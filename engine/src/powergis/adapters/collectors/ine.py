@@ -371,6 +371,18 @@ class IneCollector(BaseCollector):
     #: silencio. El nombre sí es estable.
     MUNICIPIO_VARIABLE_HINTS: tuple[str, ...] = ("municipio",)
 
+    #: Operación del INE que lista los valores de UNA variable. En singular.
+    #:
+    #: El plural (`VALORES_VARIABLES`) no existe, y la trampa está en cómo lo
+    #: dice el INE: contesta **200** con el texto plano «La operación indicada
+    #: no existe (…)» en vez de un 404. Para el cliente HTTP eso es una
+    #: respuesta correcta, así que el fallo sólo aparecía al intentar leerla
+    #: como JSON, en forma de `JSONDecodeError` sin contexto.
+    #:
+    #: El nombre vive aquí, y no incrustado en la ruta, para que la prueba
+    #: pueda fijarlo: es un error de una sola letra que no da error.
+    OP_VALORES: str = "VALORES_VARIABLE"
+
     def municipality_variable_id(self) -> int:
         """Localiza la variable 'Municipios' preguntándole al propio INE."""
         payload = self._client.get_json("VARIABLES")
@@ -401,7 +413,7 @@ class IneCollector(BaseCollector):
         Derivarla es más fiable que arrastrar otro campo que puede venir vacío.
         """
         vid = variable_id if variable_id is not None else self.municipality_variable_id()
-        ruta = f"VALORES_VARIABLES/{vid}"
+        ruta = f"{self.OP_VALORES}/{vid}"
 
         # Primero de una vez. Es lo normal y lo más barato.
         fallo_directo: Exception | None = None
@@ -419,8 +431,8 @@ class IneCollector(BaseCollector):
         # sale mal, el error dice las dos cosas que se intentaron.
         if not valores:
             log.warning(
-                "VALORES_VARIABLES/%s no devolvió nada de una vez (%s); reintento paginado",
-                vid, fallo_directo or "lista vacía",
+                "%s no devolvió nada de una vez (%s); reintento paginado",
+                ruta, fallo_directo or "lista vacía",
             )
             try:
                 valores = self._paginar(ruta)

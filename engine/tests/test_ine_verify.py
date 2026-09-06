@@ -29,10 +29,14 @@ class FakeClient:
     def __init__(self, tables: dict[str, object]) -> None:
         self.tables = tables
         self.calls: list[str] = []
+        #: La ruta COMPLETA, no sólo el ID. El nombre de la operación es parte
+        #: del contrato con el INE y se equivocó una vez.
+        self.rutas: list[str] = []
 
     def get_json(self, path: str, params: dict | None = None) -> object:
         table_id = path.rsplit("/", 1)[-1]
         self.calls.append(table_id)
+        self.rutas.append(path)
         payload = self.tables.get(table_id)
         if payload is None:
             raise CollectorError("tabla inexistente", table=table_id)
@@ -221,6 +225,24 @@ class TestPadronDeMunicipios:
 
         with pytest.raises(CollectorError):
             ine.municipalities(3)
+
+    def test_la_operacion_del_ine_es_en_singular(self):
+        """Un error de una sola letra que no daba error.
+
+        `VALORES_VARIABLES` no existe, pero el INE no contesta 404: contesta
+        **200** con el texto «La operación indicada no existe (…)». Para el
+        cliente HTTP eso es una respuesta buena, así que el fallo sólo salía al
+        leerla como JSON, sin decir qué se había pedido. Coste real: el almacén
+        se quedó sin nivel municipal.
+        """
+        assert IneCollector.OP_VALORES == "VALORES_VARIABLE"
+
+    def test_pide_exactamente_la_ruta_que_el_ine_publica(self, collector):
+        ine, cliente = collector({"VARIABLES": self.VARIABLES, "19": self.VALORES})
+
+        ine.municipalities(19)
+
+        assert cliente.rutas[-1] == "VALORES_VARIABLE/19"
 
 
 class TestListaQueNoCabe:

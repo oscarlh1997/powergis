@@ -31,11 +31,11 @@ def cliente(respuesta: httpx.Response) -> HttpClient:
 class TestCuerpoQueNoEsJson:
     def test_un_cuerpo_vacio_explica_que_estaba_vacio(self):
         with pytest.raises(CollectorError) as exc:
-            cliente(httpx.Response(200, text="")).get_json("VALORES_VARIABLES/19")
+            cliente(httpx.Response(200, text="")).get_json("VALORES_VARIABLE/19")
 
         mensaje = str(exc.value)
         assert "cuerpo vacío" in mensaje
-        assert "VALORES_VARIABLES/19" in mensaje, "hay que saber qué se pidió"
+        assert "VALORES_VARIABLE/19" in mensaje, "hay que saber qué se pidió"
         assert "0 bytes" in mensaje
 
     def test_una_pagina_de_error_html_se_ve_en_el_mensaje(self):
@@ -48,6 +48,22 @@ class TestCuerpoQueNoEsJson:
         mensaje = str(exc.value)
         assert "text/html" in mensaje
         assert "Servicio temporalmente" in mensaje
+
+    def test_el_ine_diciendo_que_la_operacion_no_existe(self):
+        """El caso que de verdad pasó.
+
+        La ruta llevaba `VALORES_VARIABLES` (plural) y esa operación no existe.
+        El INE no contesta 404: contesta 200 con esta frase en texto plano. Sin
+        este diagnóstico, lo único que se veía era «Expecting value: line 1
+        column 1 (char 0)» — que apunta a un cuerpo vacío, no a una ruta mal
+        escrita, y manda a buscar el fallo justo donde no está.
+        """
+        with pytest.raises(CollectorError) as exc:
+            cliente(
+                httpx.Response(200, text="La operación indicada no existe (VALORES_VARIABLES)")
+            ).get_json("VALORES_VARIABLES/19")
+
+        assert "La operación indicada no existe" in str(exc.value)
 
     def test_el_contexto_queda_disponible_para_el_log(self):
         """El mensaje es para el humano; el contexto, para el log estructurado."""
