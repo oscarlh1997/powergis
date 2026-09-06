@@ -94,6 +94,10 @@ class IneCollector(BaseCollector):
 
     def __init__(self, client: HttpClient | None = None) -> None:
         cfg = get_settings()
+        #: Se guarda sólo para poder escribir en los errores el `curl` exacto
+        #: que reproduce el fallo. Un diagnóstico que no se puede repetir a
+        #: mano obliga a adivinar.
+        self._base_url = cfg.ine_base_url.rstrip("/")
         self._client = client or HttpClient(
             cfg.ine_base_url,
             timeout=cfg.ine_timeout,
@@ -397,11 +401,42 @@ class IneCollector(BaseCollector):
         Derivarla es más fiable que arrastrar otro campo que puede venir vacío.
         """
         vid = variable_id if variable_id is not None else self.municipality_variable_id()
-        payload = self._client.get_json(f"VALORES_VARIABLES/{vid}")
+        ruta = f"VALORES_VARIABLES/{vid}"
+
+        # Primero de una vez. Es lo normal y lo más barato.
+        fallo_directo: Exception | None = None
+        try:
+            payload = self._client.get_json(ruta)
+            valores = list(payload) if isinstance(payload, list) else []
+        except CollectorError as exc:
+            fallo_directo = exc
+            valores = []
+
+        # Los municipios son la lista más larga que publica el INE (~8.100
+        # valores) y es justo la que a veces no cabe: contesta 200 con el
+        # cuerpo vacío. Para eso existe `?page=`, así que se reintenta paginado
+        # antes de darse por vencido. Si sale bien, el usuario no se entera; si
+        # sale mal, el error dice las dos cosas que se intentaron.
+        if not valores:
+            log.warning(
+                "VALORES_VARIABLES/%s no devolvió nada de una vez (%s); reintento paginado",
+                vid, fallo_directo or "lista vacía",
+            )
+            try:
+                valores = self._paginar(ruta)
+            except CollectorError as exc:
+                raise CollectorError(
+                    f"El INE no devuelve los valores de la variable {vid} ni entero ni "
+                    f"paginado.\n  Entero:   {fallo_directo or 'lista vacía'}\n"
+                    f"  Paginado: {exc}\n"
+                    f"Compruébalo a mano:\n"
+                    f'  curl -sS -i "{self._base_url}/{ruta}?page=1" | head -20',
+                    variable=vid,
+                ) from exc
 
         out: list[dict[str, str]] = []
         seen: set[str] = set()
-        for value in payload if isinstance(payload, list) else []:
+        for value in valores:
             code = str(value.get("Codigo") or value.get("codigo") or "").strip()
             name = str(value.get("Nombre") or value.get("nombre") or "").strip()
             if not code.isdigit() or len(code) != 5 or not name:
@@ -412,8 +447,67 @@ class IneCollector(BaseCollector):
             out.append({"ine_code": code, "name": name, "province_code": code[:2]})
 
         if not out:
-            raise CollectorError(f"La variable {vid} no devolvió municipios reconocibles")
+            raise CollectorError(
+                f"La variable {vid} devolvió {len(valores)} valores, pero ninguno "
+                f"parece un municipio (código de 5 dígitos). Probablemente no sea "
+                f"la variable de municipios: `powergis ine-discover` la localiza.",
+                variable=vid,
+                recibidos=len(valores),
+            )
         return out
+
+    #: El INE pagina a 500 registros cuando se le pasa `?page=`. Es el único
+    #: camino cuando la lista entera no le cabe en una respuesta.
+    PAGE_SIZE: int = 500
+    #: ~8.100 municipios a 500 por página son 17. El tope deja margen de sobra
+    #: y evita un bucle infinito si un día `page` deja de tener efecto.
+    MAX_PAGES: int = 60
+
+    def _paginar(self, ruta: str) -> list[dict[str, Any]]:
+        """Recorre `?page=1,2,3…` hasta que se acaba la lista.
+
+        Se para en tres sitios, y los tres importan:
+
+          · una página vacía — fin normal;
+          · una página más corta que `PAGE_SIZE` — la última;
+          · una página que no aporta ningún valor nuevo — significa que la API
+            está IGNORANDO `page` y devolviendo siempre lo mismo. Sin esta
+            comprobación el bucle daría 60 vueltas para acabar con la misma
+            lista repetida 60 veces.
+        """
+        acumulado: list[dict[str, Any]] = []
+        vistos: set[str] = set()
+
+        for pagina in range(1, self.MAX_PAGES + 1):
+            trozo = self._client.get_json(ruta, params={"page": pagina})
+            if not isinstance(trozo, list) or not trozo:
+                break
+
+            nuevos = 0
+            for value in trozo:
+                clave = str(
+                    value.get("Id")
+                    or value.get("Codigo")
+                    or value.get("codigo")
+                    or ""
+                )
+                if clave and clave in vistos:
+                    continue
+                if clave:
+                    vistos.add(clave)
+                acumulado.append(value)
+                nuevos += 1
+
+            if nuevos == 0:
+                log.warning(
+                    "El INE ignora ?page= en %s: la página %d repite lo anterior",
+                    ruta, pagina,
+                )
+                break
+            if len(trozo) < self.PAGE_SIZE:
+                break
+
+        return acumulado
 
     @staticmethod
     def _detect_level(names: Sequence[str]) -> str | None:

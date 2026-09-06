@@ -75,7 +75,42 @@ class HttpClient:
         self.close()
 
     def get_json(self, path: str, params: dict[str, Any] | None = None) -> Any:
-        return self._request("GET", path, params=params).json()
+        return self._decode_json(self._request("GET", path, params=params))
+
+    @staticmethod
+    def _decode_json(response: httpx.Response) -> Any:
+        """Convierte «esto no es JSON» en un diagnóstico legible.
+
+        `_request` ya ha descartado los 4xx/5xx, así que llegar aquí significa
+        que la fuente contestó *bien* y aun así el cuerpo no se puede leer. Es
+        el fallo más caro de diagnosticar de todos: el INE, cuando una consulta
+        le viene grande, responde 200 con el cuerpo vacío en vez de un error, y
+        `httpx` lo traduce a un `JSONDecodeError` pelado — «Expecting value:
+        line 1 column 1 (char 0)» — que no dice ni qué URL era ni qué llegó.
+
+        Aquí se guarda todo lo que hace falta para saberlo sin volver a
+        lanzarlo: URL final (tras redirecciones), código, tipo de contenido,
+        tamaño y los primeros bytes.
+        """
+        try:
+            return response.json()
+        except ValueError as exc:
+            cuerpo = response.text
+            muestra = cuerpo[:300].strip() or "(cuerpo vacío)"
+            tipo = response.headers.get("content-type", "(sin cabecera)")
+            raise CollectorError(
+                f"La fuente respondió {response.status_code} pero el cuerpo no es JSON.\n"
+                f"  URL:     {response.request.url}\n"
+                f"  Tipo:    {tipo}\n"
+                f"  Tamaño:  {len(response.content)} bytes\n"
+                f"  Empieza: {muestra}",
+                url=str(response.request.url),
+                status=response.status_code,
+                content_type=tipo,
+                length=len(response.content),
+                body=muestra,
+                cause=str(exc),
+            ) from exc
 
     def post_text(self, path: str, data: str, params: dict[str, Any] | None = None) -> str:
         return self._request("POST", path, params=params, content=data).text

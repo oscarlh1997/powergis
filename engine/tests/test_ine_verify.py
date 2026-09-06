@@ -223,6 +223,93 @@ class TestPadronDeMunicipios:
             ine.municipalities(3)
 
 
+class TestListaQueNoCabe:
+    """Los ~8.100 municipios son la lista más larga que publica el INE, y es
+    justo la que a veces no le cabe: contesta 200 con el cuerpo vacío. El
+    colector reintenta paginado antes de rendirse.
+
+    Sin esto la carga muere con un `JSONDecodeError` pelado y el almacén se
+    queda sin nivel municipal, que es la avería que deja los informes vacíos
+    sin dar un solo error.
+    """
+
+    @staticmethod
+    def municipio(n: int) -> dict:
+        return {"Codigo": f"{28000 + n:05d}", "Nombre": f"Pueblo {n}"}
+
+    def cliente_paginado(self, total: int, *, entero: object):
+        """Falla o se vacía de una vez; responde bien con `?page=`."""
+        todos = [self.municipio(n) for n in range(total)]
+
+        class Paginado:
+            calls: ClassVar[list] = []
+
+            def get_json(self, path, params=None):
+                Paginado.calls.append((path, params))
+                if not params or "page" not in params:
+                    if isinstance(entero, Exception):
+                        raise entero
+                    return entero
+                inicio = (params["page"] - 1) * IneCollector.PAGE_SIZE
+                return todos[inicio : inicio + IneCollector.PAGE_SIZE]
+
+        return IneCollector(client=Paginado())
+
+    def test_un_cuerpo_vacio_no_hunde_la_carga(self):
+        """El modo de fallo real observado en producción."""
+        ine = self.cliente_paginado(
+            1200, entero=CollectorError("el cuerpo no es JSON", status=200)
+        )
+
+        assert len(ine.municipalities(19)) == 1200
+
+    def test_una_lista_vacia_tambien_dispara_el_paginado(self):
+        """200 con `[]` es el mismo problema con otra cara."""
+        ine = self.cliente_paginado(600, entero=[])
+
+        assert len(ine.municipalities(19)) == 600
+
+    def test_no_pagina_si_no_hace_falta(self):
+        """El camino barato sigue siendo el camino por defecto."""
+        ine = self.cliente_paginado(3, entero=[self.municipio(n) for n in range(3)])
+
+        ine.municipalities(19)
+
+        assert all(p is None or "page" not in p for _, p in type(ine._client).calls)
+
+    def test_si_el_ine_ignora_page_no_se_queda_en_bucle(self):
+        """Devolver siempre la misma página es indistinguible de paginar bien
+        salvo por esto: la segunda no aporta nada nuevo."""
+        pagina = [self.municipio(n) for n in range(IneCollector.PAGE_SIZE)]
+
+        class Terco:
+            paginas = 0
+
+            def get_json(self, path, params=None):
+                if not params or "page" not in params:
+                    return []
+                Terco.paginas += 1
+                return pagina
+
+        ine = IneCollector(client=Terco())
+        municipios = ine.municipalities(19)
+
+        assert len(municipios) == IneCollector.PAGE_SIZE
+        assert Terco.paginas == 2, "debe parar en cuanto una página no aporta nada"
+
+    def test_si_fallan_los_dos_caminos_el_error_dice_los_dos(self):
+        class Muerto:
+            def get_json(self, path, params=None):
+                raise CollectorError("el cuerpo no es JSON")
+
+        with pytest.raises(CollectorError) as exc:
+            IneCollector(client=Muerto()).municipalities(19)
+
+        mensaje = str(exc.value)
+        assert "Entero:" in mensaje and "Paginado:" in mensaje
+        assert "curl" in mensaje, "el error debe traer cómo reproducirlo a mano"
+
+
 class TestDeteccionDeNivel:
     def test_ignora_el_total_nacional_de_la_primera_fila(self):
         """Las tablas del INE suelen abrir con el total nacional; si se mirara
