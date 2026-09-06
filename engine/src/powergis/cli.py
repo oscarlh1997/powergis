@@ -576,7 +576,11 @@ def smoke(base_url: str = "http://localhost:8000") -> None:
 def endpoints(
     base_url: str = "http://localhost:8000",
     fixtures: str | None = typer.Option(None, help="Ruta a fixtures.json"),
-    grupo: str | None = typer.Option(None, help="salud|catalogo|geografia|informes|operacion|seguridad"),
+    grupo: str | None = typer.Option(
+        None,
+        help="Grupos a probar, separados por comas: "
+             "salud,catalogo,geografia,informes,operacion,seguridad",
+    ),
     con_red: bool = typer.Option(False, "--con-red", help="Exige también los casos que salen a internet"),
     verbose: bool = typer.Option(False, "--verbose", help="Enseña un trozo de cada respuesta"),
 ) -> None:
@@ -691,7 +695,24 @@ def endpoints(
         except Exception as exc:
             return 0, str(exc).encode()[:400]
 
-    grupos = [grupo] if grupo else [k for k in data if not k.startswith("_")]
+    todos = [k for k in data if not k.startswith("_")]
+    if grupo:
+        # Se admite una lista separada por comas. Hace falta para probar por el
+        # dominio público, donde `operacion` DEBE dar 403: Traefik sólo sirve
+        # `/internal` a 127.0.0.1. Sin poder excluirlo, la única forma de
+        # probar el camino completo sería aceptar un fallo esperado en la
+        # salida, y una suite con fallos que hay que ignorar deja de servir.
+        grupos = [g.strip() for g in grupo.split(",") if g.strip()]
+        desconocidos = [g for g in grupos if g not in todos]
+        if desconocidos:
+            typer.secho(
+                f"No existe el grupo {', '.join(desconocidos)}. "
+                f"Hay: {', '.join(todos)}",
+                fg=typer.colors.RED,
+            )
+            raise typer.Exit(1)
+    else:
+        grupos = todos
 
     for nombre_grupo in grupos:
         casos = data.get(nombre_grupo)

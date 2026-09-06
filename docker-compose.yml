@@ -54,6 +54,16 @@ x-engine: &engine
     redis:    { condition: service_started }
   volumes:
     - data:/data
+    # Sólo lectura, y sin secretos dentro: son los datos de prueba
+    # (`fixtures.json`, `cuerpo.json`) que usan `powergis endpoints` y
+    # `powergis firmar --cuerpo`.
+    #
+    # El contexto de construcción es `./engine`, así que `scripts/` NO entra en
+    # la imagen. Sin este montaje esas dos herramientas existen en producción
+    # pero no encuentran sus datos, que es la peor de las tres opciones:
+    # parecen disponibles y fallan al usarlas. Y son justo las que hacen falta
+    # aquí, porque en producción no hay Swagger con el que probar a mano.
+    - ./scripts:/scripts:ro
   restart: unless-stopped
   logging:
     driver: json-file

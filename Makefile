@@ -186,6 +186,27 @@ logs:  ## Sigue los logs de todos los servicios
 ps:  ## Estado de los servicios
 	$(COMPOSE) ps
 
+.PHONY: probar
+probar:  ## Dispara TODOS los endpoints contra el motor de producción
+	@# Dos pasadas, y las dos hacen falta.
+	@#
+	@# La primera va a `localhost:8000` DENTRO del contenedor: prueba la
+	@# aplicación sola. La segunda sale a internet y vuelve por el dominio,
+	@# así que prueba además DNS, certificado, Traefik y el enrutado.
+	@#
+	@# Si la primera pasa y la segunda no, el motor está bien y el problema
+	@# es de infraestructura. Sin separarlas, un fallo de Traefik se lee como
+	@# un fallo del motor — que es exactamente lo que pasó con el certificado.
+	@echo "── 1/2 · la aplicación, por dentro ─────────────────────────────"
+	$(COMPOSE) exec -T api powergis endpoints http://localhost:8000
+	@echo ""
+	@echo "── 2/2 · el camino completo, por el dominio ────────────────────"
+	@# `/internal` se salta a propósito: Traefik sólo lo sirve a 127.0.0.1,
+	@# así que por el dominio DEBE dar 403. Probarlo aquí sería pedirle a la
+	@# suite que fallara.
+	$(COMPOSE) exec -T api powergis endpoints https://$${ENGINE_HOST:-localhost} \
+		--grupo salud,catalogo,geografia,informes,seguridad
+
 .PHONY: shell
 shell:  ## Shell dentro del contenedor de la API
 	$(COMPOSE) exec api /bin/bash
