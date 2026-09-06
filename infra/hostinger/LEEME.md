@@ -102,23 +102,105 @@ tu red bloquean el puerto 22.
 También te salva si te quedas sin acceso SSH: es la única vía que no depende
 de la clave.
 
-### D · Git — la buena, cuando esto deje de ser un experimento
+### D · Git — la recomendada
 
-Repositorio **privado** en GitHub o GitLab, una clave de despliegue de solo
-lectura en el VPS, y desplegar pasa a ser:
+El repositorio ya viene inicializado y con el primer commit hecho. Historial
+de qué cambió y cuándo, vuelta atrás inmediata si un despliegue rompe algo, y
+deja de depender de que tu portátil tenga la última copia.
 
-```bash
-cd ~/powergis && git pull && make up
+#### D.1 · Crear el repositorio en GitHub
+
+Créalo **privado** y **vacío** —sin README, sin `.gitignore`, sin licencia—,
+porque este repositorio ya los trae y un repositorio no vacío obliga a
+fusionar antes del primer push.
+
+```powershell
+cd C:\Users\oscar\Downloads\powergis-backend\powergis
+
+git remote add origin git@github.com:TU_USUARIO/powergis.git
+git branch -M main
+git push -u origin main
 ```
 
-Ventajas reales sobre el paquete: historial de qué cambió y cuándo, vuelta
-atrás inmediata si un despliegue rompe algo, y no depende de que tu portátil
-tenga la última copia. La razón de no empezar por aquí es solo que añade
-pasos antes de ver el sistema funcionando.
+Si prefieres HTTPS en vez de SSH, la URL es
+`https://github.com/TU_USUARIO/powergis.git` y GitHub te pedirá un token
+personal en vez de la contraseña.
 
-> **Lo que no debe subir nunca al repositorio:** el `.env`. Ya está en
-> `.gitignore`. Los secretos viven en el VPS y en `wp-config.php`, en ningún
-> otro sitio.
+Comprueba antes de empujar que no viaja nada que no deba:
+
+```powershell
+git status
+git log --stat -1 | Select-String "\.env"     # no debe devolver nada
+```
+
+#### D.2 · La clave de despliegue del VPS
+
+El servidor necesita poder leer el repositorio, y **sólo leer**. Una clave de
+despliegue hace justo eso: vale para un único repositorio, es de sólo lectura,
+y no da acceso al resto de tu cuenta de GitHub. No uses tu clave personal.
+
+```bash
+# en el VPS
+ssh-keygen -t ed25519 -C "vps-powergis" -f ~/.ssh/github -N ""
+cat ~/.ssh/github.pub
+```
+
+En GitHub: **Settings del repositorio → Deploy keys → Add deploy key**. Pega
+esa línea. **Deja «Allow write access» sin marcar.**
+
+Y dile a SSH que use esa clave para GitHub:
+
+```bash
+cat >> ~/.ssh/config <<'EOF'
+Host github.com
+    IdentityFile ~/.ssh/github
+    IdentitiesOnly yes
+EOF
+chmod 600 ~/.ssh/config
+
+ssh -T git@github.com     # "Hi TU_USUARIO/powergis! You've successfully authenticated"
+```
+
+#### D.3 · Clonar y arrancar
+
+```bash
+git clone git@github.com:TU_USUARIO/powergis.git ~/powergis
+cd ~/powergis
+cp .env.example .env
+nano .env
+make check-config
+make up
+```
+
+#### D.4 · Cada despliegue posterior
+
+En tu Windows, un commit y un push:
+
+```powershell
+git add -A
+git commit -m "lo que has cambiado"
+git push
+```
+
+En el VPS, un comando:
+
+```bash
+~/powergis/infra/hostinger/desplegar.sh
+```
+
+Trae los cambios, reconstruye lo que haga falta y deja el stack en marcha.
+Te enseña qué commits entraron. **No toca el `.env` ni los volúmenes**: la
+base de datos y los certificados sobreviven a cualquier despliegue. Y se
+niega a continuar si detecta cambios locales sin confirmar en el servidor,
+para no pisarlos.
+
+> **Lo que no sube nunca:** el `.env`. Está en `.gitignore`. Los secretos
+> viven en el VPS y en `wp-config.php`, en ningún otro sitio.
+>
+> Las credenciales que verás en `docker-compose.dev.yml` y en el CI son de
+> desarrollo y están ahí a propósito: sirven para levantar el entorno local
+> sin configurar nada. No valen para producción y el motor se niega a
+> arrancar con ellas si `ENV=production`.
 
 ### Lo que NO sirve
 
