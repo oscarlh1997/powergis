@@ -7,6 +7,8 @@ from __future__ import annotations
 
 import logging
 import uuid
+from collections.abc import Sequence
+from typing import Any
 
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
@@ -61,7 +63,10 @@ def install(app: FastAPI) -> None:
         incident = uuid.uuid4().hex[:12]
         log.exception("error no controlado [%s] en %s", incident, request.url.path)
         cfg = get_settings()
-        payload = {
+        # Anotado: sin esto se infiere `dict[str, Collection[str]]` por
+        # mezclar textos y un diccionario, y la asignación de abajo no
+        # compila aunque en ejecución funcione.
+        payload: dict[str, Any] = {
             "code": "internal_error",
             "message": "Error interno del motor",
             "context": {"incident": incident},
@@ -71,7 +76,7 @@ def install(app: FastAPI) -> None:
         return JSONResponse(status_code=500, content=payload)
 
 
-def _clean(errors: list[dict]) -> list[dict]:
+def _clean(errors: Sequence[Any]) -> list[dict[str, Any]]:
     out = []
     for error in errors[:20]:
         out.append({

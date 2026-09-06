@@ -13,10 +13,20 @@ from uuid import UUID, uuid4
 
 import pytest
 
-os.environ.setdefault("HMAC_SECRET", "secreto-de-pruebas-suficientemente-largo-1234")
-os.environ.setdefault("INTERNAL_API_KEY", "clave-interna-de-pruebas")
-os.environ.setdefault("LLM_ENABLED", "false")
-os.environ.setdefault("ENV", "test")
+# El banco de pruebas fija su entorno, NO lo hereda.
+#
+# Antes esto era `setdefault`, que sólo asigna si la variable no existe. Basta
+# con que el entorno traiga otro HMAC_SECRET —y el flujo de integración
+# continua lo exporta— para que el motor verifique con el secreto del entorno
+# mientras las pruebas firman con el suyo. Resultado: 401 invalid_signature en
+# todo lo firmado, y una suite que pasa en tu portátil y falla en CI.
+#
+# SECRETO_DE_PRUEBAS es la única fuente: las pruebas que firman lo importan de
+# aquí en vez de repetir el literal, para que no puedan volver a separarse.
+os.environ["HMAC_SECRET"] = "secreto-de-pruebas-suficientemente-largo-1234"
+os.environ["INTERNAL_API_KEY"] = "clave-interna-de-pruebas"
+os.environ["LLM_ENABLED"] = "false"
+os.environ["ENV"] = "test"
 
 from powergis.domain.enums import GeoLevel, RunStatus, Section, Tier
 from powergis.domain.models import (
@@ -29,6 +39,11 @@ from powergis.domain.models import (
     Segments,
 )
 from powergis.domain.sections.base import SectionContext
+
+# El secreto con el que firman las pruebas. Se LEE del entorno que se acaba de
+# fijar arriba, en vez de repetir el literal: así es imposible que la firma y
+# la verificación usen valores distintos.
+SECRETO_DE_PRUEBAS = os.environ["HMAC_SECRET"]
 
 PERIOD = date(2024, 1, 1)
 

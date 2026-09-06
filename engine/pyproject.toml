@@ -126,5 +126,5 @@ check_untyped_defs = true
 plugins = ["pydantic.mypy"]
 
 [[tool.mypy.overrides]]
-module = ["geoalchemy2.*", "celery.*", "xlsxwriter.*", "pptx.*", "weasyprint.*"]
+module = ["geoalchemy2.*", "celery.*", "xlsxwriter.*", "pptx.*", "weasyprint.*", "sentry_sdk.*"]
 ignore_missing_imports = true

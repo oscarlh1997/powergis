@@ -6,10 +6,12 @@ import time
 
 import pytest
 
+# Se importa de conftest, que es quien fija HMAC_SECRET en el entorno.
+# Repetir el literal aquí es lo que permitió que firma y verificación
+# se separaran sin que nada avisara.
+from conftest import SECRETO_DE_PRUEBAS as SECRET
 from powergis.api import security
 from powergis.domain.errors import ReplayError, SignatureError
-
-SECRET = "secreto-de-pruebas-suficientemente-largo-1234"
 
 
 class TestFirma:

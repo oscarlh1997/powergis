@@ -106,6 +106,17 @@ class NullCache:
     def lock(self, key: str, ttl_seconds: int = 60) -> bool:
         return True
 
+    def unlock(self, key: str) -> None:
+        """Sin cerrojo que soltar, pero tiene que existir.
+
+        Faltaba, y `lock()` devuelve True: con Redis caído, la tarea de
+        informes tomaba el cerrojo, hacía el trabajo y al soltarlo en su
+        bloque `finally` lanzaba AttributeError. Al estar en un `finally`,
+        ese error SUSTITUYE al que viniera propagándose, así que el fallo
+        real se perdía y el worker moría diciendo otra cosa.
+        """
+        return None
+
     def incr_window(self, subject: str, window_seconds: int) -> int:
         return 0
 

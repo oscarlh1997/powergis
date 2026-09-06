@@ -14,10 +14,12 @@ from uuid import uuid4
 import pytest
 from fastapi.testclient import TestClient
 
+# Se importa de conftest, que es quien fija HMAC_SECRET en el entorno.
+# Repetir el literal aquí es lo que permitió que firma y verificación
+# se separaran sin que nada avisara.
+from conftest import SECRETO_DE_PRUEBAS as SECRET
 from powergis.api import security
 from powergis.api.main import create_app
-
-SECRET = "secreto-de-pruebas-suficientemente-largo-1234"
 
 
 @pytest.fixture

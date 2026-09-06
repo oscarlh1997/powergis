@@ -11,6 +11,7 @@ from uuid import UUID
 from sqlalchemy import Select, and_, func, or_, select, text
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
+from sqlalchemy.sql.elements import ColumnElement
 
 from ...domain.enums import Dimension, Direction, GeoLevel, RunStatus, Section, Tier, Unit
 from ...domain.models import (
@@ -248,7 +249,9 @@ class SqlFactRepository:
             return []
 
         keys = [_segment_key(s) for s in (segments or [{}])]
-        conditions = [
+        # `ColumnElement[bool]` y no `BinaryExpression`: `in_()` y `==` no
+        # devuelven todos el mismo tipo concreto, y el común es este.
+        conditions: list[ColumnElement[bool]] = [
             FactRow.geo_id.in_(list(geo_ids)),
             FactRow.indicator.in_(list(indicators)),
             FactRow.segment_key.in_(keys),
@@ -287,7 +290,9 @@ class SqlFactRepository:
             .group_by(FactRow.indicator)
         ).all()
         out: dict[str, date | None] = dict.fromkeys(indicators)
-        out.update(dict(rows))
+        # `rows` son objetos Row, no tuplas: hay que desempaquetarlos para
+        # que el tipo del diccionario sea el que dice la anotación.
+        out.update({fila[0]: fila[1] for fila in rows})
         return out
 
     def upsert_many(self, facts: Sequence[Fact]) -> int:

@@ -145,6 +145,11 @@ class CachePort(Protocol):
 
     def lock(self, key: str, ttl_seconds: int = 60) -> bool: ...
 
+    # `unlock` faltaba en el puerto, y por eso una implementación sin él
+    # pasaba desapercibida hasta reventar en ejecución. Un cerrojo que se
+    # toma y no se puede soltar no es un cerrojo.
+    def unlock(self, key: str) -> None: ...
+
 
 @runtime_checkable
 class NarrativePort(Protocol):

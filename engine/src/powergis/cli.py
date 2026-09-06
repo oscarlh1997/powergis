@@ -322,6 +322,13 @@ def build(project_uuid: str, tier: str = "basico") -> None:
         ))
         uow.commit()
 
+    if run.run_id is None:
+        # No debería ocurrir tras el commit, pero si el repositorio cambiara y
+        # dejara de devolver el id, esto lo dice en vez de fallar más abajo con
+        # un error que no menciona la causa.
+        typer.secho("La ejecución se creó sin id", fg=typer.colors.RED)
+        raise typer.Exit(1)
+
     result = BuildReport(uow_factory, cfg.engine_version)(run.run_id)
     typer.secho(
         f"Informe v{result.version} · estado {result.run.status} · "
@@ -1012,14 +1019,14 @@ def firmar(
         if not cuerpo:
             typer.secho("Indica --cuerpo <fichero> o --get <ruta>", fg=typer.colors.RED)
             raise typer.Exit(1)
-        ruta = Path(cuerpo)
-        if not ruta.is_file():
-            typer.secho(f"No encuentro {ruta}", fg=typer.colors.RED)
+        fichero = Path(cuerpo)
+        if not fichero.is_file():
+            typer.secho(f"No encuentro {fichero}", fg=typer.colors.RED)
             raise typer.Exit(1)
 
         # Se leen BYTES, no texto: reescribir el fichero con otro final de
         # línea cambiaría la firma sin que se note al mirarlo.
-        crudo = ruta.read_bytes()
+        crudo = fichero.read_bytes()
 
         try:
             json.loads(crudo)

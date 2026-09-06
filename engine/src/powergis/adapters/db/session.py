@@ -10,6 +10,14 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
 
 from ...config import Settings, get_settings
+from ...domain.ports import (
+    FactRepository,
+    GeoRepository,
+    IndicatorRepository,
+    ProjectRepository,
+    RunRepository,
+    SnapshotRepository,
+)
 from .repositories import (
     SqlFactRepository,
     SqlGeoRepository,
@@ -56,36 +64,80 @@ class SqlUnitOfWork:
     commit hace rollback. Nada se persiste «por accidente».
     """
 
+    # Los repositorios se declaran aquí aunque se construyan en `__enter__`.
+    #
+    # No es decoración: sin estas anotaciones, para el analizador de tipos esta
+    # clase no tiene esos atributos y por tanto NO cumple el protocolo
+    # `UnitOfWork` del dominio. La consecuencia era que `uow_factory` —que
+    # devuelve un `SqlUnitOfWork`— se rechazaba en todos los casos de uso que
+    # piden un `Callable[[], UnitOfWork]`: diecinueve errores, todos el mismo.
+    #
+    # Declararlos aquí dice la verdad sobre la clase y hace que el adaptador
+    # vuelva a encajar en el puerto, que es de lo que trata la arquitectura.
+    #
+    # Y se anotan con el tipo del PUERTO, no con el del adaptador: los
+    # atributos de un Protocol son invariantes: se pueden leer y escribir,
+    # así que declarar aquí `SqlGeoRepository` donde el puerto pide
+    # `GeoRepository` no cumple el protocolo aunque uno herede del otro.
+    #
+    # Y es además lo correcto: quien recibe un UnitOfWork trabaja contra los
+    # puertos del dominio. Que por dentro sean implementaciones de SQLAlchemy
+    # es cosa de este adaptador y de nadie más.
+    geos: GeoRepository
+    indicators: IndicatorRepository
+    facts: FactRepository
+    projects: ProjectRepository
+    runs: RunRepository
+    snapshots: SnapshotRepository
+    sector_profiles: SqlSectorProfileRepository
+
     def __init__(self, session_factory: sessionmaker[Session] | None = None) -> None:
         self._factory = session_factory or get_session_factory()
-        self.session: Session | None = None
+        self._session: Session | None = None
+
+    @property
+    def session(self) -> Session:
+        """La sesión abierta.
+
+        Es una propiedad y no un atributo porque fuera del `with` no existe
+        ninguna sesión. Antes esto era `Session | None`, y cada uso —
+        `uow.session.scalar(...)`, `uow.session.add(...)`— arrastraba un aviso
+        del analizador que se ignoraba. En ejecución, usarlo fuera del contexto
+        daba `AttributeError: 'NoneType' object has no attribute 'scalar'`, que
+        no dice nada de lo que pasó realmente.
+        """
+        if self._session is None:
+            raise RuntimeError(
+                "No hay sesión abierta: usa el UnitOfWork dentro de un `with`."
+            )
+        return self._session
 
     def __enter__(self) -> SqlUnitOfWork:
-        self.session = self._factory()
-        self.geos = SqlGeoRepository(self.session)
-        self.indicators = SqlIndicatorRepository(self.session)
-        self.facts = SqlFactRepository(self.session)
-        self.projects = SqlProjectRepository(self.session)
-        self.runs = SqlRunRepository(self.session)
-        self.snapshots = SqlSnapshotRepository(self.session)
-        self.sector_profiles = SqlSectorProfileRepository(self.session)
+        self._session = self._factory()
+        self.geos = SqlGeoRepository(self._session)
+        self.indicators = SqlIndicatorRepository(self._session)
+        self.facts = SqlFactRepository(self._session)
+        self.projects = SqlProjectRepository(self._session)
+        self.runs = SqlRunRepository(self._session)
+        self.snapshots = SqlSnapshotRepository(self._session)
+        self.sector_profiles = SqlSectorProfileRepository(self._session)
         return self
 
     def __exit__(self, exc_type: Any, exc: Any, tb: Any) -> None:
-        assert self.session is not None
+        sesion = self._session
+        if sesion is None:
+            return
         try:
             if exc_type is not None:
-                self.session.rollback()
+                sesion.rollback()
         finally:
-            self.session.close()
-            self.session = None
+            sesion.close()
+            self._session = None
 
     def commit(self) -> None:
-        assert self.session is not None
         self.session.commit()
 
     def rollback(self) -> None:
-        assert self.session is not None
         self.session.rollback()
 
 

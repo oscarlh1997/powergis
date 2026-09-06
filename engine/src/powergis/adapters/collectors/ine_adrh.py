@@ -132,7 +132,9 @@ class AdrhCollector(BaseCollector):
     def _period(point: dict[str, Any]) -> date:
         year = point.get("Anyo") or point.get("anyo")
         try:
-            return date(int(year), 1, 1)
+            # El INE a veces no manda el año. El `except` ya lo cubría; la
+            # anotación no lo decía.
+            return date(int(year), 1, 1)  # type: ignore[arg-type]
         except (TypeError, ValueError):
             return date.today()
 

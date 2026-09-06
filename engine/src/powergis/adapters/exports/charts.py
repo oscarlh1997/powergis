@@ -84,7 +84,9 @@ def _axis_and_legend(
             f"{_esc(_truncate(label, 16))}</text>"
         )
     # Leyenda
-    lx = PAD_L
+    # Acumulan desplazamientos fraccionarios, así que son float desde el
+    # principio y no enteros que luego cambian de tipo.
+    lx: float = PAD_L
     ly = H - 10
     for i, name in enumerate(names):
         color = PALETTE[i % len(PALETTE)]
@@ -125,7 +127,7 @@ def bar_svg(chart: Chart) -> str:
     if chart.stack:
         bar_w = slot * 0.62
         for i in range(len(labels)):
-            bottom = PAD_T + plot_h
+            bottom: float = PAD_T + plot_h
             for s, (_, data) in enumerate(series):
                 value = data[i] if i < len(data) else 0.0
                 height = value / max_value * plot_h if max_value else 0
@@ -193,8 +195,10 @@ def line_svg(chart: Chart) -> str:
             f'stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>'
         )
         for point in points:
-            x, y = point.split(",")
-            parts.append(f'<circle cx="{x}" cy="{y}" r="2.4" fill="{color}"/>')
+            # Nombres propios: `x` e `y` ya se usaron arriba como coordenadas
+            # numéricas, y aquí son los dos trozos de texto de "x,y".
+            px, py = point.split(",")
+            parts.append(f'<circle cx="{px}" cy="{py}" r="2.4" fill="{color}"/>')
 
     parts.append("</svg>")
     return "".join(parts)

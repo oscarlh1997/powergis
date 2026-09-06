@@ -8,7 +8,7 @@ es material para llevar a una reunión, no una presentación de marketing.
 from __future__ import annotations
 
 import io
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from pptx import Presentation
 from pptx.dml.color import RGBColor
@@ -16,6 +16,13 @@ from pptx.enum.text import PP_ALIGN
 from pptx.util import Inches, Pt
 
 from ...domain.models import Report
+
+if TYPE_CHECKING:  # pragma: no cover
+    # `pptx.Presentation` es una función fábrica, no una clase: usarla como
+    # anotación es incorrecto. El tipo de verdad es este.
+    from pptx.presentation import Presentation as Deck
+else:
+    Deck = Any
 
 INK = RGBColor(0x0F, 0x17, 0x2A)
 MUTED = RGBColor(0x64, 0x74, 0x8B)
@@ -58,7 +65,7 @@ class PptxExporter:
 
     # ------------------------------------------------------------------ #
 
-    def _blank(self, deck: Presentation):
+    def _blank(self, deck: Deck):
         return deck.slides.add_slide(deck.slide_layouts[6])
 
     def _title(self, slide, text: str, subtitle: str | None = None) -> None:
@@ -75,7 +82,7 @@ class PptxExporter:
             para.runs[0].font.size = Pt(12)
             para.runs[0].font.color.rgb = MUTED
 
-    def _cover(self, deck: Presentation, report: Report) -> None:
+    def _cover(self, deck: Deck, report: Report) -> None:
         slide = self._blank(deck)
         box = slide.shapes.add_textbox(Inches(0.9), Inches(2.2), Inches(11.5), Inches(3))
         frame = box.text_frame
@@ -96,7 +103,7 @@ class PptxExporter:
             para.runs[0].font.size = Pt(14)
             para.runs[0].font.color.rgb = MUTED
 
-    def _summary(self, deck: Presentation, report: Report) -> None:
+    def _summary(self, deck: Deck, report: Report) -> None:
         slide = self._blank(deck)
         self._title(slide, "Resumen ejecutivo")
         summary = report.executive_summary or {}
@@ -132,7 +139,7 @@ class PptxExporter:
                 item.runs[0].font.size = Pt(12)
                 item.runs[0].font.color.rgb = MUTED
 
-    def _subsection(self, deck: Presentation, section_title: str, sub) -> None:
+    def _subsection(self, deck: Deck, section_title: str, sub) -> None:
         slide = self._blank(deck)
         self._title(slide, sub.title, section_title)
         self._kpi_row(slide, [
@@ -147,7 +154,9 @@ class PptxExporter:
             return
         width = Inches(2.3)
         gap = Inches(0.22)
-        left = Inches(0.6)
+        # `Inches()` devuelve Emu (un int); el acumulador se anota como
+        # int porque abajo se le suman anchos y separaciones.
+        left: int = Inches(0.6)
         for kpi in kpis[:5]:
             box = slide.shapes.add_textbox(left, Inches(1.55), width, Inches(1.15))
             frame = box.text_frame
@@ -225,7 +234,7 @@ class PptxExporter:
             note.text_frame.paragraphs[0].runs[0].font.size = Pt(9)
             note.text_frame.paragraphs[0].runs[0].font.color.rgb = MUTED
 
-    def _placerank(self, deck: Presentation, placerank: dict[str, Any]) -> None:
+    def _placerank(self, deck: Deck, placerank: dict[str, Any]) -> None:
         slide = self._blank(deck)
         weights = " · ".join(
             f"{k} {int(v * 100)}%" for k, v in (placerank.get("weights") or {}).items()
@@ -262,7 +271,7 @@ class PptxExporter:
                 cell.text = value
                 cell.text_frame.paragraphs[0].runs[0].font.size = Pt(10)
 
-    def _sources(self, deck: Presentation, report: Report) -> None:
+    def _sources(self, deck: Deck, report: Report) -> None:
         slide = self._blank(deck)
         self._title(slide, "Fuentes y metodología")
         box = slide.shapes.add_textbox(Inches(0.6), Inches(1.5), Inches(12.1), Inches(5.2))
