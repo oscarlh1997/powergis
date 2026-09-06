@@ -1,0 +1,44 @@
+# Secretos: NUNCA en git
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+coverage.xml
+htmlcov/
+
+# Datos: pesan gigas y se regeneran
+/data/
+infra/backups/
+*.pmtiles
+*.osm.pbf
+*.sql.gz
+*.gpg
+
+# Sistema
+.DS_Store
+*.log
+
+# Paquetes de despliegue y volcados de diagnóstico
+*.zip
+*.tgz
+diagnostico.txt
+node_modules/
+
+# El .env del servidor se crea allí a partir de .env.example y NO se versiona.
+# Si alguna vez ves .env en `git status`, para y revisa este fichero antes de
+# hacer commit: una vez dentro del historial, un secreto no se borra sin
+# reescribirlo entero.

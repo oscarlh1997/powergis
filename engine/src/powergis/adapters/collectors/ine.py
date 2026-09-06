@@ -1,0 +1,436 @@
+"""Colector del INE — API JSON (Tempus3).
+
+    https://servicios.ine.es/wstempus/js/ES/{FUNCION}/{ID}
+
+Funciones usadas:
+    DATOS_TABLA/{id}                  datos de una tabla  (?nult=, ?tip=A, ?det=)
+    GRUPOS_TABLA/{id}                 variables de filtrado de la tabla
+    VALORES_GRUPOSTABLA/{id}/{grupo}  valores posibles    (tv=variable:valor)
+    SERIES_TABLA/{id}                 metadatos de series
+
+Principio de diseño: **el INE no se consulta con un usuario esperando.** Es un
+catálogo que cambia una o dos veces al año, así que aquí se descarga la tabla
+entera y se vuelca a `fact_indicator`. El informe lee del almacén.
+
+Los IDs de tabla se declaran en `TABLES` y se pueden sobreescribir por
+variable de entorno sin tocar código: el INE republica y renumera tablas, y no
+queremos un despliegue por eso.
+"""
+
+from __future__ import annotations
+
+import logging
+import os
+import re
+from collections.abc import Iterable, Sequence
+from dataclasses import dataclass
+from datetime import date
+from typing import Any
+
+from ...config import get_settings
+from ...domain.errors import CollectorError
+from ...domain.models import Fact, Geo, Segments
+from .base import BaseCollector, HttpClient
+
+log = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True, slots=True)
+class TableSpec:
+    """Una tabla del INE y cómo mapear sus series a nuestros indicadores."""
+
+    table_id: str
+    indicator: str
+    level: str                       # nivel geográfico de las filas
+    match: tuple[str, ...] = ()      # tokens que deben aparecer en el nombre de la serie
+    exclude: tuple[str, ...] = ()
+    segment_from: str | None = None  # 'age' | 'sex' | 'nationality' | 'month'
+    scale: float = 1.0
+
+    @property
+    def env_key(self) -> str:
+        return f"INE_TABLE_{self.indicator.upper().replace('.', '_')}"
+
+    def resolved_id(self) -> str:
+        return os.getenv(self.env_key, self.table_id)
+
+
+# Semilla de tablas. Verificar los IDs con `powergis ine-discover <id>` antes
+# de una carga masiva: el INE los renumera al republicar una operación.
+TABLES: tuple[TableSpec, ...] = (
+    TableSpec("2879", "dem.pop.total", "municipio"),
+    TableSpec("2879", "dem.sex.men", "municipio", match=("hombres",)),
+    TableSpec("2879", "dem.sex.women", "municipio", match=("mujeres",)),
+    TableSpec("56934", "dem.age.0_15", "municipio", match=("0-15",)),
+    TableSpec("56934", "dem.age.16_64", "municipio", match=("16-64",)),
+    TableSpec("56934", "dem.age.65p", "municipio", match=("65",)),
+    TableSpec("56934", "dem.age.mean", "municipio", match=("edad media",)),
+    TableSpec("56934", "dem.pop.segment", "municipio", segment_from="age"),
+    TableSpec("59524", "dem.nat.foreign_pct", "municipio", match=("extranjer",)),
+    TableSpec("61399", "dem.edu.university_pct", "municipio", match=("superior",)),
+    TableSpec("61399", "dem.edu.secondary_pct", "municipio", match=("segunda etapa",)),
+    TableSpec("61399", "dem.edu.primary_pct", "municipio", match=("primera etapa",)),
+    TableSpec("61399", "dem.edu.none_pct", "municipio", match=("analfabet", "sin estudios")),
+    TableSpec("61250", "dem.household.size", "municipio", match=("tamaño medio",)),
+    TableSpec("61250", "dem.household.single_pct", "municipio", match=("unipersonal",)),
+    TableSpec("1470", "dem.birth.rate", "provincia", match=("natalidad",)),
+)
+
+_AGE_TOKEN = re.compile(r"(\d{1,3})\s*(?:-|a)\s*(\d{1,3})|(\d{1,3})\s*(?:y más|o más|\+)")
+_YEAR = re.compile(r"(19|20)\d{2}")
+
+
+def _fold(text: str) -> str:
+    """Minúsculas sin acentos: 'Municipios' y 'MUNICIPIOS' son lo mismo."""
+    import unicodedata
+
+    normalised = unicodedata.normalize("NFKD", text)
+    return "".join(c for c in normalised if not unicodedata.combining(c)).lower().strip()
+
+
+class IneCollector(BaseCollector):
+    name = "ine"
+    PROVIDES = tuple({spec.indicator for spec in TABLES})
+
+    def __init__(self, client: HttpClient | None = None) -> None:
+        cfg = get_settings()
+        self._client = client or HttpClient(
+            cfg.ine_base_url,
+            timeout=cfg.ine_timeout,
+            max_retries=cfg.ine_max_retries,
+            rps=cfg.ine_rps,
+        )
+
+    # ------------------------------------------------------------------ #
+
+    def collect(
+        self,
+        indicators: Sequence[str],
+        geos: Sequence[Geo],
+        segments: Segments,
+        period: date | None = None,
+    ) -> list[Fact]:
+        wanted = set(indicators) & set(self.PROVIDES)
+        if not wanted or not geos:
+            return []
+
+        by_code = {g.ine_code.zfill(5): g for g in geos}
+        by_code.update({g.ine_code: g for g in geos})
+        facts: list[Fact] = []
+
+        for spec in TABLES:
+            if spec.indicator not in wanted:
+                continue
+            try:
+                rows = self._table(spec)
+            except CollectorError as exc:
+                log.warning("INE tabla %s (%s): %s", spec.resolved_id(), spec.indicator, exc.message)
+                continue
+            facts.extend(self._map(spec, rows, by_code, segments, period))
+
+        return facts
+
+    # ------------------------------------------------------------------ #
+
+    def _table(self, spec: TableSpec, nult: int = 1) -> list[dict[str, Any]]:
+        payload = self._client.get_json(
+            f"DATOS_TABLA/{spec.resolved_id()}", {"nult": nult, "tip": "A", "det": 2}
+        )
+        if isinstance(payload, dict):
+            payload = payload.get("Data") or payload.get("data") or []
+        if not isinstance(payload, list):
+            raise CollectorError("Respuesta inesperada del INE", table=spec.resolved_id())
+        return payload
+
+    def _map(
+        self,
+        spec: TableSpec,
+        rows: Iterable[dict[str, Any]],
+        by_code: dict[str, Geo],
+        segments: Segments,
+        period: date | None,
+    ) -> list[Fact]:
+        out: list[Fact] = []
+        wanted_ages = {a.lower() for a in segments.age}
+        wanted_sex = {s.upper() for s in segments.sex}
+
+        for row in rows:
+            name = str(row.get("Nombre") or row.get("nombre") or "")
+            lower = name.lower()
+
+            if spec.match and not any(token in lower for token in spec.match):
+                continue
+            if spec.exclude and any(token in lower for token in spec.exclude):
+                continue
+
+            geo = self._geo_of(name, by_code)
+            if geo is None:
+                continue
+
+            segment: dict[str, str] = {}
+            if spec.segment_from == "age":
+                age = self._age_of(lower)
+                if age is None:
+                    continue
+                if wanted_ages and age.lower() not in wanted_ages:
+                    continue
+                segment["age"] = age
+            if spec.segment_from == "sex" or "hombres" in lower or "mujeres" in lower:
+                sex = "M" if "hombres" in lower else ("F" if "mujeres" in lower else None)
+                if sex and (not wanted_sex or sex in wanted_sex):
+                    segment["sex"] = sex
+
+            for value, point_period in self._points(row):
+                out.append(
+                    self.fact(
+                        geo,
+                        spec.indicator,
+                        None if value is None else value * spec.scale,
+                        period or point_period,
+                        segment or None,
+                        source_ref=f"INE:{spec.resolved_id()}",
+                    )
+                )
+        return out
+
+    def _points(self, row: dict[str, Any]) -> list[tuple[float | None, date]]:
+        data = row.get("Data") or row.get("data") or []
+        out: list[tuple[float | None, date]] = []
+        for point in data:
+            value = self.to_float(point.get("Valor", point.get("valor")))
+            year = point.get("Anyo") or point.get("anyo") or point.get("Fecha")
+            out.append((value, self._period_of(year)))
+        return out
+
+    @staticmethod
+    def _period_of(raw: Any) -> date:
+        if isinstance(raw, int):
+            return date(raw, 1, 1)
+        text = str(raw or "")
+        if text.isdigit() and len(text) == 13:  # timestamp ms
+            from datetime import UTC, datetime
+
+            return datetime.fromtimestamp(int(text) / 1000, UTC).date()
+        match = _YEAR.search(text)
+        return date(int(match.group(0)), 1, 1) if match else date.today()
+
+    @staticmethod
+    def _geo_of(name: str, by_code: dict[str, Geo]) -> Geo | None:
+        """El INE nombra las series como '28079 Madrid. Total. ...'."""
+        head = name.split(".")[0].strip()
+        token = head.split(" ")[0].strip()
+        if token.isdigit():
+            return by_code.get(token) or by_code.get(token.zfill(5)) or by_code.get(token.zfill(2))
+        lowered = head.lower()
+        for geo in by_code.values():
+            if geo.name.lower() == lowered:
+                return geo
+        return None
+
+    @staticmethod
+    def _age_of(text: str) -> str | None:
+        match = _AGE_TOKEN.search(text)
+        if not match:
+            return None
+        if match.group(1) and match.group(2):
+            return f"{match.group(1)}-{match.group(2)}"
+        if match.group(3):
+            return f"{match.group(3)}+"
+        return None
+
+    # ------------------------------------------------------------------ #
+    # Descubrimiento: sin esto, mapear una tabla del INE es adivinar
+    # ------------------------------------------------------------------ #
+
+    def discover(self, table_id: str) -> dict[str, Any]:
+        """Variables y valores de una tabla. Úsalo antes de añadir un TableSpec.
+
+            powergis ine-discover 56934
+        """
+        groups = self._client.get_json(f"GRUPOS_TABLA/{table_id}")
+        out: dict[str, Any] = {"table": table_id, "groups": []}
+        for group in groups if isinstance(groups, list) else []:
+            gid = group.get("Id") or group.get("id")
+            values = self._client.get_json(f"VALORES_GRUPOSTABLA/{table_id}/{gid}")
+            out["groups"].append({
+                "id": gid,
+                "name": group.get("Nombre") or group.get("nombre"),
+                "values": [
+                    {"id": v.get("Id"), "name": v.get("Nombre")}
+                    for v in (values if isinstance(values, list) else [])[:60]
+                ],
+            })
+        return out
+
+    def sample(self, table_id: str, limit: int = 5) -> list[str]:
+        rows = self._client.get_json(f"DATOS_TABLA/{table_id}", {"nult": 1, "tip": "A"})
+        rows = rows if isinstance(rows, list) else []
+        return [str(r.get("Nombre", "")) for r in rows[:limit]]
+
+    # ------------------------------------------------------------------ #
+    # Verificación: los IDs de TABLES son una SEMILLA, no una certeza
+    # ------------------------------------------------------------------ #
+
+    def verify(self, specs: Sequence[TableSpec] | None = None) -> dict[str, Any]:
+        """Contrasta cada `TableSpec` con la API real del INE.
+
+        Existe porque el INE renumera tablas al republicar una operación y
+        porque `match` son subcadenas del nombre de la serie: los dos fallan
+        en silencio. Un filtro que deja de acertar no lanza una excepción,
+        simplemente devuelve cero hechos, y el informe sale con huecos que
+        parecen secreto estadístico. Esto lo convierte en un fallo ruidoso.
+
+        Se descarga UNA vez por tabla distinta, no por spec: las 16 entradas
+        de `TABLES` son 6 tablas.
+        """
+        specs = specs or TABLES
+        cache: dict[str, list[dict[str, Any]] | None] = {}
+        results: list[dict[str, Any]] = []
+
+        for spec in specs:
+            table_id = spec.resolved_id()
+            if table_id not in cache:
+                try:
+                    cache[table_id] = self._table(spec, nult=1)
+                except CollectorError as exc:
+                    log.warning("INE tabla %s no responde: %s", table_id, exc.message)
+                    cache[table_id] = None
+                except Exception as exc:  # un verificador que se cae no verifica nada
+                    log.warning("INE tabla %s: %s", table_id, exc)
+                    cache[table_id] = None
+
+            rows = cache[table_id]
+            entry: dict[str, Any] = {
+                "indicator": spec.indicator,
+                "table": table_id,
+                "overridden": table_id != spec.table_id,
+                "expected_level": spec.level,
+            }
+
+            if rows is None:
+                entry.update(status="UNREACHABLE", detail="la tabla no responde o no existe")
+                results.append(entry)
+                continue
+
+            names = [str(r.get("Nombre") or r.get("nombre") or "") for r in rows]
+            entry["series"] = len(names)
+
+            if not names:
+                entry.update(status="EMPTY", detail="la tabla existe pero no devuelve series")
+                results.append(entry)
+                continue
+
+            detected = self._detect_level(names)
+            entry["detected_level"] = detected
+
+            if spec.match:
+                hits = [n for n in names if any(t in n.lower() for t in spec.match)]
+                entry["matched"] = len(hits)
+                entry["sample"] = hits[:3] if hits else names[:3]
+                if not hits:
+                    entry.update(
+                        status="NO_MATCH",
+                        detail=f"ninguna serie contiene {list(spec.match)}",
+                    )
+                    results.append(entry)
+                    continue
+            else:
+                entry["matched"] = len(names)
+                entry["sample"] = names[:3]
+
+            if detected and detected != spec.level:
+                entry.update(
+                    status="LEVEL_MISMATCH",
+                    detail=f"se esperaba '{spec.level}' y las series son de '{detected}'",
+                )
+                results.append(entry)
+                continue
+
+            entry.update(status="OK", detail="")
+            results.append(entry)
+
+        broken = [r for r in results if r["status"] != "OK"]
+        return {
+            "checked": len(results),
+            "ok": len(results) - len(broken),
+            "broken": len(broken),
+            "results": results,
+        }
+
+    # ------------------------------------------------------------------ #
+    # Padrón de municipios: sin esto no hay almacén municipal
+    # ------------------------------------------------------------------ #
+
+    #: Nombres de variable del INE que designan el municipio. Se busca POR
+    #: NOMBRE y no por ID porque los IDs de variable no son estables entre
+    #: republicaciones y un ID equivocado carga 8.000 filas de basura en
+    #: silencio. El nombre sí es estable.
+    MUNICIPIO_VARIABLE_HINTS: tuple[str, ...] = ("municipio",)
+
+    def municipality_variable_id(self) -> int:
+        """Localiza la variable 'Municipios' preguntándole al propio INE."""
+        payload = self._client.get_json("VARIABLES")
+        candidates: list[tuple[int, str]] = []
+        for var in payload if isinstance(payload, list) else []:
+            name = _fold(str(var.get("Nombre") or var.get("nombre") or ""))
+            vid = var.get("Id") or var.get("id")
+            if vid is None:
+                continue
+            if any(hint in name for hint in self.MUNICIPIO_VARIABLE_HINTS):
+                candidates.append((int(vid), name))
+
+        if not candidates:
+            raise CollectorError(
+                "El INE no expone ninguna variable cuyo nombre contenga 'municipio'. "
+                "Revisa la API antes de cargar geografías."
+            )
+        # El nombre más corto es el genérico ("Municipios") frente a variantes
+        # como "Municipios de residencia".
+        candidates.sort(key=lambda item: len(item[1]))
+        return candidates[0][0]
+
+    def municipalities(self, variable_id: int | None = None) -> list[dict[str, str]]:
+        """Relación completa de municipios: código INE de 5 dígitos y nombre.
+
+        La provincia NO se le pregunta al INE: son los dos primeros dígitos
+        del código municipal, por definición del propio sistema de codificación.
+        Derivarla es más fiable que arrastrar otro campo que puede venir vacío.
+        """
+        vid = variable_id if variable_id is not None else self.municipality_variable_id()
+        payload = self._client.get_json(f"VALORES_VARIABLES/{vid}")
+
+        out: list[dict[str, str]] = []
+        seen: set[str] = set()
+        for value in payload if isinstance(payload, list) else []:
+            code = str(value.get("Codigo") or value.get("codigo") or "").strip()
+            name = str(value.get("Nombre") or value.get("nombre") or "").strip()
+            if not code.isdigit() or len(code) != 5 or not name:
+                continue
+            if code in seen:
+                continue
+            seen.add(code)
+            out.append({"ine_code": code, "name": name, "province_code": code[:2]})
+
+        if not out:
+            raise CollectorError(f"La variable {vid} no devolvió municipios reconocibles")
+        return out
+
+    @staticmethod
+    def _detect_level(names: Sequence[str]) -> str | None:
+        """Deduce el nivel por la longitud del código que encabeza la serie.
+
+        El INE nombra '28079 Madrid. …' (municipio, 5) frente a '28 Madrid. …'
+        (provincia, 2). Se mira la mayoría, no la primera fila: las tablas
+        suelen traer un total nacional delante.
+        """
+        counts: dict[str, int] = {}
+        for name in names:
+            token = name.split(".")[0].strip().split(" ")[0].strip()
+            if not token.isdigit():
+                continue
+            level = {2: "provincia", 5: "municipio", 7: "seccion"}.get(len(token))
+            if level:
+                counts[level] = counts.get(level, 0) + 1
+        if not counts:
+            return None
+        return max(counts, key=lambda k: counts[k])

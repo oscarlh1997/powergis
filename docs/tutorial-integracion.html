@@ -1,0 +1,808 @@
+<title>Integrar el motor con WordPress</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&display=swap">
+
+<style>
+	/* Misma familia visual que el runbook de despliegue: son dos documentos
+	   del mismo sistema y conviene que se lean como tales. */
+	:root {
+		--ground:      #FBFAF8;
+		--surface:     #FFFFFF;
+		--surface-alt: #F4F2EE;
+		--line:        #E4E0D9;
+		--line-strong: #CFC9BF;
+		--ink:         #171614;
+		--ink-soft:    #45423C;
+		--muted:       #726D64;
+		--accent:      #D9541A;
+		--ok:          #106B45;
+		--ok-soft:     #E8F3ED;
+		--warn:        #8A5A00;
+		--warn-soft:   #FBF1DC;
+		--danger:      #A32017;
+		--danger-soft: #FBEBE9;
+		--term-bg:     #1B1A17;
+		--term-ink:    #E8E4DC;
+		--term-dim:    #8B857A;
+		--term-ok:     #7BC49A;
+		--measure: 66ch;
+		--radius: 10px;
+	}
+
+	@media (prefers-color-scheme: dark) {
+		:root:not([data-theme="light"]) {
+			--ground: #131211; --surface: #1B1A18; --surface-alt: #221F1C;
+			--line: #302C28; --line-strong: #443E38;
+			--ink: #F2EFE9; --ink-soft: #CFC9C0; --muted: #948D82;
+			--accent: #FF7A3D;
+			--ok: #4CBE8A; --ok-soft: #14271E;
+			--warn: #D8A23A; --warn-soft: #2B2211;
+			--danger: #F0796C; --danger-soft: #2E1614;
+			--term-bg: #0D0C0B; --term-ink: #E8E4DC; --term-dim: #7C766B;
+			--term-ok: #7BC49A;
+		}
+	}
+
+	:root[data-theme="dark"] {
+		--ground: #131211; --surface: #1B1A18; --surface-alt: #221F1C;
+		--line: #302C28; --line-strong: #443E38;
+		--ink: #F2EFE9; --ink-soft: #CFC9C0; --muted: #948D82;
+		--accent: #FF7A3D;
+		--ok: #4CBE8A; --ok-soft: #14271E;
+		--warn: #D8A23A; --warn-soft: #2B2211;
+		--danger: #F0796C; --danger-soft: #2E1614;
+		--term-bg: #0D0C0B; --term-ink: #E8E4DC; --term-dim: #7C766B;
+		--term-ok: #7BC49A;
+	}
+
+	* { box-sizing: border-box; }
+
+	body {
+		margin: 0;
+		background: var(--ground);
+		color: var(--ink);
+		font-family: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+		font-size: 16px;
+		line-height: 1.62;
+		-webkit-font-smoothing: antialiased;
+	}
+
+	h1, h2, h3 {
+		font-family: Archivo, "Helvetica Neue", Arial, sans-serif;
+		text-wrap: balance;
+		margin: 0;
+		letter-spacing: -0.011em;
+	}
+
+	code, pre { font-family: "IBM Plex Mono", ui-monospace, Menlo, monospace; }
+	a { color: var(--accent); }
+
+	.wrap { max-width: 1160px; margin: 0 auto; padding: 0 28px 96px; }
+	.layout { display: grid; grid-template-columns: 200px minmax(0, 1fr); gap: 52px; align-items: start; }
+
+	/* -- cabecera -- */
+	.masthead {
+		border-bottom: 1px solid var(--line);
+		padding: 54px 0 34px;
+		margin-bottom: 40px;
+	}
+	.eyebrow {
+		font-family: "IBM Plex Mono", monospace;
+		font-size: 11.5px; letter-spacing: 0.13em; text-transform: uppercase;
+		color: var(--muted); margin: 0 0 12px;
+	}
+	.masthead h1 { font-size: clamp(30px, 4.4vw, 44px); font-weight: 700; line-height: 1.08; max-width: 17ch; }
+	.masthead p { margin: 14px 0 0; color: var(--ink-soft); max-width: 56ch; }
+
+	/* -- rail -- */
+	.rail { position: sticky; top: 28px; }
+	.rail h2 {
+		font-size: 11.5px; font-family: "IBM Plex Mono", monospace;
+		letter-spacing: 0.13em; text-transform: uppercase;
+		color: var(--muted); font-weight: 400; margin-bottom: 16px;
+	}
+	.rail ol { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 3px; }
+	.rail a {
+		display: grid; grid-template-columns: 22px 1fr; gap: 9px; align-items: baseline;
+		padding: 8px 10px; border-radius: 7px; text-decoration: none;
+		color: var(--ink-soft); font-size: 13.5px; border: 1px solid transparent;
+	}
+	.rail a:hover, .rail a:focus-visible { background: var(--surface); border-color: var(--line); color: var(--ink); }
+	.rail .n { font-family: "IBM Plex Mono", monospace; font-size: 11px; color: var(--accent); }
+
+	/* -- etapas -- */
+	.stage { margin-bottom: 60px; scroll-margin-top: 24px; }
+	.stage > header { border-top: 2px solid var(--ink); padding-top: 14px; margin-bottom: 26px; }
+	.stage h2 {
+		font-size: 25px; font-weight: 600;
+		display: flex; flex-wrap: wrap; align-items: baseline; gap: 13px;
+	}
+	.stage h2 .tag {
+		font-family: "IBM Plex Mono", monospace; font-size: 11.5px; font-weight: 400;
+		letter-spacing: 0.09em; text-transform: uppercase; color: var(--accent);
+		border: 1px solid currentColor; border-radius: 999px; padding: 2px 10px;
+	}
+	.stage > header p { margin: 9px 0 0; color: var(--muted); max-width: var(--measure); font-size: 14.5px; }
+
+	.block { padding: 20px 0; border-bottom: 1px solid var(--line); }
+	.block:last-child { border-bottom: 0; }
+	.block h3 { font-size: 16.5px; font-weight: 600; margin-bottom: 8px; }
+	.block p { margin: 0 0 12px; max-width: var(--measure); color: var(--ink-soft); }
+	.block p:last-child { margin-bottom: 0; }
+	.block ul, .block ol.steps { margin: 0 0 12px; padding-left: 19px; max-width: var(--measure); color: var(--ink-soft); }
+	.block li { margin: 5px 0; }
+
+	/* -- terminal -- */
+	pre {
+		background: var(--term-bg); color: var(--term-ink);
+		border-radius: var(--radius); padding: 15px 18px;
+		overflow-x: auto; font-size: 13px; line-height: 1.72;
+		margin: 0 0 12px; border: 1px solid var(--line-strong);
+	}
+	pre .c { color: var(--term-dim); }
+	pre .p { color: var(--accent); user-select: none; }
+	pre .g { color: var(--term-ok); }
+
+	:not(pre) > code {
+		background: var(--surface-alt); border: 1px solid var(--line);
+		border-radius: 5px; padding: 1px 5px; font-size: 0.885em; color: var(--ink);
+	}
+
+	/* -- qué deberías ver: el rasgo estructural del tutorial -- */
+	.expect {
+		border-left: 2px solid var(--ok); background: var(--ok-soft);
+		border-radius: 0 7px 7px 0; padding: 11px 15px;
+		font-size: 13.5px; color: var(--ink-soft); max-width: var(--measure); margin: 0 0 12px;
+	}
+	.expect b {
+		display: block; font-family: "IBM Plex Mono", monospace;
+		font-size: 10.5px; letter-spacing: 0.1em; text-transform: uppercase;
+		color: var(--ok); font-weight: 500; margin-bottom: 3px;
+	}
+	.expect code { background: transparent; border: 0; padding: 0; }
+
+	.note {
+		border-left: 2px solid var(--warn); background: var(--warn-soft);
+		border-radius: 0 7px 7px 0; padding: 12px 16px;
+		font-size: 13.5px; margin: 0 0 12px; max-width: var(--measure); color: var(--ink-soft);
+	}
+	.note.stop { border-left-color: var(--danger); background: var(--danger-soft); }
+	.note b {
+		display: block; font-family: "IBM Plex Mono", monospace;
+		font-size: 10.5px; letter-spacing: 0.1em; text-transform: uppercase;
+		color: var(--warn); font-weight: 500; margin-bottom: 3px;
+	}
+	.note.stop b { color: var(--danger); }
+
+	/* -- tablas -- */
+	.scroller { overflow-x: auto; margin: 0 0 12px; }
+	table { border-collapse: collapse; width: 100%; font-size: 13.5px; min-width: 520px; }
+	th, td { text-align: left; padding: 9px 16px 9px 0; border-bottom: 1px solid var(--line); vertical-align: top; }
+	th {
+		font-family: "IBM Plex Mono", monospace; font-size: 10.5px;
+		letter-spacing: 0.09em; text-transform: uppercase; color: var(--muted); font-weight: 500;
+	}
+	td code { white-space: nowrap; }
+
+	.map {
+		display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+		gap: 12px; margin: 0 0 16px;
+	}
+	.map div {
+		border: 1px solid var(--line); border-radius: var(--radius);
+		padding: 13px 15px; background: var(--surface); font-size: 13px;
+	}
+	.map h4 {
+		margin: 0 0 5px; font-size: 11px; font-family: "IBM Plex Mono", monospace;
+		letter-spacing: 0.09em; text-transform: uppercase; color: var(--accent); font-weight: 500;
+	}
+	.map p { margin: 0; color: var(--ink-soft); line-height: 1.5; }
+
+	:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+	@media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+
+	@media (max-width: 900px) {
+		.layout { grid-template-columns: 1fr; gap: 0; }
+		.rail { position: static; margin-bottom: 36px; }
+		.rail ol { flex-direction: row; flex-wrap: wrap; }
+		.rail a { border: 1px solid var(--line); background: var(--surface); }
+	}
+	@media (max-width: 560px) { .wrap { padding: 0 18px 64px; } }
+</style>
+
+<div class="wrap">
+
+	<header class="masthead">
+		<p class="eyebrow">PowerGIS · guía de integración</p>
+		<h1>Integrar el motor con WordPress</h1>
+		<p>De cero a un informe generado por el circuito completo, en local, sin tocar
+		   powergis.es. Cada etapa aísla una cosa: si algo falla, sabes exactamente qué
+		   tramo es antes de pasar al siguiente.</p>
+	</header>
+
+	<div class="layout">
+
+		<nav class="rail" aria-label="Etapas">
+			<h2>Etapas</h2>
+			<ol>
+				<li><a href="#windows"><span class="n">··</span><span>Si usas Windows</span></a></li>
+				<li><a href="#mapa"><span class="n">··</span><span>El mapa</span></a></li>
+				<li><a href="#e1"><span class="n">1</span><span>Levantar el entorno</span></a></li>
+				<li><a href="#e2"><span class="n">2</span><span>El motor solo</span></a></li>
+				<li><a href="#e3"><span class="n">3</span><span>Meter datos</span></a></li>
+				<li><a href="#e4"><span class="n">4</span><span>El circuito entero</span></a></li>
+				<li><a href="#e5"><span class="n">5</span><span>Desde el navegador</span></a></li>
+				<li><a href="#e6"><span class="n">6</span><span>Plugin contra tema</span></a></li>
+				<li><a href="#e7"><span class="n">7</span><span>Llevarlo a la web</span></a></li>
+				<li><a href="#fallos"><span class="n">!</span><span>Cuando falla</span></a></li>
+			</ol>
+		</nav>
+
+		<main>
+
+			<!-- =========================== WINDOWS ========================== -->
+			<section class="stage" id="windows">
+				<header>
+					<h2>Si usas Windows, empieza por aquí</h2>
+					<p><code>make</code> no existe en Windows y los <code>.sh</code> necesitan bash,
+					   así que en <code>cmd</code> fallan antes de hacer nada. Hay un atajo
+					   equivalente que no depende de ninguno de los dos.</p>
+				</header>
+
+				<div class="block">
+					<h3>Usa <code>pg</code> en lugar de <code>make</code></h3>
+					<p>Todo el trabajo ocurre dentro de los contenedores, así que sólo hacía falta
+					   una forma de lanzarlo desde Windows. <code>pg.cmd</code> está en la raíz del
+					   repositorio y hace exactamente lo mismo.</p>
+<pre><span class="c">REM en cmd.exe</span>
+<span class="p">&gt;</span> pg              <span class="c">REM la lista de comandos</span>
+<span class="p">&gt;</span> pg dev          <span class="c">REM = make dev</span>
+
+<span class="c"># en PowerShell: el .\ es obligatorio</span>
+<span class="p">PS&gt;</span> .\pg dev
+<span class="p">PS&gt;</span> .\pg doctor
+<span class="p">PS&gt;</span> .\pg logs worker</pre>
+					<div class="note"><b>«El término 'pg' no se reconoce»</b>
+						Estás en PowerShell, que no ejecuta programas del directorio actual salvo
+						que se lo pidas con <code>.\</code> — es una medida de seguridad, para que
+						un fichero suelto en una carpeta no suplante a un comando del sistema.
+						cmd.exe sí los ejecuta. Escribe <code>.\pg dev</code> y funciona igual.</div>
+					<div class="scroller">
+						<table>
+							<thead><tr><th>En Linux / macOS</th><th>En Windows</th></tr></thead>
+							<tbody>
+								<tr><td><code>make dev</code></td><td><code>pg dev</code></td></tr>
+								<tr><td><code>make doctor</code></td><td><code>pg doctor</code></td></tr>
+								<tr><td><code>make smoke</code></td><td><code>pg smoke</code></td></tr>
+								<tr><td><code>make almacen</code></td><td><code>pg almacen</code></td></tr>
+								<tr><td><code>make probar-formulario</code></td><td><code>pg formulario</code></td></tr>
+								<tr><td><code>make dev-rutas</code></td><td><code>pg rutas</code></td></tr>
+								<tr><td><code>make dev-reset</code></td><td><code>pg reset</code></td></tr>
+							</tbody>
+						</table>
+					</div>
+					<div class="note"><b>La alternativa</b>
+						Si prefieres los comandos originales, Git para Windows trae Git Bash y ahí
+						<code>make</code> y los <code>.sh</code> funcionan tal cual. Las dos vías son
+						válidas; <code>pg</code> evita instalar nada.</div>
+				</div>
+
+				<div class="block">
+					<h3>Dos trampas de <code>curl</code> en Windows</h3>
+					<p>Windows 10 y 11 traen <code>curl</code>, pero <code>-s</code> silencia también
+					   los errores: si el servicio no responde, <strong>no imprime nada</strong> y
+					   parece que el comando ha ido bien. Usa <code>-i</code>, que enseña el estado.</p>
+<pre><span class="c">REM engañoso: si falla, no dice nada</span>
+<span class="p">&gt;</span> curl -s http://localhost:8000/health
+
+<span class="c">REM así se ve lo que pasa</span>
+<span class="p">&gt;</span> curl -i http://localhost:8000/health</pre>
+					<p>En PowerShell, <code>curl</code> es un alias de <code>Invoke-WebRequest</code>
+					   y no acepta las mismas opciones. Usa <code>curl.exe</code> con el
+					   <code>.exe</code> explícito, o mejor: <code>pg doctor</code>, que no necesita
+					   ninguna de las dos.</p>
+				</div>
+			</section>
+
+			<!-- ============================ MAPA ============================ -->
+			<section class="stage" id="mapa">
+				<header>
+					<h2>Qué habla con qué</h2>
+					<p>Antes de tocar nada, conviene tener claras las cuatro piezas y por dónde
+					   se pasan la pelota. Casi todos los fallos de integración son una de estas
+					   flechas que no llega.</p>
+				</header>
+
+				<div class="block">
+					<div class="map">
+						<div>
+							<h4>1 · Navegador</h4>
+							<p>El shortcode <code>[crear_proyecto_v6]</code> arma un JSON y lo manda a
+							   WordPress con el nonce de la sesión.</p>
+						</div>
+						<div>
+							<h4>2 · WordPress</h4>
+							<p>Traduce ese JSON al contrato del motor, resuelve la ubicación a código
+							   INE y firma la petición con HMAC.</p>
+						</div>
+						<div>
+							<h4>3 · Motor</h4>
+							<p>Encola el cálculo, lo hace en segundo plano y guarda el informe.</p>
+						</div>
+						<div>
+							<h4>4 · Callback</h4>
+							<p>El motor avisa a WordPress, firmando también. WordPress publica el
+							   proyecto.</p>
+						</div>
+					</div>
+
+					<p>La flecha 4 es la que más se rompe, y siempre por lo mismo: <strong>el motor
+					   tiene que poder alcanzar WordPress por su nombre de red</strong>. Dentro del
+					   contenedor del motor, <code>localhost</code> es el motor, no WordPress.</p>
+
+					<div class="note"><b>Regla del tutorial</b>
+						Todo esto se hace en local. No se toca powergis.es hasta la etapa 7, y ahí
+						se toca una copia. El circuito nuevo cambia cómo se crean los proyectos:
+						probarlo en producción es probar sobre clientes.</div>
+				</div>
+			</section>
+
+			<!-- ============================= 1 ============================== -->
+			<section class="stage" id="e1">
+				<header>
+					<h2>Levantar el entorno <span class="tag">Etapa 1</span></h2>
+					<p>Un solo comando arranca motor, base de datos, cola, worker y un WordPress
+					   limpio con el plugin ya activo.</p>
+				</header>
+
+				<div class="block">
+					<h3>Arrancar</h3>
+					<p>Necesitas Docker y el repositorio descomprimido. Nada más: Python, PHP y
+					   PostgreSQL van dentro de los contenedores.</p>
+<pre><span class="p">$</span> cd powergis
+<span class="p">$</span> make dev</pre>
+					<p>Tarda un par de minutos la primera vez porque construye la imagen del motor.
+					   Al terminar imprime las tres direcciones.</p>
+					<div class="expect"><b>Deberías ver</b>
+						<code>WordPress http://localhost:8080</code> con los usuarios
+						<code>admin/admin</code> y <code>cliente/cliente</code>, y el motor en
+						<code>http://localhost:8000/docs</code>.</div>
+				</div>
+
+				<div class="block">
+					<h3>Comprobar que las piezas están en pie</h3>
+<pre><span class="p">$</span> make dev            <span class="c"># pg dev  en Windows</span>
+<span class="p">$</span> make setup          <span class="c"># pg setup — instala WordPress</span></pre>
+					<p>Y en cuanto arranque, antes que nada:</p>
+<pre><span class="p">$</span> make doctor         <span class="c"># pg doctor</span></pre>
+					<p>Comprueba desde dentro del contenedor —así que funciona igual en Windows—
+					   PostgreSQL, el catálogo, las geografías, los municipios, el almacén, Redis y
+					   si hay algún worker vivo. Cada fallo viene con el comando que lo arregla.</p>
+					<div class="expect"><b>Deberías ver</b>
+						<code>api</code>, <code>worker</code>, <code>postgres</code>,
+						<code>redis</code>, <code>wordpress</code> y <code>mariadb</code> en marcha,
+						y el doctor avisando de que el almacén está vacío. Eso último es normal
+						todavía: lo llenas en la etapa 3.</div>
+					<div class="note stop"><b>Corregido: el fallo que tumbaba los dos</b>
+						Si vienes de una copia anterior a esta, verás
+						<code>SettingsError: error parsing value for field "allowed_origins"</code>.
+						pydantic-settings intentaba interpretar como JSON el valor
+						<code>ALLOWED_ORIGINS=http://localhost:8080</code>, y el error saltaba al
+						IMPORTAR la configuración: se llevaba por delante a la API y al worker a
+						la vez. La API caída con <code>curl -s</code> no imprime nada, así que
+						parecía un problema sólo del worker. Ya acepta lista con comas y array
+						JSON, y hay ocho pruebas que cargan la configuración desde el entorno.</div>
+
+					<div class="note stop"><b>Si el worker sale «Restarting»</b>
+						Es el único servicio que no puede fallar en silencio: sin él, los informes
+						se encolan y no los calcula nadie. El contenedor se reinicia en bucle, así
+						que <code>docker compose ps</code> sólo dice que está reiniciando, no por
+						qué. Los logos están en:
+						<code>docker compose -f docker-compose.dev.yml logs worker</code>
+						(o <code>pg logs worker</code>). Mira las últimas 20 líneas antes del
+						reinicio: ahí está la causa real.</div>
+					<div class="note"><b>Puertos ocupados</b>
+						El entorno usa 8080, 8000, 5433 y 6380. Los dos últimos van desplazados a
+						propósito para no chocar con un PostgreSQL o un Redis que ya tengas. Si
+						<code>docker compose ps</code> muestra puertos sin publicar, casi siempre es
+						que ya había algo escuchando.</div>
+				</div>
+			</section>
+
+			<!-- ============================= 2 ============================== -->
+			<section class="stage" id="e2">
+				<header>
+					<h2>El motor solo, sin WordPress <span class="tag">Etapa 2</span></h2>
+					<p>Antes de conectar nada, comprueba que el motor funciona por su cuenta. Si
+					   esto falla, no tiene sentido mirar WordPress.</p>
+				</header>
+
+				<div class="block">
+					<h3>Prueba de humo</h3>
+					<p>Firma y llama al motor igual que haría WordPress. Comprueba también lo que
+					   <em>no</em> debe pasar: que una lectura sin firma se rechace.</p>
+<pre><span class="p">$</span> make smoke          <span class="c"># pg smoke  en Windows</span></pre>
+					<p>Corre dentro del contenedor, en Python, sin bash ni <code>openssl</code>: por
+					   eso funciona igual en los tres sistemas. (La versión en bash sigue ahí como
+					   <code>make smoke-bash</code>, para quien la prefiera en Linux o macOS.)</p>
+					<div class="expect"><b>Deberías ver</b>
+						Cinco comprobaciones en verde, incluida <em>«una lectura sin firma se
+						rechaza»</em> y <em>«el informe básico no trae datos de las secciones de
+						pago»</em>.</div>
+					<div class="note"><b>Si sale 401 invalid_signature</b>
+						El secreto del motor y el de WordPress no coinciden. En local los dos valen
+						<code>dev-secreto-compartido-cambialo-en-produccion-0123456789</code>: está
+						en <code>docker-compose.dev.yml</code>, en el entorno del motor y en
+						<code>WORDPRESS_CONFIG_EXTRA</code>. Tienen que ser idénticos, carácter a
+						carácter.</div>
+				</div>
+			</section>
+
+			<!-- ============================= 3 ============================== -->
+			<section class="stage" id="e3">
+				<header>
+					<h2>Meter datos <span class="tag">Etapa 3</span></h2>
+					<p>El almacén arranca vacío. Hay dos caminos y conviene hacerlos en este orden:
+					   primero datos falsos para probar la fontanería, luego los del INE.</p>
+				</header>
+
+				<div class="block">
+					<h3>Primero: datos sintéticos</h3>
+					<p>Sirven para comprobar que el circuito entero funciona sin depender de que el
+					   INE responda ni de esperar una ingesta larga.</p>
+<pre><span class="p">$</span> docker compose -f docker-compose.dev.yml exec -T api \
+      powergis seed --demo</pre>
+					<div class="note stop"><b>Que no se te olvide</b>
+						Estos datos son <strong>inventados</strong>. Sirven para ver el sistema
+						moverse, nunca para enseñar un informe a nadie. El propio comando te lo
+						avisa en rojo.</div>
+				</div>
+
+				<div class="block">
+					<h3>Después: los municipios y el INE de verdad</h3>
+					<p>La semilla del repositorio sólo llega a provincia —72 filas—. Sin los ~8.100
+					   municipios, un estudio provincial no tiene con qué comparar y la ingesta del
+					   Padrón descarta cada fila sin dar ningún error.</p>
+<pre><span class="p">$</span> docker compose -f docker-compose.dev.yml exec -T api \
+      powergis load-municipios
+
+<span class="c"># comprueba el mapeo ANTES de cargar: el INE renumera tablas</span>
+<span class="p">$</span> docker compose -f docker-compose.dev.yml exec -T api \
+      powergis ine-verify</pre>
+					<div class="expect"><b>Deberías ver</b>
+						Algo por encima de 8.000 municipios cargados, y luego <em>«Las 16 tablas del
+						INE responden y mapean»</em>. Si <code>ine-verify</code> falla, te dice qué
+						tabla y qué filtro, y con qué serie de ejemplo arreglarlo.</div>
+					<div class="note"><b>Esto necesita red</b>
+						Los municipios y el Padrón se descargan del INE. Si estás sin conexión,
+						quédate en los datos sintéticos: el resto del tutorial funciona igual.</div>
+				</div>
+			</section>
+
+			<!-- ============================= 4 ============================== -->
+			<section class="stage" id="e4">
+				<header>
+					<h2>El circuito entero, sin navegador <span class="tag">Etapa 4</span></h2>
+					<p>Ésta es la etapa clave. Mete el payload real de
+					   <code>[crear_proyecto_v6]</code> por el mismo camino que recorrería desde el
+					   navegador, y va diciendo en voz alta qué pasa en cada tramo.</p>
+				</header>
+
+				<div class="block">
+					<h3>Por qué sin navegador</h3>
+					<p>Desde el navegador, tres fallos muy distintos se ven exactamente igual —«no
+					   se crea el proyecto»—: que el mapeo esté mal, que la ubicación no se resuelva
+					   a código INE, o que el motor no conteste. Este banco de pruebas los separa.</p>
+<pre><span class="p">$</span> make probar-formulario</pre>
+					<p>Usa <code>scripts/payload-formulario.json</code>, que es copia literal de lo
+					   que produce <code>buildPayload()</code> en el shortcode. Si el formulario
+					   cambia, actualizas ese fichero y la prueba vuelve a ser cierta.</p>
+				</div>
+
+				<div class="block">
+					<h3>Los siete tramos que comprueba</h3>
+					<div class="scroller">
+						<table>
+							<thead><tr><th>Tramo</th><th>Qué responde</th></tr></thead>
+							<tbody>
+								<tr><td>1 · Plugin</td><td>Las clases están cargadas y las constantes definidas</td></tr>
+								<tr><td>2 · Motor</td><td><code>/health</code> contesta</td></tr>
+								<tr><td>3 · Ubicación</td><td>«Madrid» → <code>28</code>. El tramo que nadie ve fallar</td></tr>
+								<tr><td>4 · Mapeo</td><td>Qué scope, segments, business y target salen</td></tr>
+								<tr><td>5 · Creación</td><td>El endpoint real, como usuario <code>cliente</code></td></tr>
+								<tr><td>6 · Callback</td><td>El motor avisa y el proyecto pasa a listo</td></tr>
+								<tr><td>7 · Muro de pago</td><td>El básico NO trae datos de las secciones de pago</td></tr>
+							</tbody>
+						</table>
+					</div>
+					<div class="expect"><b>Deberías ver</b>
+						En el tramo 4, <strong>una docena de campos en <code>target</code></strong>.
+						Ahí es donde se nota que el perfil de cliente viaja entero: son los que
+						alimentan el Match&nbsp;%. Y al final, <em>«Circuito completo»</em> con el
+						número de proyecto.</div>
+					<div class="note"><b>Si el tramo 3 falla</b>
+						Es lo más probable la primera vez, y no es un error tuyo: el formulario manda
+						<em>nombres</em> de zona y el motor exige el código INE. Si <code>dim_geo</code>
+						está vacío no hay contra qué resolver. Vuelve a la etapa 3.</div>
+				</div>
+
+				<div class="block">
+					<h3>Ver qué pasó por dentro</h3>
+<pre><span class="c"># el cálculo, la ingesta y los errores del motor</span>
+<span class="p">$</span> docker compose -f docker-compose.dev.yml logs -f worker api
+
+<span class="c"># lo que WordPress registró</span>
+<span class="p">$</span> docker compose -f docker-compose.dev.yml exec wordpress \
+      tail -f /var/www/html/wp-content/debug.log</pre>
+				</div>
+			</section>
+
+			<!-- ============================= 5 ============================== -->
+			<section class="stage" id="e5">
+				<header>
+					<h2>Ahora sí, desde el navegador <span class="tag">Etapa 5</span></h2>
+					<p>Con el circuito ya verificado, lo que pruebas aquí es la experiencia: el
+					   formulario, el informe y la subida a avanzado.</p>
+				</header>
+
+				<div class="block">
+					<h3>Crear un proyecto como cliente</h3>
+					<ol class="steps">
+						<li>Entra en <code>http://localhost:8080</code> como <code>cliente/cliente</code>.
+							Hazlo con este usuario y no con admin: es el que tiene los permisos de
+							verdad, y así compruebas de paso que el control de propiedad funciona.</li>
+						<li>Ve a <code>/nuevo-proyecto/</code> y rellena el formulario.</li>
+						<li>Envía. Deberías aterrizar en el informe, que se pinta solo cuando el
+							cálculo termina.</li>
+					</ol>
+					<div class="note"><b>Ojo con el formulario en local</b>
+						El entorno local trae el shortcode del plugin
+						(<code>[powergis_form]</code>), no el <code>[crear_proyecto_v6]</code> de tu
+						tema, que aquí no está instalado. Para probar el formulario real, monta tu
+						tema en el WordPress de pruebas añadiendo un volumen en
+						<code>docker-compose.dev.yml</code>. El contrato ya está verificado en la
+						etapa 4, así que esto es sobre todo probar el diseño.</div>
+				</div>
+
+				<div class="block">
+					<h3>El informe básico y la compra desde dentro</h3>
+					<p>En el informe básico verás la demografía completa y, en el lugar de cada
+					   sección de pago, el índice de lo que contiene con los valores tapados. Los
+					   <code>•••</code> no son un truco de CSS: <strong>el navegador nunca ha
+					   recibido esas cifras</strong>. Abajo del todo, un solo panel de compra.</p>
+					<div class="expect"><b>Compruébalo tú mismo</b>
+						Abre las herramientas de desarrollo, pestaña Red, y mira la respuesta de
+						<code>/saas/v1/projects/…/report</code>. Las secciones bloqueadas traen
+						<code>preview</code> con etiquetas y ni un solo número.</div>
+				</div>
+
+				<div class="block">
+					<h3>Simular el pago</h3>
+					<p>En local no hace falta Stripe: <code>POWERGIS_DEV_MODE</code> activa un
+					   simulador que dispara el mismo camino que dispararía el webhook.</p>
+					<div class="expect"><b>Deberías ver</b>
+						La página se amplía sola, sin recargar a mano, y las secciones bloqueadas se
+						rellenan. En la base de datos quedan la v1 y la v2 del mismo proyecto, y la
+						v2 reutiliza la demografía en vez de recalcularla.</div>
+					<div class="note stop"><b>Nunca en producción</b>
+						<code>POWERGIS_DEV_MODE</code> desbloquea informes de pago sin pagar. No debe
+						estar definido en powergis.es bajo ningún concepto.</div>
+				</div>
+			</section>
+
+			<!-- ============================= 6 ============================== -->
+			<section class="stage" id="e6">
+				<header>
+					<h2>El choque entre el plugin y tu tema <span class="tag">Etapa 6</span></h2>
+					<p>Esto no se nota en local, porque el tema no está. Se nota en powergis.es, y
+					   se nota mal: sin error, sin aviso, funcionando a medias.</p>
+				</header>
+
+				<div class="block">
+					<h3>Qué pasa exactamente</h3>
+					<p>Tu tema registra <code>saas/v1/projects/create</code> en
+					   <code>rest-projects.php</code>. El plugin registra <strong>la misma ruta</strong>.
+					   WordPress no se queja: apila los dos manejadores y despacha el primero que
+					   coincida en método. Gana el que se registró antes —el plugin, porque los
+					   plugins cargan antes que el tema— y el del tema queda como código muerto que
+					   sigue pareciendo activo.</p>
+					<p>Lo mismo con el CPT <code>project</code>: tu tema lo registra en
+					   <code>init</code> con prioridad 0, el plugin en la 10, y
+					   <code>register_post_type</code> sobrescribe. Gana el plugin, con otros
+					   <code>capability_type</code>, otro <code>rewrite</code> y otro
+					   <code>show_in_rest</code>.</p>
+					<div class="note stop"><b>El problema no es cuál gana</b>
+						Es que gane por accidente. Un cambio de prioridad o de orden de carga
+						invierte el resultado sin que nadie toque una línea de lógica.</div>
+				</div>
+
+				<div class="block">
+					<h3>Detectarlo</h3>
+<pre><span class="p">$</span> make dev-rutas</pre>
+					<div class="expect"><b>Deberías ver</b>
+						Una línea por ruta de <code>saas/v1</code> con el número de manejadores.
+						Cualquier ruta con más de uno sale marcada <code>⚠ CHOQUE</code>. En
+						powergis.es, el mismo <code>wp eval</code> con tu WP-CLI.</div>
+				</div>
+
+				<div class="block">
+					<h3>Resolverlo: que el ganador sea una decisión</h3>
+					<p>La forma más limpia es que el tema se aparte solo cuando el plugin esté
+					   presente. Un guardia al principio del <code>rest_api_init</code> de
+					   <code>rest-projects.php</code>:</p>
+<pre>add_action('rest_api_init', function () {
+
+    <span class="c">// El plugin powergis-connector se encarga de saas/v1.</span>
+    <span class="c">// Sin esto los dos registran la misma ruta y gana el que</span>
+    <span class="c">// cargue antes, que es un accidente, no una decisión.</span>
+    if ( class_exists( '\PowerGIS\REST_Projects' ) ) {
+        return;
+    }
+
+    <span class="c">// … el registro actual, intacto …</span>
+});</pre>
+					<p>Y lo mismo en <code>cpt-project.php</code>:</p>
+<pre>function saas_register_project_cpt() {
+    if ( class_exists( '\PowerGIS\CPT' ) ) {
+        return;
+    }
+    <span class="c">// … register_post_type actual …</span>
+}</pre>
+					<p>Es reversible: si desactivas el plugin, el tema vuelve a hacerse cargo solo.
+					   Y deja escrito en el código quién manda, que es lo que ahora no está.</p>
+					<div class="note"><b>Una decisión de producto que queda abierta</b>
+						Tu CPT usa <code>publicly_queryable =&gt; false</code>, así que no hay página
+						pública del informe; el del plugin sí la sirve en <code>/proyectos/{slug}/</code>.
+						Las dos posturas son defendibles, pero hay que elegir una a conciencia: de
+						ella depende cómo llega el cliente a su informe.</div>
+				</div>
+			</section>
+
+			<!-- ============================= 7 ============================== -->
+			<section class="stage" id="e7">
+				<header>
+					<h2>Llevarlo a powergis.es <span class="tag">Etapa 7</span></h2>
+					<p>Sobre una copia, nunca sobre el sitio vivo, y con el motor ya desplegado
+					   siguiendo el runbook.</p>
+				</header>
+
+				<div class="block">
+					<h3>Antes de nada, rota el secreto</h3>
+					<div class="note stop"><b>Comprometido</b>
+						<code>'guachineatata2026kimbapaquesuene'</code> ha estado en texto plano en
+						el repositorio como valor por defecto. Genera uno nuevo y ponlo a la vez en
+						el motor y en <code>wp-config.php</code>: si sólo cambias uno, todo devuelve
+						401.</div>
+<pre><span class="p">$</span> openssl rand -hex 32</pre>
+				</div>
+
+				<div class="block">
+					<h3>Las constantes</h3>
+					<p>En <code>wp-config.php</code>, por encima de
+					   <code>/* That's all, stop editing! */</code>. Nunca en la tabla
+					   <code>options</code>, nunca en git.</p>
+<pre>define( 'POWERGIS_ENGINE_URL',  'https://motor.powergis.es' );
+define( 'POWERGIS_HMAC_SECRET', '…' );   <span class="c">// el mismo que en el motor</span>
+define( 'POWERGIS_STRIPE_SECRET',         'sk_test_…' );
+define( 'POWERGIS_STRIPE_WEBHOOK_SECRET', 'whsec_…'  );
+define( 'POWERGIS_STRIPE_PRICE_ID',       'price_…'  );</pre>
+					<div class="note stop"><b>No copies POWERGIS_DEV_MODE</b>
+						Es la constante del simulador de pago. En la copia de pruebas puede estar; en
+						producción, jamás.</div>
+				</div>
+
+				<div class="block">
+					<h3>El orden que evita sustos</h3>
+					<ol class="steps">
+						<li>Sube el plugin y actívalo. Todavía no toques el tema.</li>
+						<li><code>make dev-rutas</code> (o el <code>wp eval</code> equivalente) para
+							ver los choques que hay.</li>
+						<li>Pon los guardias de la etapa 6 en el tema.</li>
+						<li>Vuelve a mirar las rutas: ya no debe haber ninguna con dos manejadores.</li>
+						<li>Crea un proyecto tuyo, de principio a fin, mirando los logs.</li>
+						<li>Prueba el pago en modo test con una tarjeta de prueba, y reenvía el mismo
+							evento desde Stripe para comprobar que la idempotencia lo ignora.</li>
+					</ol>
+					<div class="expect"><b>Cuando esto pase, la fase 3 está cerrada</b>
+						Un proyecto creado desde el formulario real, calculado por el motor con datos
+						del INE, cobrado por Stripe y ampliado solo tras el webhook.</div>
+				</div>
+			</section>
+
+			<!-- =========================== FALLOS =========================== -->
+			<section class="stage" id="fallos">
+				<header>
+					<h2>Cuando falla <span class="tag">Referencia</span></h2>
+					<p>Los síntomas que vas a ver, y qué significan de verdad.</p>
+				</header>
+
+				<div class="block">
+					<div class="scroller">
+						<table>
+							<thead><tr><th>Síntoma</th><th>Casi siempre es</th><th>Qué hacer</th></tr></thead>
+							<tbody>
+								<tr>
+									<td><code>401 invalid_signature</code></td>
+									<td>Los dos secretos no coinciden</td>
+									<td>Compara <code>HMAC_SECRET</code> y <code>POWERGIS_HMAC_SECRET</code> carácter a carácter</td>
+								</tr>
+								<tr>
+									<td><code>401 stale_request</code></td>
+									<td>Relojes desincronizados</td>
+									<td>La ventana es de 300 s. Sincroniza la hora del VPS</td>
+								</tr>
+								<tr>
+									<td>El proyecto se queda en <code>queued</code></td>
+									<td>El worker no está vivo</td>
+									<td><code>logs worker</code>. Si la cola es la equivocada, no la consume nadie</td>
+								</tr>
+								<tr>
+									<td>Se calcula pero no llega el callback</td>
+									<td>El motor no alcanza WordPress</td>
+									<td>Revisa <code>POWERGIS_CALLBACK_URL</code>: por nombre de red, no <code>localhost</code></td>
+								</tr>
+								<tr>
+									<td>«No hemos podido identificar la zona»</td>
+									<td><code>dim_geo</code> sin municipios</td>
+									<td><code>powergis load-municipios</code></td>
+								</tr>
+								<tr>
+									<td>El informe sale lleno de huecos</td>
+									<td>El almacén está vacío para ese ámbito</td>
+									<td><code>ine-verify</code> y luego <code>ingest-ine</code></td>
+								</tr>
+								<tr>
+									<td>Match&nbsp;% bajo o ausente</td>
+									<td>El perfil no llegó al motor</td>
+									<td><code>make probar-formulario</code>, tramo 4: cuenta los campos de <code>target</code></td>
+								</tr>
+								<tr>
+									<td>Todo va bien pero la ruta se comporta raro</td>
+									<td>Choque plugin/tema</td>
+									<td><code>make dev-rutas</code></td>
+								</tr>
+								<tr>
+									<td><code>404</code> en <code>/wp-json/saas/v1/…</code></td>
+									<td>Enlaces permanentes feos</td>
+									<td>Ajustes → Enlaces permanentes → guardar</td>
+								</tr>
+								<tr>
+									<td><code>worker</code> en <code>Restarting</code></td>
+									<td>Falla al arrancar, en bucle</td>
+									<td><code>logs worker</code>: el motivo está en las líneas previas al reinicio</td>
+								</tr>
+								<tr>
+									<td><code>SettingsError: allowed_origins</code></td>
+									<td>Bug corregido en la configuración</td>
+									<td>Actualiza el repo. Tumbaba API y worker a la vez, al importar</td>
+								</tr>
+								<tr>
+									<td><code>worker</code> sale <code>unhealthy</code></td>
+									<td>Heredaba el healthcheck de la API</td>
+									<td>Corregido: ahora usa <code>celery inspect ping</code>. Reconstruye con <code>pg reset</code></td>
+								</tr>
+								<tr>
+									<td><code>make: *** [smoke] Error 2</code></td>
+									<td>Estás en Windows</td>
+									<td><code>pg smoke</code>, o Git Bash</td>
+								</tr>
+								<tr>
+									<td><code>curl -s</code> no imprime nada</td>
+									<td><code>-s</code> silencia también los errores</td>
+									<td><code>curl -i</code>, o mejor <code>pg doctor</code></td>
+								</tr>
+							</tbody>
+						</table>
+					</div>
+
+					<h3>Empezar de cero</h3>
+					<p>Si el entorno local se enreda, se tira y se rehace. No hay nada que perder
+					   ahí dentro.</p>
+<pre><span class="p">$</span> make dev-reset   <span class="c"># borra volúmenes y vuelve a montarlo todo</span></pre>
+				</div>
+			</section>
+
+		</main>
+	</div>
+</div>

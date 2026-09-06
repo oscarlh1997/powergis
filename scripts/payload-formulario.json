@@ -1,0 +1,49 @@
+{
+  "_comentario": "Payload EXACTO que produce buildPayload() del shortcode [crear_proyecto_v6]. Sirve para probar el contrato sin abrir el navegador ni depender del tema. Si el formulario cambia, actualiza este fichero y las pruebas siguen siendo ciertas.",
+
+  "project_name": "Restaurantes - Madrid - prueba",
+  "ultimo_paso": 5,
+  "report_tier": "basico",
+
+  "definicion": {
+    "tipo_estudio": "provincia",
+    "actividad_economica": {
+      "sector": "Hostelería",
+      "actividad": "Restaurantes",
+      "cnae": "5610"
+    },
+    "delimitacion_geografica": {
+      "ccaa": "Comunidad de Madrid",
+      "provincia": "Madrid",
+      "poblacion": ""
+    }
+  },
+
+  "ticket": ["Medio", "Medio-Alto"],
+
+  "buyer_persona": {
+    "edad": ["25-34", "35-44"],
+    "genero": "Femenino",
+    "estado_civil": ["Nido Lleno"],
+    "academia": "Universitario / Grado Licenciatura",
+    "nacionalidad": ["España"],
+    "nse": ["A/B", "C+"],
+    "renta_anual": ["Media-Alta"],
+    "renta_mensual": "Renta Holgada"
+  },
+
+  "ecosistema": {
+    "comp_directa": true,
+    "comp_indirecta_alta": "Bares",
+    "comp_indirecta_media": "Cafeterías",
+    "gen_trafico_alto": "Centro comercial, Estación de tren",
+    "gen_trafico_medio": "Colegio"
+  },
+
+  "entorno": {
+    "clima": ["Templado"],
+    "trafico_peaton": ["Alta"],
+    "trafico_vehicular": ["Media"],
+    "comentarios": "Zona céntrica, prueba de integración"
+  }
+}

@@ -1,0 +1,318 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Firmar peticiones · PowerGIS</title>
+<style>
+	:root{
+		--ground:#FBFAF8; --surface:#FFFFFF; --surface-alt:#F4F2EE;
+		--line:#E4E0D9; --line-strong:#CFC9BF;
+		--ink:#171614; --ink-soft:#45423C; --muted:#726D64;
+		--accent:#D9541A; --ok:#106B45; --ok-soft:#E8F3ED;
+		--warn:#8A5A00; --warn-soft:#FBF1DC; --danger:#A32017;
+		--term-bg:#1B1A17; --term-ink:#E8E4DC;
+	}
+	@media (prefers-color-scheme:dark){:root{
+		--ground:#131211; --surface:#1B1A18; --surface-alt:#221F1C;
+		--line:#302C28; --line-strong:#443E38;
+		--ink:#F2EFE9; --ink-soft:#CFC9C0; --muted:#948D82;
+		--accent:#FF7A3D; --ok:#4CBE8A; --ok-soft:#14271E;
+		--warn:#D8A23A; --warn-soft:#2B2211; --danger:#F0796C;
+		--term-bg:#0D0C0B; --term-ink:#E8E4DC;
+	}}
+	*{box-sizing:border-box}
+	body{margin:0;background:var(--ground);color:var(--ink);line-height:1.6;
+		font-family:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+		font-size:15px;-webkit-font-smoothing:antialiased}
+	code,pre,input,textarea,.mono{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace}
+	.wrap{max-width:880px;margin:0 auto;padding:32px 24px 80px}
+	h1{font-size:26px;margin:0 0 6px;letter-spacing:-.01em}
+	.sub{color:var(--ink-soft);margin:0 0 24px;max-width:62ch}
+	fieldset{border:1px solid var(--line);border-radius:10px;background:var(--surface);
+		padding:16px 18px;margin:0 0 16px}
+	legend{font-size:11px;letter-spacing:.11em;text-transform:uppercase;color:var(--muted);
+		padding:0 7px;font-family:ui-monospace,monospace}
+	label{display:block;font-size:12.5px;color:var(--muted);margin:10px 0 4px}
+	input[type=text],textarea{width:100%;padding:9px 11px;border:1px solid var(--line-strong);
+		border-radius:7px;background:var(--surface-alt);color:var(--ink);font-size:13px}
+	textarea{min-height:150px;resize:vertical;line-height:1.55}
+	input:focus,textarea:focus{outline:2px solid var(--accent);outline-offset:1px}
+	.tabs{display:flex;gap:6px;margin-bottom:14px}
+	.tabs button{flex:1;padding:9px;border:1px solid var(--line-strong);border-radius:8px;
+		background:var(--surface);color:var(--ink-soft);font:inherit;font-size:13.5px;cursor:pointer}
+	.tabs button[aria-selected=true]{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
+	.btn{background:var(--accent);color:#fff;border:0;border-radius:8px;padding:11px 22px;
+		font:inherit;font-size:14.5px;font-weight:600;cursor:pointer}
+	.btn:hover{filter:brightness(1.07)}
+	.salida{margin-top:18px}
+	.fila{display:flex;align-items:center;gap:8px;background:var(--term-bg);color:var(--term-ink);
+		border:1px solid var(--line-strong);border-radius:8px;padding:9px 11px;margin-bottom:7px;
+		font-size:12.5px;overflow-x:auto}
+	.fila b{color:var(--accent);font-weight:500;white-space:nowrap}
+	.fila span{flex:1;word-break:break-all}
+	.fila button{background:transparent;border:1px solid var(--line-strong);color:var(--term-ink);
+		border-radius:5px;padding:3px 9px;font-size:11px;cursor:pointer;white-space:nowrap}
+	.fila button:hover{background:rgba(255,255,255,.08)}
+	.aviso{border-left:2px solid var(--warn);background:var(--warn-soft);border-radius:0 8px 8px 0;
+		padding:11px 14px;font-size:13px;color:var(--ink-soft);margin:0 0 16px}
+	.aviso.ok{border-left-color:var(--ok);background:var(--ok-soft)}
+	.aviso.mal{border-left-color:var(--danger);background:var(--warn-soft)}
+	.aviso b{display:block;font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;
+		font-family:ui-monospace,monospace;margin-bottom:3px;color:var(--warn)}
+	.aviso.ok b{color:var(--ok)} .aviso.mal b{color:var(--danger)}
+	ol{padding-left:20px;color:var(--ink-soft);font-size:14px}
+	ol li{margin:6px 0}
+	.reloj{font-size:12.5px;color:var(--muted);margin-top:9px}
+	.reloj.viejo{color:var(--danger);font-weight:600}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>Firmar peticiones <span style="font:600 11px ui-monospace,monospace;
+letter-spacing:.1em;vertical-align:middle;background:var(--ok-soft);color:var(--ok);
+border-radius:5px;padding:3px 8px">v3 · parte la Request URL</span></h1>
+<p class="sub" style="margin-bottom:8px"><b>Si esa etiqueta no dice «v3», tu
+navegador está sirviendo una copia en caché.</b> Ciérrala y vuelve a abrir el
+fichero, o pulsa Ctrl+Shift+R.</p>
+<p class="sub">Calcula las cabeceras <code>X-PG-Timestamp</code> y
+<code>X-PG-Signature</code> para pegarlas en Swagger. Todo ocurre en tu
+navegador: el secreto no sale de esta página ni viaja a ningún sitio.</p>
+
+<p class="sub" style="border-left:3px solid var(--warn);background:var(--warn-soft);
+padding:10px 14px;border-radius:0 7px 7px 0">
+<strong>Esta página es un fichero local, no la sirve el motor.</strong>
+Si has llegado buscando <code>localhost:8000/docs/firmar.html</code> y te ha
+salido <code>{"detail":"Not Found"}</code>, eso es el 404 de la API: en el motor,
+<code>/docs</code> es Swagger, y no tiene ni idea de este fichero. Coincidencia
+desafortunada de nombres con la carpeta <code>docs/</code> del repositorio.
+Ábrela con doble clic desde el explorador, o con <code>.\pg firmar-web</code>.</p>
+
+<div id="soporte"></div>
+
+<fieldset>
+	<legend>Secreto compartido</legend>
+	<label for="secreto">El mismo valor que <code>HMAC_SECRET</code> en el motor y
+		<code>POWERGIS_HMAC_SECRET</code> en wp-config.php</label>
+	<input type="text" id="secreto" spellcheck="false"
+	       value="dev-secreto-compartido-cambialo-en-produccion-0123456789">
+</fieldset>
+
+<div class="tabs" role="tablist">
+	<button role="tab" id="tab-post" aria-selected="true">POST · se firma el cuerpo</button>
+	<button role="tab" id="tab-get" aria-selected="false">GET · se firma la ruta</button>
+</div>
+
+<fieldset id="zona-post">
+	<legend>Cuerpo de la petición</legend>
+	<div class="aviso"><b>Esto es lo que falla casi siempre</b>
+		La firma cubre los <strong>bytes exactos</strong> del cuerpo. Escribe el JSON
+		aquí, pulsa Firmar, y luego <strong>copia este mismo texto</strong> al cuadro
+		de Swagger. Si lo reescribes, aunque sea un espacio o un salto de línea, la
+		firma deja de valer.</div>
+	<label for="cuerpo">JSON</label>
+	<textarea id="cuerpo" spellcheck="false">{
+  "project_uuid": "3f2a1b4c-5d6e-4f70-8a91-b2c3d4e5f607",
+  "wp_user_id": 7,
+  "tier": "basico",
+  "scope": { "level": "ccaa", "ine_code": "13", "children_level": "provincia" },
+  "segments": { "age": ["25-34"], "sex": ["F"] },
+  "business": { "sector": "restauracion", "avg_ticket": 600 }
+}</textarea>
+</fieldset>
+
+<fieldset id="zona-get" hidden>
+	<legend>Ruta y parámetros</legend>
+	<div class="aviso"><b>Ojo</b>
+		En los GET la firma cubre método, ruta y parámetros — y el ORDEN de los
+		parámetros cuenta. Si cambias <code>wp_user_id</code> en Swagger después
+		de firmar, la firma ya no vale: eso es justo lo que impide abrir el
+		informe de otro usuario.</div>
+
+	<div class="aviso ok"><b>Lo más fácil: pega la «Request URL» de Swagger</b>
+		Dispara una vez en Swagger, aunque dé 401. Justo debajo del botón
+		aparece <b>Request URL</b> con la dirección exacta que ha construido.
+		Pégala entera aquí abajo —con <code>http://localhost:8000</code> y
+		todo— y se parte sola. Así no hay forma de equivocarse con el orden de
+		los parámetros ni con el <code>?</code>.</div>
+
+	<label for="ruta">Ruta, o la Request URL entera</label>
+	<input type="text" id="ruta" spellcheck="false"
+	       value="http://localhost:8000/v1/reports/3f2a1b4c-5d6e-4f70-8a91-b2c3d4e5f607?wp_user_id=7">
+	<label for="params">Parámetros (se ignora si arriba has pegado una URL entera)</label>
+	<input type="text" id="params" spellcheck="false" value="">
+</fieldset>
+
+<button class="btn" id="firmar">Firmar</button>
+<div class="reloj" id="reloj"></div>
+
+<div class="salida" id="salida"></div>
+
+<fieldset style="margin-top:26px">
+	<legend>Cómo se usa en Swagger</legend>
+	<ol>
+		<li>Abre <code>http://localhost:8000/docs</code> y despliega el endpoint.</li>
+		<li>Pulsa <strong>Try it out</strong>.</li>
+		<li>Pega el cuerpo <em>tal cual</em> lo firmaste (en los POST).</li>
+		<li>Rellena <code>X-PG-Timestamp</code> y <code>X-PG-Signature</code> con lo de arriba.</li>
+		<li>En <code>POST /v1/reports</code>, pon cualquier valor en
+			<code>Idempotency-Key</code>: sirve para que un doble clic no cree dos informes.</li>
+		<li><strong>Execute</strong>, y antes de que pasen 5 minutos.</li>
+	</ol>
+	<div class="aviso"><b>Los internos son más fáciles</b>
+		<code>/internal/*</code> no lleva firma: sólo la cabecera
+		<code>X-Internal-Key</code> con el valor de <code>INTERNAL_API_KEY</code>
+		(en pruebas, <code>dev-clave-interna-0123456789</code>). Y
+		<code>/health</code>, <code>/ready</code>, el catálogo y
+		<code>/v1/geo/*</code> no piden nada: funcionan en Swagger sin tocar cabeceras.</div>
+</fieldset>
+
+</div>
+
+<script>
+(function () {
+	'use strict';
+	const $ = id => document.getElementById(id);
+
+	if (!(window.crypto && crypto.subtle)) {
+		$('soporte').innerHTML = '<div class="aviso mal"><b>No puedo firmar aquí</b>' +
+			'Tu navegador no expone <code>crypto.subtle</code> en este contexto. ' +
+			'Suele pasar al abrir el fichero por red. Cópialo a tu disco y ábrelo ' +
+			'con doble clic, o sírvelo desde <code>localhost</code>.</div>';
+		$('firmar').disabled = true;
+		return;
+	}
+
+	let modo = 'post';
+	function cambiar(nuevo) {
+		modo = nuevo;
+		$('tab-post').setAttribute('aria-selected', nuevo === 'post');
+		$('tab-get').setAttribute('aria-selected', nuevo === 'get');
+		$('zona-post').hidden = nuevo !== 'post';
+		$('zona-get').hidden = nuevo !== 'get';
+		$('salida').innerHTML = '';
+		$('reloj').textContent = '';
+	}
+	$('tab-post').onclick = () => cambiar('post');
+	$('tab-get').onclick = () => cambiar('get');
+
+	async function hmac(secreto, mensaje) {
+		const enc = new TextEncoder();
+		const k = await crypto.subtle.importKey('raw', enc.encode(secreto),
+			{ name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+		const s = await crypto.subtle.sign('HMAC', k, enc.encode(mensaje));
+		return [...new Uint8Array(s)].map(b => b.toString(16).padStart(2, '0')).join('');
+	}
+
+	function fila(nombre, valor) {
+		const d = document.createElement('div');
+		d.className = 'fila';
+		const b = document.createElement('b'); b.textContent = nombre;
+		const s = document.createElement('span'); s.textContent = valor; s.className = 'mono';
+		const c = document.createElement('button'); c.type = 'button'; c.textContent = 'copiar';
+		c.onclick = async () => {
+			try { await navigator.clipboard.writeText(valor); c.textContent = 'copiado'; }
+			catch { c.textContent = 'selecciónalo a mano'; }
+			setTimeout(() => { c.textContent = 'copiar'; }, 1600);
+		};
+		d.append(b, s, c);
+		return d;
+	}
+
+	let temporizador = null;
+
+	$('firmar').onclick = async () => {
+		const secreto = $('secreto').value;
+		if (!secreto) { alert('Falta el secreto'); return; }
+
+		const ts = String(Math.floor(Date.now() / 1000));
+		let mensaje, extra = [];
+
+		if (modo === 'post') {
+			// Se firma el texto EXACTO del cuadro, sin reformatear: es lo que
+			// tiene que llegar al servidor byte a byte.
+			const cuerpo = $('cuerpo').value;
+			try { JSON.parse(cuerpo); }
+			catch (e) {
+				$('salida').innerHTML = '<div class="aviso mal"><b>JSON inválido</b>' +
+					String(e) + '</div>';
+				return;
+			}
+			mensaje = ts + '\n' + cuerpo;
+			extra.push(['Idempotency-Key', crypto.randomUUID()]);
+		} else {
+			let ruta = $('ruta').value.trim();
+			let params = $('params').value.trim();
+
+			// Si han pegado la «Request URL» entera de Swagger, se parte aquí.
+			// Es el camino recomendado: el orden de los parámetros forma parte
+			// de la firma, y copiarlos a mano es donde se falla.
+			if (/^https?:\/\//i.test(ruta)) {
+				try {
+					const u = new URL(ruta);
+					ruta = u.pathname;
+					// `u.search` conserva el orden original; NO se usa
+					// URLSearchParams, que podría reordenar o recodificar.
+					params = u.search.startsWith('?') ? u.search.slice(1) : u.search;
+				} catch (e) {
+					$('salida').innerHTML = '<div class="aviso mal"><b>URL inválida</b>' +
+						String(e) + '</div>';
+					return;
+				}
+			}
+
+			if (!ruta.startsWith('/')) {
+				$('salida').innerHTML = '<div class="aviso mal"><b>Ruta inválida</b>' +
+					'Tiene que empezar por <code>/</code>, o pega la Request URL entera.</div>';
+				return;
+			}
+
+			params = params.replace(/^\?/, '');
+
+			// Sin parámetros NO se pone la interrogación: el motor construye
+			// `GET\n/ruta` a secas, y añadir un `?` de más cambia la firma y
+			// la rechaza. Comprobado contra `canonical_get()` del motor.
+			mensaje = ts + '\nGET\n' + ruta + (params ? '?' + params : '');
+		}
+
+		const firma = await hmac(secreto, mensaje);
+
+		const salida = $('salida');
+		salida.innerHTML = '';
+		salida.appendChild(fila('X-PG-Timestamp', ts));
+		salida.appendChild(fila('X-PG-Signature', firma));
+		extra.forEach(([n, v]) => salida.appendChild(fila(n, v)));
+
+		const previo = document.createElement('div');
+		previo.className = 'aviso ok';
+		previo.innerHTML = '<b>Se ha firmado esto</b>';
+		const pre = document.createElement('pre');
+		pre.style.cssText = 'margin:6px 0 0;white-space:pre-wrap;word-break:break-all;font-size:11.5px';
+		// Con /g. Sin la bandera global sólo se sustituía el PRIMER salto, y
+		// el segundo se pintaba como salto de verdad: la vista previa parecía
+		// mostrar dos líneas cuando lo firmado es una sola cadena.
+		pre.textContent = mensaje.replace(/\n/g, '\\n');
+		previo.appendChild(pre);
+		salida.appendChild(previo);
+
+		clearInterval(temporizador);
+		const nacida = Date.now();
+		temporizador = setInterval(() => {
+			const seg = Math.floor((Date.now() - nacida) / 1000);
+			const quedan = 300 - seg;
+			const r = $('reloj');
+			if (quedan > 0) {
+				r.className = 'reloj' + (quedan < 60 ? ' viejo' : '');
+				r.textContent = 'Válida durante ' + quedan + ' s más.';
+			} else {
+				r.className = 'reloj viejo';
+				r.textContent = 'Caducada: el motor la rechazará con stale_request. Vuelve a firmar.';
+				clearInterval(temporizador);
+			}
+		}, 1000);
+	};
+})();
+</script>
+</body>
+</html>

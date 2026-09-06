@@ -1,0 +1,209 @@
+# PowerGIS · entorno de PRUEBAS con WordPress incluido
+#
+#   docker compose -f docker-compose.dev.yml up -d
+#
+# Diferencias con producción (docker-compose.yml):
+#   · WordPress + MariaDB dentro del stack, para probar el front sin tocar
+#     powergis.es;
+#   · sin Traefik ni TLS: WordPress en :8080, motor en :8000;
+#   · el plugin se monta por volumen — editas y recargas, sin reconstruir;
+#   · POWERGIS_DEV_MODE activo: simulador de pago sin Stripe;
+#   · un solo worker con las tres colas, para gastar menos RAM.
+#
+# NO uses este fichero en producción.
+
+name: powergis-dev
+
+x-engine-dev: &engine-dev
+  build:
+    context: ./engine
+    target: runtime
+  image: powergis/engine:dev
+  environment: &engine-env
+    ENV: development
+    DEBUG: "true"
+    LOG_JSON: "false"
+    LOG_LEVEL: INFO
+    DATABASE_URL: postgresql+psycopg://powergis:powergis@postgres:5432/powergis
+    REDIS_URL: redis://redis:6379/0
+    CELERY_BROKER_URL: redis://redis:6379/1
+    CELERY_RESULT_BACKEND: redis://redis:6379/2
+    # El MISMO valor que POWERGIS_HMAC_SECRET en WordPress. Si no coinciden,
+    # todo devuelve 401 invalid_signature.
+    HMAC_SECRET: dev-secreto-compartido-cambialo-en-produccion-0123456789
+    INTERNAL_API_KEY: dev-clave-interna-0123456789
+    ALLOWED_ORIGINS: http://localhost:8080
+    WORDPRESS_BASE_URL: http://wordpress
+    LLM_ENABLED: "false"
+    USE_LOCAL_OSM: "false"
+    AEMET_API_KEY: ""
+  depends_on:
+    postgres: { condition: service_healthy }
+    redis:    { condition: service_started }
+  volumes:
+    - ./engine/src:/app/src:ro     # recarga sin reconstruir la imagen
+    - ./scripts:/scripts:ro        # datos de prueba de `powergis endpoints`
+    - devdata:/data
+  restart: unless-stopped
+
+# ---------------------------------------------------------------------------
+# Por qué TODOS los servicios llevan `restart: unless-stopped`
+# ---------------------------------------------------------------------------
+#
+# Antes sólo lo llevaban `api` y `worker`, que lo heredaban del ancla de
+# arriba. Los de infraestructura —postgres, redis, mariadb, wordpress— no
+# llevaban ninguno, y eso producía el peor estado posible cuando el portátil
+# se suspendía o Docker Desktop se reiniciaba:
+#
+#     powergis-dev-api-1        Up 2 hours (healthy)
+#     powergis-dev-worker-1     Up 2 hours (unhealthy)
+#     powergis-dev-postgres-1   Exited (255) 2 hours ago
+#     powergis-dev-redis-1      Exited (255) 2 hours ago
+#
+# El motor volvía solo; la base de datos y la cola, no. Y un motor sin base de
+# datos no dice «la base de datos está caída»: dice
+#
+#     failed to resolve host 'postgres': Name or service not known
+#
+# porque el DNS interno de Compose sólo resuelve contenedores en marcha. Es un
+# mensaje que parece de red y manda a buscar donde no es.
+#
+# `depends_on` no cubre esto: sólo ordena el arranque inicial. Cuando el
+# demonio revive un contenedor por su política de reinicio, lo hace sin
+# consultar dependencias — por eso `api` puede estar arriba con `postgres`
+# caído sin que nada proteste.
+#
+# El fichero de producción sí lo tenía en todos los servicios. Esto sólo
+# iguala el de pruebas.
+# ---------------------------------------------------------------------------
+
+services:
+
+  # ---------------------------------------------------------------- motor --
+  postgres:
+    restart: unless-stopped
+    image: postgis/postgis:16-3.4
+    environment:
+      POSTGRES_DB: powergis
+      POSTGRES_USER: powergis
+      POSTGRES_PASSWORD: powergis
+    volumes:
+      - devpg:/var/lib/postgresql/data
+      - ./infra/postgres/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U powergis -d powergis"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    ports: ["5433:5432"]   # 5433 para no chocar con un Postgres local
+
+  redis:
+    restart: unless-stopped
+    image: redis:7-alpine
+    ports: ["6380:6379"]
+
+  api:
+    <<: *engine-dev
+    command: >
+      uvicorn powergis.api.main:app
+      --host 0.0.0.0 --port 8000 --reload --reload-dir /app/src
+    ports: ["8000:8000"]
+
+  worker:
+    <<: *engine-dev
+    # Un solo worker con las tres colas: en desarrollo no hace falta separarlas.
+    command: >
+      celery -A powergis.workers.celery_app worker
+      --queues reports.advanced,reports.basic,etl,narrative
+      --concurrency 2 --loglevel INFO
+    # La imagen trae un HEALTHCHECK que hace `curl /health`, pensado para la
+    # API. El worker no sirve HTTP, así que heredarlo lo deja marcado como
+    # enfermo para siempre y confunde al mirar `docker compose ps`.
+    healthcheck:
+      test: ["CMD-SHELL", "celery -A powergis.workers.celery_app inspect ping -d celery@$$HOSTNAME || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  # ----------------------------------------------------------- wordpress --
+  mariadb:
+    restart: unless-stopped
+    image: mariadb:11
+    environment:
+      MARIADB_DATABASE: wordpress
+      MARIADB_USER: wordpress
+      MARIADB_PASSWORD: wordpress
+      MARIADB_ROOT_PASSWORD: root
+    volumes: [devwp_db:/var/lib/mysql]
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  wordpress:
+    restart: unless-stopped
+    image: wordpress:6-php8.2-apache
+    depends_on:
+      mariadb: { condition: service_healthy }
+      api:     { condition: service_started }
+    ports: ["8080:80"]
+    environment:
+      WORDPRESS_DB_HOST: mariadb
+      WORDPRESS_DB_USER: wordpress
+      WORDPRESS_DB_PASSWORD: wordpress
+      WORDPRESS_DB_NAME: wordpress
+      WORDPRESS_DEBUG: "1"
+      # Todo lo de PowerGIS se define aquí, igual que iría en wp-config.php.
+      WORDPRESS_CONFIG_EXTRA: |
+        define( 'WP_HOME',    'http://localhost:8080' );
+        define( 'WP_SITEURL', 'http://localhost:8080' );
+        define( 'WP_DEBUG_LOG', true );
+        define( 'WP_DEBUG_DISPLAY', false );
+
+        /* El motor, por la red interna de Docker. */
+        define( 'POWERGIS_ENGINE_URL',  'http://api:8000' );
+        define( 'POWERGIS_HMAC_SECRET', 'dev-secreto-compartido-cambialo-en-produccion-0123456789' );
+
+        /* El motor alcanza WordPress por su nombre de servicio, no por
+           localhost:8080 — dentro del contenedor del motor, localhost es él. */
+        define( 'POWERGIS_CALLBACK_URL', 'http://wordpress/wp-json/saas/v1/projects/callback' );
+
+        /* Simulador de pago sin Stripe. NUNCA en producción. */
+        define( 'POWERGIS_DEV_MODE', true );
+    volumes:
+      - devwp:/var/www/html
+      # El plugin en vivo: editas en tu máquina y recargas el navegador.
+      - ./wordpress/powergis-connector:/var/www/html/wp-content/plugins/powergis-connector
+      # El FRONT real: el plugin SaaS Studies, que es donde vive de verdad el
+      # shortcode [crear_proyecto_v6] y los datos de CNAE, países y ubicación.
+      # Así se prueba el formulario de producción contra el motor local, sin
+      # tocar powergis.es y sin exponer nada a internet.
+      - ./wordpress/saas-studies:/var/www/html/wp-content/plugins/saas-studies
+
+  # WP-CLI para la instalación automática. Se ejecuta y termina.
+  wpcli:
+    image: wordpress:cli-php8.2
+    depends_on:
+      wordpress: { condition: service_started }
+    volumes:
+      - devwp:/var/www/html
+      - ./wordpress/powergis-connector:/var/www/html/wp-content/plugins/powergis-connector
+      - ./wordpress/saas-studies:/var/www/html/wp-content/plugins/saas-studies
+      - ./scripts/setup-wordpress.sh:/setup.sh:ro
+      # Banco de pruebas del formulario (wp eval-file /scripts/probar-formulario.php)
+      - ./scripts:/scripts:ro
+    environment:
+      WORDPRESS_DB_HOST: mariadb
+      WORDPRESS_DB_USER: wordpress
+      WORDPRESS_DB_PASSWORD: wordpress
+      WORDPRESS_DB_NAME: wordpress
+    entrypoint: ["/bin/sh", "/setup.sh"]
+    profiles: ["setup"]
+
+volumes:
+  devpg:
+  devwp:
+  devwp_db:
+  devdata:

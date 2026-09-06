@@ -1,0 +1,393 @@
+{
+  "_comentario": "Datos de prueba de cada endpoint del motor. Los usa `powergis endpoints`, que firma y dispara todo en orden de dependencia. Editable: si cambias un cuerpo aquí, la prueba cambia.",
+  "_placeholders": {
+    "{uuid}": "proyecto principal de la tanda: lo crean, leen, amplían y exportan los demás casos",
+    "{uuid2}": "segundo proyecto, para el caso nacional",
+    "{uuid3}": "tercero, para el municipal",
+    "{owner}": "wp_user_id, distinto en cada tanda: si se repitiera, el límite de informes gratuitos (3/hora) haría fallar la segunda ejecución",
+    "esperar": "marca los casos asíncronos: tras un 202, el lanzador sondea hasta que el informe está en ese nivel antes de seguir",
+    "requiere_proyecto": "el caso necesita el proyecto principal creado en el grupo `informes`; se salta si esa tanda no corrió"
+  },
+  "salud": [
+    {
+      "nombre": "estado del servicio",
+      "metodo": "GET",
+      "ruta": "/health",
+      "auth": "ninguna",
+      "espera": 200,
+      "nota": "Lo único que puede llamarse sin credenciales. Úsalo para monitorización."
+    },
+    {
+      "nombre": "listo para recibir tráfico",
+      "metodo": "GET",
+      "ruta": "/ready",
+      "auth": "ninguna",
+      "espera": [
+        200,
+        503
+      ],
+      "nota": "503 si PostgreSQL o Redis no responden. Es la sonda de arranque, no la de vida."
+    }
+  ],
+  "catalogo": [
+    {
+      "nombre": "qué incluye el informe básico",
+      "metodo": "GET",
+      "ruta": "/v1/reports/catalog/basico",
+      "auth": "ninguna",
+      "espera": 200,
+      "nota": "Público a propósito: alimenta la página comercial de precios."
+    },
+    {
+      "nombre": "qué incluye el avanzado",
+      "metodo": "GET",
+      "ruta": "/v1/reports/catalog/avanzado",
+      "auth": "ninguna",
+      "espera": 200
+    }
+  ],
+  "geografia": [
+    {
+      "nombre": "buscar por nombre",
+      "metodo": "GET",
+      "ruta": "/v1/geo/search",
+      "query": "q=Madrid&level=provincia",
+      "auth": "ninguna",
+      "espera": 200,
+      "nota": "Lo que usa el resolutor de WordPress para traducir «Madrid» a «28»."
+    },
+    {
+      "nombre": "una geografía concreta",
+      "metodo": "GET",
+      "ruta": "/v1/geo/provincia/28",
+      "auth": "ninguna",
+      "espera": 200
+    },
+    {
+      "nombre": "municipios de una provincia",
+      "metodo": "GET",
+      "ruta": "/v1/geo/provincia/28/children",
+      "query": "level=municipio",
+      "auth": "ninguna",
+      "espera": 200,
+      "nota": "Debe devolver ~179 municipios para Madrid. Si devuelve 0, falta `load-municipios`."
+    },
+    {
+      "nombre": "provincias de una comunidad",
+      "metodo": "GET",
+      "ruta": "/v1/geo/ccaa/13/children",
+      "query": "level=provincia",
+      "auth": "ninguna",
+      "espera": 200
+    }
+  ],
+  "informes": [
+    {
+      "nombre": "crear informe básico",
+      "metodo": "POST",
+      "ruta": "/v1/reports",
+      "auth": "firma sobre el cuerpo",
+      "espera": 202,
+      "cabeceras": {
+        "Idempotency-Key": "uno nuevo por intento real"
+      },
+      "cuerpo": {
+        "project_uuid": "{uuid}",
+        "wp_user_id": "{owner}",
+        "wp_post_id": 7818,
+        "tier": "basico",
+        "scope": {
+          "level": "ccaa",
+          "ine_code": "13",
+          "children_level": "provincia"
+        },
+        "segments": {
+          "age": [
+            "25-34",
+            "35-44"
+          ],
+          "sex": [
+            "F"
+          ]
+        },
+        "business": {
+          "sector": "restauracion",
+          "avg_ticket": 600
+        },
+        "target": {
+          "age_range": [
+            "25-34",
+            "35-44"
+          ],
+          "education_level": "universitario",
+          "family_status": "nido_lleno",
+          "nse": [
+            "a/b",
+            "c+"
+          ],
+          "annual_income": "45-75k",
+          "monthly_available_income": "801-2500",
+          "average_ticket": "medio_alto",
+          "climate": [
+            "templado"
+          ],
+          "pedestrian_traffic": "alto",
+          "vehicular_traffic": "medio",
+          "direct_competition": true
+        }
+      },
+      "nota": "202, no 200: el cálculo va a una cola. El informe no existe todavía cuando responde.",
+      "esperar": "basico"
+    },
+    {
+      "nombre": "crear informe nacional",
+      "metodo": "POST",
+      "ruta": "/v1/reports",
+      "auth": "firma sobre el cuerpo",
+      "espera": 202,
+      "cuerpo": {
+        "project_uuid": "{uuid2}",
+        "wp_user_id": "{owner}",
+        "tier": "basico",
+        "scope": {
+          "level": "pais",
+          "ine_code": "ES",
+          "children_level": "ccaa"
+        },
+        "segments": {
+          "age": [],
+          "sex": []
+        },
+        "business": {
+          "sector": "retail"
+        }
+      },
+      "nota": "Ámbito nacional: el único que usa «ES» en vez de un código numérico. Usa su propio UUID: tres altas con el mismo identificador serían la misma alta."
+    },
+    {
+      "nombre": "crear informe municipal",
+      "metodo": "POST",
+      "ruta": "/v1/reports",
+      "auth": "firma sobre el cuerpo",
+      "espera": 202,
+      "cuerpo": {
+        "project_uuid": "{uuid3}",
+        "wp_user_id": "{owner}",
+        "tier": "avanzado",
+        "scope": {
+          "level": "municipio",
+          "ine_code": "28079"
+        },
+        "segments": {
+          "age": [
+            "18-24"
+          ],
+          "sex": [
+            "M",
+            "F"
+          ]
+        },
+        "business": {
+          "sector": "cafeteria",
+          "avg_ticket": 30,
+          "surface_m2": 85
+        }
+      },
+      "nota": "Sin `children_level`: por debajo de municipio no hay datos en la fase del INE."
+    },
+    {
+      "nombre": "leer el informe",
+      "metodo": "GET",
+      "ruta": "/v1/reports/{uuid}",
+      "query": "wp_user_id={owner}",
+      "auth": "firma sobre método + ruta + query",
+      "espera": 200,
+      "nota": "409 mientras se calcula. La firma cubre la query entera: sin eso, cambiar wp_user_id abriría el informe de otro."
+    },
+    {
+      "nombre": "leer una versión concreta",
+      "metodo": "GET",
+      "ruta": "/v1/reports/{uuid}",
+      "query": "wp_user_id={owner}&version=1",
+      "auth": "firma sobre método + ruta + query",
+      "espera": 200,
+      "nota": "v1 es el básico, v2 el avanzado tras el pago."
+    },
+    {
+      "nombre": "subir a avanzado",
+      "metodo": "POST",
+      "ruta": "/v1/reports/{uuid}/upgrade",
+      "auth": "firma sobre el cuerpo",
+      "espera": 202,
+      "cuerpo": {
+        "payment_reference": "pi_3PruebaStripe000",
+        "force_refresh": false
+      },
+      "nota": "Reutiliza la demografía ya calculada. `force_refresh: true` la recalcula, y sólo hace falta si los datos del almacén han cambiado. Devuelve 202: la ampliación se calcula en segundo plano, así que todo lo que necesite la v2 —PlaceRank el primero— tiene que esperar a que exista.",
+      "esperar": "avanzado"
+    },
+    {
+      "nombre": "recalcular el PlaceRank con otros pesos",
+      "metodo": "POST",
+      "ruta": "/v1/reports/{uuid}/placerank/rebalance",
+      "auth": "firma sobre el cuerpo",
+      "espera": 200,
+      "cuerpo": {
+        "economico": 0.4,
+        "demografico": 0.3,
+        "ambiental": 0.2,
+        "match": 0.1
+      },
+      "nota": "No toca la base de datos: recalcula sobre el snapshot. Devuelve el ranking COMPLETO, que es producto de pago, y por eso va firmado."
+    },
+    {
+      "nombre": "capas del mapa",
+      "metodo": "POST",
+      "ruta": "/v1/reports/{uuid}/geolens",
+      "auth": "firma sobre el cuerpo",
+      "espera": 200,
+      "cuerpo": {
+        "indicators": [
+          "dem.pop.total",
+          "dem.age.mean"
+        ],
+        "classes": 5,
+        "method": "quantiles"
+      },
+      "nota": "`indicators` vacío devuelve todas las capas. Los valores viajan aquí; las geometrías, en las teselas."
+    },
+    {
+      "nombre": "exportar a Excel",
+      "metodo": "GET",
+      "ruta": "/v1/reports/{uuid}/export/xlsx",
+      "query": "wp_user_id={owner}",
+      "auth": "firma sobre método + ruta + query",
+      "espera": 200,
+      "nota": "Devuelve binario, no JSON. Igual con `pdf` y `pptx`."
+    },
+    {
+      "nombre": "bajar a básico",
+      "metodo": "POST",
+      "ruta": "/v1/reports/{uuid}/downgrade",
+      "auth": "firma sobre el cuerpo",
+      "espera": 200,
+      "cuerpo": {},
+      "nota": "Para reembolsos y contracargos. No borra la v2: deja de servirla. Va el ÚLTIMO de la tanda a propósito: deja el proyecto en básico, así que todo lo que necesita el avanzado —PlaceRank, GeoLens, exportaciones— tiene que probarse antes."
+    }
+  ],
+  "operacion": [
+    {
+      "nombre": "arrancar el almacén",
+      "metodo": "POST",
+      "ruta": "/internal/bootstrap",
+      "query": "demo=true",
+      "auth": "X-Internal-Key",
+      "espera": 200,
+      "nota": "Carga geografías, perfiles de sector y catálogo sin necesidad de shell. `demo=true` añade hechos SINTÉTICOS. Existe porque `powergis seed` por `docker compose exec` falla en Windows más de lo que parece, y deja las tablas creadas y vacías: el estado en que todo devuelve 404 sin decir por qué."
+    },
+    {
+      "nombre": "encolar una ingesta",
+      "metodo": "POST",
+      "ruta": "/internal/ingest",
+      "auth": "X-Internal-Key",
+      "espera": 200,
+      "cuerpo": {
+        "collector": "ine",
+        "indicators": [
+          "dem.pop.total",
+          "dem.age.mean"
+        ],
+        "level": "provincia",
+        "parent_code": "13",
+        "period": null
+      },
+      "nota": "Va a la cola `etl`, aislada de los informes. Estas rutas NUNCA salen a internet."
+    },
+    {
+      "nombre": "sincronizar el catálogo",
+      "metodo": "POST",
+      "ruta": "/internal/catalog/sync",
+      "auth": "X-Internal-Key",
+      "espera": 200,
+      "cuerpo": {},
+      "nota": "El catálogo del código es la fuente de verdad; esto lo vuelca a la base."
+    },
+    {
+      "nombre": "indicadores sin colector",
+      "metodo": "GET",
+      "ruta": "/internal/coverage",
+      "auth": "X-Internal-Key",
+      "espera": 200,
+      "nota": "Un indicador huérfano nunca tendrá dato: saldrá como hueco y parecerá secreto estadístico."
+    },
+    {
+      "nombre": "inspeccionar una tabla del INE",
+      "metodo": "GET",
+      "ruta": "/internal/ine/discover/2879",
+      "auth": "X-Internal-Key",
+      "espera": 200,
+      "nota": "Necesita red hacia servicios.ine.es. `powergis endpoints` lo salta si no hay salida; con `--con-red` lo exige.",
+      "requiere_red": true
+    }
+  ],
+  "seguridad": [
+    {
+      "nombre": "lectura SIN firma",
+      "metodo": "GET",
+      "ruta": "/v1/reports/{uuid}",
+      "query": "wp_user_id={owner}",
+      "auth": "ninguna (a propósito)",
+      "espera": 401,
+      "nota": "Si esto devuelve 200, cualquier UUID filtrado abre un informe de pago."
+    },
+    {
+      "nombre": "PlaceRank SIN firma",
+      "metodo": "POST",
+      "ruta": "/v1/reports/{uuid}/placerank/rebalance",
+      "auth": "ninguna (a propósito)",
+      "espera": 401,
+      "cuerpo": {
+        "economico": 1.0,
+        "demografico": 0.0,
+        "ambiental": 0.0,
+        "match": 0.0
+      },
+      "nota": "Estuvo abierto. Devolvía el ranking entero a quien conociera el UUID."
+    },
+    {
+      "nombre": "cuerpo alterado tras firmar",
+      "metodo": "POST",
+      "ruta": "/v1/reports",
+      "auth": "firma válida de OTRO cuerpo",
+      "espera": 401,
+      "nota": "La firma cubre los bytes exactos. Un byte distinto y no vale."
+    },
+    {
+      "nombre": "firma caducada",
+      "metodo": "GET",
+      "ruta": "/v1/reports/{uuid}",
+      "query": "wp_user_id={owner}",
+      "auth": "firma con timestamp de hace una hora",
+      "espera": 401,
+      "nota": "Ventana de 300 s. Evita que una petición capturada valga para siempre."
+    },
+    {
+      "nombre": "informe de otro usuario",
+      "metodo": "GET",
+      "ruta": "/v1/reports/{uuid}",
+      "query": "wp_user_id=999",
+      "auth": "firma válida",
+      "espera": 403,
+      "nota": "Segunda barrera: aunque la llamada esté firmada, el proyecto no es suyo. Necesita que el proyecto EXISTA para llegar al 403; suelto daría 404, que es correcto pero no prueba nada.",
+      "requiere_proyecto": true
+    },
+    {
+      "nombre": "rutas internas desde fuera",
+      "metodo": "GET",
+      "ruta": "/internal/coverage",
+      "auth": "sin X-Internal-Key",
+      "espera": 401,
+      "nota": "En producción, Traefik además no las publica."
+    }
+  ]
+}

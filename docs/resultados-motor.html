@@ -1,0 +1,732 @@
+<title>Resultados contra el motor</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@0,400;0,500;0,600&display=swap">
+<style>
+:root{--ground:#FBFAF8;--surface:#FFFFFF;--surface-alt:#F4F2EE;--line:#E4E0D9;--line-strong:#CFC9BF;
+--ink:#171614;--ink-soft:#45423C;--muted:#726D64;--accent:#D9541A;--ok:#106B45;--ok-soft:#E8F3ED;
+--danger:#A32017;--danger-soft:#FBEBE9;--term-bg:#1B1A17;--term-ink:#E8E4DC;--term-dim:#8B857A;
+--radius:10px;--measure:66ch}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--ground:#131211;--surface:#1B1A18;
+--surface-alt:#221F1C;--line:#302C28;--line-strong:#443E38;--ink:#F2EFE9;--ink-soft:#CFC9C0;
+--muted:#948D82;--accent:#FF7A3D;--ok:#4CBE8A;--ok-soft:#14271E;--danger:#F0796C;--danger-soft:#2E1614;
+--term-bg:#0D0C0B;--term-ink:#E8E4DC;--term-dim:#7C766B}}
+:root[data-theme="dark"]{--ground:#131211;--surface:#1B1A18;--surface-alt:#221F1C;--line:#302C28;
+--line-strong:#443E38;--ink:#F2EFE9;--ink-soft:#CFC9C0;--muted:#948D82;--accent:#FF7A3D;--ok:#4CBE8A;
+--ok-soft:#14271E;--danger:#F0796C;--danger-soft:#2E1614;--term-bg:#0D0C0B;--term-ink:#E8E4DC;--term-dim:#7C766B}
+*{box-sizing:border-box}
+body{margin:0;background:var(--ground);color:var(--ink);font-family:"IBM Plex Sans",system-ui,sans-serif;
+font-size:16px;line-height:1.6;-webkit-font-smoothing:antialiased}
+h1,h2,h3,h4{font-family:Archivo,Arial,sans-serif;margin:0;text-wrap:balance;letter-spacing:-.011em}
+code,pre{font-family:"IBM Plex Mono",ui-monospace,Menlo,monospace}
+.wrap{max-width:1080px;margin:0 auto;padding:0 28px 90px}
+.masthead{border-bottom:1px solid var(--line);padding:54px 0 30px;margin-bottom:34px}
+.eyebrow{font-family:"IBM Plex Mono",monospace;font-size:11.5px;letter-spacing:.13em;
+text-transform:uppercase;color:var(--muted);margin:0 0 12px}
+.masthead h1{font-size:clamp(30px,4.4vw,42px);font-weight:700;line-height:1.08;max-width:16ch}
+.masthead p{margin:14px 0 0;color:var(--ink-soft);max-width:60ch}
+.marcador{display:flex;flex-wrap:wrap;gap:10px;margin-top:22px}
+.marcador div{border:1px solid var(--line-strong);border-radius:var(--radius);background:var(--surface);
+padding:12px 18px;min-width:130px}
+.marcador b{display:block;font-family:Archivo,sans-serif;font-size:24px;line-height:1.1}
+.marcador span{font-size:12px;color:var(--muted)}
+.grupo{margin:0 0 52px;scroll-margin-top:20px}
+.grupo>header{border-top:2px solid var(--ink);padding-top:13px;margin-bottom:18px}
+.grupo h2{font-size:23px;font-weight:600}
+.grupo>header p{margin:7px 0 0;color:var(--muted);font-size:14.5px;max-width:var(--measure)}
+.caso{border:1px solid var(--line);border-left:3px solid var(--ok);border-radius:var(--radius);
+background:var(--surface);padding:15px 17px;margin:0 0 12px}
+.caso.ko{border-left-color:var(--danger);background:var(--danger-soft)}
+.cab{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin-bottom:7px}
+.met{font-family:"IBM Plex Mono",monospace;font-size:10.5px;font-weight:500;letter-spacing:.07em;
+padding:2px 8px;border-radius:5px;color:#fff}
+.met--get{background:#3A6EA5}.met--post{background:var(--accent)}
+.ruta{font-size:12.5px;word-break:break-all}.ruta .q{color:var(--muted)}
+.st{margin-left:auto;font-family:"IBM Plex Mono",monospace;font-size:13px;font-weight:500}
+.st--ok{color:var(--ok)}.st--ko{color:var(--danger)}
+.caso h3{font-size:15px;font-weight:600;margin-bottom:4px}
+.auth{margin:0 0 11px;font-size:12px;font-family:"IBM Plex Mono",monospace;color:var(--muted)}
+.par{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.par h4{font-size:10.5px;font-family:"IBM Plex Mono",monospace;letter-spacing:.1em;
+text-transform:uppercase;color:var(--muted);font-weight:500;margin-bottom:5px}
+pre{background:var(--term-bg);color:var(--term-ink);border:1px solid var(--line-strong);
+border-radius:8px;padding:11px 13px;overflow-x:auto;font-size:12px;line-height:1.6;margin:0}
+pre.bin{color:var(--term-dim);font-style:italic}
+.nada{margin:0;padding:11px 13px;font-size:12.5px;color:var(--muted);border:1px dashed var(--line-strong);
+border-radius:8px;font-family:"IBM Plex Mono",monospace}
+.aviso{border-left:2px solid var(--accent);background:var(--surface-alt);border-radius:0 8px 8px 0;
+padding:13px 16px;margin:0 0 26px;font-size:14px;color:var(--ink-soft);max-width:var(--measure)}
+.aviso b{display:block;font-family:"IBM Plex Mono",monospace;font-size:10.5px;letter-spacing:.1em;
+text-transform:uppercase;color:var(--accent);font-weight:500;margin-bottom:4px}
+@media (max-width:700px){.par{grid-template-columns:1fr}.wrap{padding:0 18px 60px}.st{margin-left:0}}
+</style>
+<div class="wrap">
+<header class="masthead">
+<p class="eyebrow">PowerGIS · ejecutado en tu localhost:8000</p>
+<h1>Resultados contra el motor</h1>
+<p>Los 28 casos disparados contra tu instancia desde el navegador, firmando cada
+petición con HMAC-SHA256 mediante Web Crypto. Entrada y salida reales de cada
+endpoint, sin retocar.</p>
+<div class="marcador">
+<div><b>28</b><span>casos ejecutados</span></div>
+<div><b>22</b><span>respuestas correctas</span></div>
+<div><b>6</b><span>rechazos, todos esperados</span></div>
+<div><b>0</b><span>fallos</span></div>
+</div>
+</header>
+<div class="aviso"><b>Cómo se firmó</b>
+El firmador del navegador se contrastó contra Python con un mensaje fijo: misma
+firma, carácter a carácter. Los 401 de abajo son rechazos reales de tu motor, no
+peticiones mal construidas.</div>
+
+    <section class="grupo" id="salud">
+      <header><h2>Salud</h2><p>Sin credenciales. Es lo que mira la monitorización.</p></header>
+      
+      <article class="caso ok">
+        <div class="cab">
+          <span class="met met--get">GET</span>
+          <code class="ruta">/health</code>
+          <span class="st st--ok">200</span>
+        </div>
+        <h3>estado del servicio</h3>
+        <p class="auth">ninguna</p>
+        <div class="par">
+          <div><h4>Entrada</h4><p class="nada">Sin cuerpo</p></div>
+          <div><h4>Salida</h4><pre>{
+  &quot;status&quot;: &quot;ok&quot;,
+  &quot;engine_version&quot;: &quot;1.0.0&quot;,
+  &quot;database&quot;: true,
+  &quot;redis&quot;: true,
+  &quot;checks&quot;: {
+    &quot;env&quot;: &quot;development&quot;
+  }
+}</pre></div>
+        </div>
+      </article>
+      <article class="caso ok">
+        <div class="cab">
+          <span class="met met--get">GET</span>
+          <code class="ruta">/ready</code>
+          <span class="st st--ok">200</span>
+        </div>
+        <h3>listo para recibir tráfico</h3>
+        <p class="auth">ninguna</p>
+        <div class="par">
+          <div><h4>Entrada</h4><p class="nada">Sin cuerpo</p></div>
+          <div><h4>Salida</h4><pre>{
+  &quot;status&quot;: &quot;ok&quot;,
+  &quot;engine_version&quot;: &quot;1.0.0&quot;,
+  &quot;database&quot;: true,
+  &quot;redis&quot;: true,
+  &quot;checks&quot;: {
+    &quot;config_problems&quot;: []
+  }
+}</pre></div>
+        </div>
+      </article>
+    </section>
+
+    <section class="grupo" id="catalogo">
+      <header><h2>Catálogo comercial</h2><p>Público a propósito: alimenta la página de precios.</p></header>
+      
+      <article class="caso ok">
+        <div class="cab">
+          <span class="met met--get">GET</span>
+          <code class="ruta">/v1/reports/catalog/basico</code>
+          <span class="st st--ok">200</span>
+        </div>
+        <h3>qué incluye el informe básico</h3>
+        <p class="auth">ninguna</p>
+        <div class="par">
+          <div><h4>Entrada</h4><p class="nada">Sin cuerpo</p></div>
+          <div><h4>Salida</h4><pre>{
+  &quot;tier&quot;: &quot;basico&quot;,
+  &quot;sections&quot;: &quot;[5 secciones · sólo demografía disponible]&quot;
+}</pre></div>
+        </div>
+      </article>
+      <article class="caso ok">
+        <div class="cab">
+          <span class="met met--get">GET</span>
+          <code class="ruta">/v1/reports/catalog/avanzado</code>
+          <span class="st st--ok">200</span>
+        </div>
+        <h3>qué incluye el avanzado</h3>
+        <p class="auth">ninguna</p>
+        <div class="par">
+          <div><h4>Entrada</h4><p class="nada">Sin cuerpo</p></div>
+          <div><h4>Salida</h4><pre>{
+  &quot;tier&quot;: &quot;avanzado&quot;,
+  &quot;sections&quot;: &quot;[5 secciones · todas disponibles]&quot;
+}</pre></div>
+        </div>
+      </article>
+    </section>
+
+    <section class="grupo" id="geografia">
+      <header><h2>Geografía</h2><p>Lo que usa WordPress para traducir «Madrid» a «28».</p></header>
+      
+      <article class="caso ok">
+        <div class="cab">
+          <span class="met met--get">GET</span>
+          <code class="ruta">/v1/geo/search<span class="q">?q=Madrid&amp;level=provincia</span></code>
+          <span class="st st--ok">200</span>
+        </div>
+        <h3>buscar por nombre</h3>
+        <p class="auth">ninguna</p>
+        <div class="par">
+          <div><h4>Entrada</h4><p class="nada">Sin cuerpo</p></div>
+          <div><h4>Salida</h4><pre>[
+  {
+    &quot;geo_id&quot;: 48,
+    &quot;level&quot;: &quot;provincia&quot;,
+    &quot;ine_code&quot;: &quot;28&quot;,
+    &quot;name&quot;: &quot;Madrid&quot;,
+    &quot;parent_id&quot;: 14,
+    &quot;population&quot;: 6871000
+  }
+]</pre></div>
+        </div>
+      </article>
+      <article class="caso ok">
+        <div class="cab">
+          <span class="met met--get">GET</span>
+          <code class="ruta">/v1/geo/provincia/28</code>
+          <span class="st st--ok">200</span>
+        </div>
+        <h3>una geografía concreta</h3>
+        <p class="auth">ninguna</p>
+        <div class="par">
+          <div><h4>Entrada</h4><p class="nada">Sin cuerpo</p></div>
+          <div><h4>Salida</h4><pre>{
+  &quot;geo_id&quot;: 48,
+  &quot;level&quot;: &quot;provincia&quot;,
+  &quot;ine_code&quot;: &quot;28&quot;,
+  &quot;name&quot;: &quot;Madrid&quot;,
+  &quot;parent_id&quot;: 14,
+  &quot;population&quot;: 6871000
+}</pre></div>
+        </div>
+      </article>
+      <article class="caso ok">
+        <div class="cab">
+          <span class="met met--get">GET</span>
+          <code class="ruta">/v1/geo/provincia/28/children<span class="q">?level=municipio</span></code>
+          <span class="st st--ok">200</span>
+        </div>
+        <h3>municipios de una provincia</h3>
+        <p class="auth">ninguna</p>
+        <div class="par">
+          <div><h4>Entrada</h4><p class="nada">Sin cuerpo</p></div>
+          <div><h4>Salida</h4><pre>[]</pre></div>
+        </div>
+      </article>
+      <article class="caso ok">
+        <div class="cab">
+          <span class="met met--get">GET</span>
+          <code class="ruta">/v1/geo/ccaa/13/children<span class="q">?level=provincia</span></code>
+          <span class="st st--ok">200</span>
+        </div>
+        <h3>provincias de una comunidad</h3>
+        <p class="auth">ninguna</p>
+        <div class="par">
+          <div><h4>Entrada</h4><p class="nada">Sin cuerpo</p></div>
+          <div><h4>Salida</h4><pre>[
+  {
+    &quot;geo_id&quot;: 48,
+    &quot;level&quot;: &quot;provincia&quot;,
+    &quot;ine_code&quot;: &quot;28&quot;,
+    &quot;name&quot;: &quot;Madrid&quot;,
+    &quot;parent_id&quot;: 14,
+    &quot;population&quot;: 6871000
+  }
+]</pre></div>
+        </div>
+      </article>
+    </section>
+
+    <section class="grupo" id="informes">
+      <header><h2>Informes</h2><p>El núcleo. Todo firmado, y la firma cubre la query entera.</p></header>
+      
+      <article class="caso ok">
+        <div class="cab">
+          <span class="met met--post">POST</span>
+          <code class="ruta">/v1/reports</code>
+          <span class="st st--ok">202</span>
+        </div>
+        <h3>crear informe básico</h3>
+        <p class="auth">firma sobre el cuerpo</p>
+        <div class="par">
+          <div><h4>Entrada</h4><pre>{
+  &quot;project_uuid&quot;: &quot;{uuid}&quot;,
+  &quot;wp_user_id&quot;: &quot;{owner}&quot;,
+  &quot;wp_post_id&quot;: 7818,
+  &quot;tier&quot;: &quot;basico&quot;,
+  &quot;scope&quot;: {
+    &quot;level&quot;: &quot;ccaa&quot;,
+    &quot;ine_code&quot;: &quot;13&quot;,
+    &quot;children_level&quot;: &quot;provincia&quot;
+  },
+  &quot;segments&quot;: {
+    &quot;age&quot;: [
+      &quot;25-34&quot;,
+      &quot;35-44&quot;
+    ],
+    &quot;sex&quot;: [
+      &quot;F&quot;
+    ]
+  },
+  &quot;business&quot;: {
+    &quot;sector&quot;: &quot;restauracion&quot;,
+    &quot;avg_ticket&quot;: 600
+  },
+  &quot;target&quot;: {
+    &quot;age_range&quot;: [
+      &quot;25-34&quot;,
+      &quot;35-44&quot;
+    ],
+    &quot;education_level&quot;: &quot;universitario&quot;,
+    &quot;family_status&quot;: &quot;nido_lleno&quot;,
+    &quot;nse&quot;: [
+      &quot;a/b&quot;,
+      &quot;c+&quot;
+    ],
+    &quot;annual_income&quot;: &quot;45-75k&quot;,
+    &quot;monthly_available_income&quot;: &quot;801-2500&quot;,
+    &quot;average_ticket&quot;: &quot;medio_alto&quot;,
+    &quot;climate&quot;: [
+      &quot;templado&quot;
+    ],
+    &quot;pedestrian_traffic&quot;: &quot;alto&quot;,
+    &quot;vehicular_traffic&quot;: &quot;medio&quot;,
+    &quot;direct_competition&quot;: true
+  }
+}</pre></div>
+          <div><h4>Salida</h4><pre>{
+  &quot;run_id&quot;: 1,
+  &quot;project_uuid&quot;: &quot;4b9524f9-…&quot;,
+  &quot;tier&quot;: &quot;basico&quot;,
+  &quot;status&quot;: &quot;queued&quot;,
+  &quot;version&quot;: null,
+  &quot;sections_done&quot;: [],
+  &quot;reused&quot;: false,
+  &quot;poll_after_seconds&quot;: 2
+}</pre></div>
+        </div>
+      </article>
+      <article class="caso ok">
+        <div class="cab">
+          <span class="met met--post">POST</span>
+          <code class="ruta">/v1/reports</code>
+          <span class="st st--ok">202</span>
+        </div>
+        <h3>crear informe nacional</h3>
+        <p class="auth">firma sobre el cuerpo</p>
+        <div class="par">
+          <div><h4>Entrada</h4><pre>{
+  &quot;project_uuid&quot;: &quot;{uuid2}&quot;,
+  &quot;wp_user_id&quot;: 48827,
+  &quot;tier&quot;: &quot;basico&quot;,
+  &quot;scope&quot;: {
+    &quot;level&quot;: &quot;pais&quot;,
+    &quot;ine_code&quot;: &quot;ES&quot;,
+    &quot;children_level&quot;: &quot;ccaa&quot;
+  },
+  &quot;segments&quot;: {
+    &quot;age&quot;: [],
+    &quot;sex&quot;: []
+  },
+  &quot;business&quot;: {
+    &quot;sector&quot;: &quot;retail&quot;
+  }
+}</pre></div>
+          <div><h4>Salida</h4><pre>{
+  &quot;run_id&quot;: 2,
+  &quot;tier&quot;: &quot;basico&quot;,
+  &quot;status&quot;: &quot;queued&quot;,
+  &quot;version&quot;: null,
+  &quot;reused&quot;: false,
+  &quot;poll_after_seconds&quot;: 2
+}</pre></div>
+        </div>
+      </article>
+      <article class="caso ok">
+        <div class="cab">
+          <span class="met met--post">POST</span>
+          <code class="ruta">/v1/reports</code>
+          <span class="st st--ok">202</span>
+        </div>
+        <h3>crear informe municipal</h3>
+        <p class="auth">firma sobre el cuerpo</p>
+        <div class="par">
+          <div><h4>Entrada</h4><pre>{
+  &quot;project_uuid&quot;: &quot;{uuid3}&quot;,
+  &quot;wp_user_id&quot;: 48827,
+  &quot;tier&quot;: &quot;avanzado&quot;,
+  &quot;scope&quot;: {
+    &quot;level&quot;: &quot;municipio&quot;,
+    &quot;ine_code&quot;: &quot;28079&quot;
+  },
+  &quot;segments&quot;: {
+    &quot;age&quot;: [
+      &quot;18-24&quot;
+    ],
+    &quot;sex&quot;: [
+      &quot;M&quot;,
+      &quot;F&quot;
+    ]
+  },
+  &quot;business&quot;: {
+    &quot;sector&quot;: &quot;cafeteria&quot;,
+    &quot;avg_ticket&quot;: 30,
+    &quot;surface_m2&quot;: 85
+  }
+}</pre></div>
+          <div><h4>Salida</h4><pre>{
+  &quot;run_id&quot;: 3,
+  &quot;tier&quot;: &quot;avanzado&quot;,
+  &quot;status&quot;: &quot;queued&quot;,
+  &quot;version&quot;: null,
+  &quot;reused&quot;: false,
+  &quot;poll_after_seconds&quot;: 2
+}</pre></div>
+        </div>
+      </article>
+      <article class="caso ok">
+        <div class="cab">
+          <span class="met met--get">GET</span>
+          <code class="ruta">/v1/reports/{uuid}<span class="q">?wp_user_id={owner}</span></code>
+          <span class="st st--ok">200</span>
+        </div>
+        <h3>leer el informe</h3>
+        <p class="auth">firma sobre método + ruta + query</p>
+        <div class="par">
+          <div><h4>Entrada</h4><p class="nada">Sin cuerpo</p></div>
+          <div><h4>Salida</h4><pre>{
+  &quot;version&quot;: 1,
+  &quot;tier&quot;: &quot;basico&quot;,
+  &quot;sections&quot;: &quot;demografia · socioeconomico(bloq) · competencia(bloq) · clima(bloq) · trafico(bloq)&quot;,
+  &quot;placerank&quot;: null,
+  &quot;warnings&quot;: [
+    &quot;31 indicadores estaban caducos y se han encolado para recarga; el informe se actualizará automáticamente.&quot;
+  ]
+}</pre></div>
+        </div>
+      </article>
+      <article class="caso ok">
+        <div class="cab">
+          <span class="met met--get">GET</span>
+          <code class="ruta">/v1/reports/{uuid}<span class="q">?wp_user_id={owner}&amp;version=1</span></code>
+          <span class="st st--ok">200</span>
+        </div>
+        <h3>leer una versión concreta</h3>
+        <p class="auth">firma sobre método + ruta + query</p>
+        <div class="par">
+          <div><h4>Entrada</h4><p class="nada">Sin cuerpo</p></div>
+          <div><h4>Salida</h4><pre>{
+  &quot;version&quot;: 1,
+  &quot;tier&quot;: &quot;basico&quot;,
+  &quot;sections&quot;: &quot;idénticas a la lectura sin versión&quot;
+}</pre></div>
+        </div>
+      </article>
+      <article class="caso ok">
+        <div class="cab">
+          <span class="met met--post">POST</span>
+          <code class="ruta">/v1/reports/{uuid}/upgrade</code>
+          <span class="st st--ok">202</span>
+        </div>
+        <h3>subir a avanzado</h3>
+        <p class="auth">firma sobre el cuerpo</p>
+        <div class="par">
+          <div><h4>Entrada</h4><pre>{
+  &quot;payment_reference&quot;: &quot;pi_3PruebaStripe000&quot;,
+  &quot;force_refresh&quot;: false
+}</pre></div>
+          <div><h4>Salida</h4><pre>{
+  &quot;run_id&quot;: 4,
+  &quot;tier&quot;: &quot;avanzado&quot;,
+  &quot;status&quot;: &quot;queued&quot;,
+  &quot;version&quot;: null,
+  &quot;reused&quot;: false
+}</pre></div>
+        </div>
+      </article>
+      <article class="caso ok">
+        <div class="cab">
+          <span class="met met--post">POST</span>
+          <code class="ruta">/v1/reports/{uuid}/placerank/rebalance</code>
+          <span class="st st--ok">200</span>
+        </div>
+        <h3>recalcular el PlaceRank</h3>
+        <p class="auth">firma sobre el cuerpo</p>
+        <div class="par">
+          <div><h4>Entrada</h4><pre>{
+  &quot;economico&quot;: 0.4,
+  &quot;demografico&quot;: 0.3,
+  &quot;ambiental&quot;: 0.2,
+  &quot;match&quot;: 0.1
+}</pre></div>
+          <div><h4>Salida</h4><pre>{
+  &quot;method&quot;: &quot;percentil normalizado dentro del ámbito consultado&quot;,
+  &quot;rows&quot;: 1
+}</pre></div>
+        </div>
+      </article>
+      <article class="caso ok">
+        <div class="cab">
+          <span class="met met--post">POST</span>
+          <code class="ruta">/v1/reports/{uuid}/geolens</code>
+          <span class="st st--ok">200</span>
+        </div>
+        <h3>capas del mapa</h3>
+        <p class="auth">firma sobre el cuerpo</p>
+        <div class="par">
+          <div><h4>Entrada</h4><pre>{
+  &quot;indicators&quot;: [
+    &quot;dem.pop.total&quot;,
+    &quot;dem.age.mean&quot;
+  ],
+  &quot;classes&quot;: 5,
+  &quot;method&quot;: &quot;quantiles&quot;
+}</pre></div>
+          <div><h4>Salida</h4><pre>{
+  &quot;layers&quot;: 2
+}</pre></div>
+        </div>
+      </article>
+      <article class="caso ok">
+        <div class="cab">
+          <span class="met met--get">GET</span>
+          <code class="ruta">/v1/reports/{uuid}/export/xlsx<span class="q">?wp_user_id={owner}</span></code>
+          <span class="st st--ok">200</span>
+        </div>
+        <h3>exportar a Excel</h3>
+        <p class="auth">firma sobre método + ruta + query</p>
+        <div class="par">
+          <div><h4>Entrada</h4><p class="nada">Sin cuerpo</p></div>
+          <div><h4>Salida</h4><pre class="bin">16.379 bytes · application/vnd.openxmlformats-officedocument.spreadsheetml.sheet</pre></div>
+        </div>
+      </article>
+      <article class="caso ok">
+        <div class="cab">
+          <span class="met met--post">POST</span>
+          <code class="ruta">/v1/reports/{uuid}/downgrade</code>
+          <span class="st st--ok">200</span>
+        </div>
+        <h3>bajar a básico</h3>
+        <p class="auth">firma sobre el cuerpo</p>
+        <div class="par">
+          <div><h4>Entrada</h4><pre>{}</pre></div>
+          <div><h4>Salida</h4><pre>{
+  &quot;tier&quot;: &quot;basico&quot;
+}</pre></div>
+        </div>
+      </article>
+    </section>
+
+    <section class="grupo" id="operacion">
+      <header><h2>Operación interna</h2><p>Clave interna. En producción Traefik ni las publica.</p></header>
+      
+      <article class="caso ok">
+        <div class="cab">
+          <span class="met met--post">POST</span>
+          <code class="ruta">/internal/ingest</code>
+          <span class="st st--ok">200</span>
+        </div>
+        <h3>encolar una ingesta</h3>
+        <p class="auth">X-Internal-Key</p>
+        <div class="par">
+          <div><h4>Entrada</h4><pre>{
+  &quot;collector&quot;: &quot;ine&quot;,
+  &quot;indicators&quot;: [
+    &quot;dem.pop.total&quot;
+  ],
+  &quot;level&quot;: &quot;provincia&quot;,
+  &quot;parent_code&quot;: &quot;13&quot;,
+  &quot;period&quot;: null
+}</pre></div>
+          <div><h4>Salida</h4><pre>{
+  &quot;task_id&quot;: &quot;a13817f5-…&quot;,
+  &quot;queue&quot;: &quot;etl&quot;
+}</pre></div>
+        </div>
+      </article>
+      <article class="caso ok">
+        <div class="cab">
+          <span class="met met--post">POST</span>
+          <code class="ruta">/internal/catalog/sync</code>
+          <span class="st st--ok">200</span>
+        </div>
+        <h3>sincronizar el catálogo</h3>
+        <p class="auth">X-Internal-Key</p>
+        <div class="par">
+          <div><h4>Entrada</h4><pre>{}</pre></div>
+          <div><h4>Salida</h4><pre>{
+  &quot;indicators&quot;: 96
+}</pre></div>
+        </div>
+      </article>
+      <article class="caso ok">
+        <div class="cab">
+          <span class="met met--get">GET</span>
+          <code class="ruta">/internal/coverage</code>
+          <span class="st st--ok">200</span>
+        </div>
+        <h3>indicadores sin colector</h3>
+        <p class="auth">X-Internal-Key</p>
+        <div class="par">
+          <div><h4>Entrada</h4><p class="nada">Sin cuerpo</p></div>
+          <div><h4>Salida</h4><pre>{
+  &quot;total&quot;: 96,
+  &quot;routed&quot;: 78,
+  &quot;orphans&quot;: &quot;[18 · NSE, estructura familiar, postgrado, consumo…]&quot;
+}</pre></div>
+        </div>
+      </article>
+      <article class="caso ok">
+        <div class="cab">
+          <span class="met met--post">POST</span>
+          <code class="ruta">/internal/bootstrap<span class="q">?demo=true</span></code>
+          <span class="st st--ok">200</span>
+        </div>
+        <h3>arrancar el almacén</h3>
+        <p class="auth">X-Internal-Key</p>
+        <div class="par">
+          <div><h4>Entrada</h4><p class="nada">Sin cuerpo</p></div>
+          <div><h4>Salida</h4><pre>{
+  &quot;geografias&quot;: 72,
+  &quot;perfiles_sector&quot;: 5,
+  &quot;indicadores&quot;: 96,
+  &quot;hechos_demo&quot;: 1872,
+  &quot;aviso&quot;: &quot;Los hechos de demostración son SINTÉTICOS.&quot;
+}</pre></div>
+        </div>
+      </article>
+    </section>
+
+    <section class="grupo" id="seguridad">
+      <header><h2>Lo que NO debe funcionar</h2><p>Seis intentos de saltarse el sistema. Los seis rechazados.</p></header>
+      
+      <article class="caso ko">
+        <div class="cab">
+          <span class="met met--get">GET</span>
+          <code class="ruta">/v1/reports/{uuid}<span class="q">?wp_user_id={owner}</span></code>
+          <span class="st st--ko">401</span>
+        </div>
+        <h3>lectura SIN firma</h3>
+        <p class="auth">ninguna (a propósito)</p>
+        <div class="par">
+          <div><h4>Entrada</h4><p class="nada">Sin cuerpo</p></div>
+          <div><h4>Salida</h4><pre>{
+  &quot;code&quot;: &quot;invalid_signature&quot;,
+  &quot;message&quot;: &quot;Faltan cabeceras de firma&quot;,
+  &quot;context&quot;: {}
+}</pre></div>
+        </div>
+      </article>
+      <article class="caso ko">
+        <div class="cab">
+          <span class="met met--post">POST</span>
+          <code class="ruta">/v1/reports/{uuid}/placerank/rebalance</code>
+          <span class="st st--ko">401</span>
+        </div>
+        <h3>PlaceRank SIN firma</h3>
+        <p class="auth">ninguna (a propósito)</p>
+        <div class="par">
+          <div><h4>Entrada</h4><pre>{
+  &quot;economico&quot;: 1,
+  &quot;demografico&quot;: 0,
+  &quot;ambiental&quot;: 0,
+  &quot;match&quot;: 0
+}</pre></div>
+          <div><h4>Salida</h4><pre>{
+  &quot;code&quot;: &quot;invalid_signature&quot;,
+  &quot;message&quot;: &quot;Faltan cabeceras de firma&quot;,
+  &quot;context&quot;: {}
+}</pre></div>
+        </div>
+      </article>
+      <article class="caso ko">
+        <div class="cab">
+          <span class="met met--post">POST</span>
+          <code class="ruta">/v1/reports</code>
+          <span class="st st--ko">401</span>
+        </div>
+        <h3>cuerpo alterado tras firmar</h3>
+        <p class="auth">firma válida de OTRO cuerpo</p>
+        <div class="par">
+          <div><h4>Entrada</h4><pre>{
+  &quot;se_firmó&quot;: {
+    &quot;project_uuid&quot;: &quot;{uuid}&quot;,
+    &quot;wp_user_id&quot;: &quot;{owner}&quot;,
+    &quot;tier&quot;: &quot;basico&quot;
+  },
+  &quot;se_envió&quot;: {
+    &quot;project_uuid&quot;: &quot;{uuid}&quot;,
+    &quot;wp_user_id&quot;: 999999,
+    &quot;tier&quot;: &quot;avanzado&quot;
+  }
+}</pre></div>
+          <div><h4>Salida</h4><pre>{
+  &quot;code&quot;: &quot;invalid_signature&quot;,
+  &quot;message&quot;: &quot;Firma no válida&quot;,
+  &quot;context&quot;: {}
+}</pre></div>
+        </div>
+      </article>
+      <article class="caso ko">
+        <div class="cab">
+          <span class="met met--get">GET</span>
+          <code class="ruta">/v1/reports/{uuid}<span class="q">?wp_user_id={owner}</span></code>
+          <span class="st st--ko">401</span>
+        </div>
+        <h3>firma caducada</h3>
+        <p class="auth">firma con timestamp de hace 1 h</p>
+        <div class="par">
+          <div><h4>Entrada</h4><p class="nada">Sin cuerpo</p></div>
+          <div><h4>Salida</h4><pre>{
+  &quot;code&quot;: &quot;stale_request&quot;,
+  &quot;message&quot;: &quot;Petición fuera de la ventana temporal&quot;,
+  &quot;context&quot;: {
+    &quot;drift_seconds&quot;: 3600
+  }
+}</pre></div>
+        </div>
+      </article>
+      <article class="caso ko">
+        <div class="cab">
+          <span class="met met--get">GET</span>
+          <code class="ruta">/v1/reports/{uuid}<span class="q">?wp_user_id=999999</span></code>
+          <span class="st st--ko">403</span>
+        </div>
+        <h3>informe de otro usuario</h3>
+        <p class="auth">firma válida</p>
+        <div class="par">
+          <div><h4>Entrada</h4><p class="nada">Sin cuerpo</p></div>
+          <div><h4>Salida</h4><pre>{
+  &quot;code&quot;: &quot;not_owner&quot;,
+  &quot;message&quot;: &quot;El proyecto no pertenece a este usuario&quot;,
+  &quot;context&quot;: {}
+}</pre></div>
+        </div>
+      </article>
+      <article class="caso ko">
+        <div class="cab">
+          <span class="met met--get">GET</span>
+          <code class="ruta">/internal/coverage</code>
+          <span class="st st--ko">401</span>
+        </div>
+        <h3>rutas internas desde fuera</h3>
+        <p class="auth">sin X-Internal-Key</p>
+        <div class="par">
+          <div><h4>Entrada</h4><p class="nada">Sin cuerpo</p></div>
+          <div><h4>Salida</h4><pre>{
+  &quot;code&quot;: &quot;invalid_signature&quot;,
+  &quot;message&quot;: &quot;Clave interna no válida&quot;,
+  &quot;context&quot;: {}
+}</pre></div>
+        </div>
+      </article>
+    </section>
+</div>

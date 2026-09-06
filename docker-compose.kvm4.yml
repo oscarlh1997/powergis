@@ -1,0 +1,177 @@
+# PowerGIS · override para Hostinger KVM 4
+# (4 vCPU / 16 GB RAM / 200 GB NVMe)
+#
+#     make up TIER=kvm4
+#     # equivale a:
+#     docker compose -f docker-compose.yml -f docker-compose.kvm4.yml up -d
+#
+# No duplica el stack: sólo sube los techos, devuelve el worker de narrativa
+# a su propio proceso y añade n8n. El `docker-compose.yml` base sigue siendo
+# la única definición de qué servicios existen.
+#
+# Cuándo migrar (señales, no calendario):
+#
+#   · `docker stats` con postgres rozando su techo de forma sostenida.
+#   · Cola `reports.*` con espera > 60 s en hora punta:
+#         make queue-depth
+#   · Un informe avanzado tardando > 90 s de forma habitual.
+#   · La ingesta nocturna del INE sin terminar antes de las 07:00.
+#
+# Migración: `make backup`, apagar, redimensionar en el panel de Hostinger,
+# arrancar con TIER=kvm4. Los volúmenes se conservan; no hay que recargar
+# el almacén.
+
+name: powergis
+
+x-engine-4: &engine-4
+  build:
+    context: ./engine
+    target: runtime
+  image: powergis/engine:1.0.0
+  env_file: [.env]
+  environment:
+    MALLOC_ARENA_MAX: "4"
+    PYTHONUNBUFFERED: "1"
+  depends_on:
+    postgres: { condition: service_healthy }
+    redis:    { condition: service_started }
+  volumes:
+    - data:/data
+  restart: unless-stopped
+  logging:
+    driver: json-file
+    options: { max-size: "10m", max-file: "3" }
+
+services:
+
+  postgres:
+    shm_size: 512mb
+    command:
+      - postgres
+      - -c
+      - shared_buffers=4GB
+      - -c
+      - effective_cache_size=10GB
+      - -c
+      - work_mem=32MB
+      - -c
+      - maintenance_work_mem=1GB
+      - -c
+      - max_connections=120
+      - -c
+      - random_page_cost=1.1
+      - -c
+      - effective_io_concurrency=200
+      - -c
+      - max_worker_processes=4
+      - -c
+      - max_parallel_workers=4
+      - -c
+      - max_parallel_workers_per_gather=2
+      - -c
+      - max_parallel_maintenance_workers=2
+      - -c
+      - wal_compression=on
+      - -c
+      - min_wal_size=1GB
+      - -c
+      - max_wal_size=4GB
+      - -c
+      - checkpoint_completion_target=0.9
+      - -c
+      - autovacuum_vacuum_scale_factor=0.05
+      - -c
+      - autovacuum_analyze_scale_factor=0.02
+      - -c
+      - log_min_duration_statement=2000
+    deploy:
+      resources:
+        limits: { memory: 6G, cpus: "3.0" }
+
+  redis:
+    command: >
+      redis-server
+      --maxmemory 512mb
+      --maxmemory-policy noeviction
+      --appendonly yes
+      --appendfsync everysec
+      --save ""
+    deploy:
+      resources:
+        limits: { memory: 768M, cpus: "1.0" }
+
+  api:
+    command: >
+      uvicorn powergis.api.main:app
+      --host 0.0.0.0 --port 8000 --workers 4 --proxy-headers
+      --forwarded-allow-ips '*'
+    deploy:
+      resources:
+        limits: { memory: 1G, cpus: "2.0" }
+
+  worker-reports:
+    # Ya no absorbe `narrative`: vuelve a tener proceso propio abajo.
+    command: >
+      celery -A powergis.workers.celery_app worker
+      --queues reports.advanced,reports.basic
+      --concurrency 3 --prefetch-multiplier 1
+      --max-tasks-per-child 200 --loglevel INFO
+    deploy:
+      resources:
+        limits: { memory: 3G, cpus: "3.0" }
+
+  worker-etl:
+    command: >
+      celery -A powergis.workers.celery_app worker
+      --queues etl --concurrency 2 --prefetch-multiplier 1
+      --max-tasks-per-child 20 --loglevel INFO
+    deploy:
+      resources:
+        limits: { memory: 3G, cpus: "2.0" }
+
+  worker-narrative:
+    <<: *engine-4
+    command: >
+      celery -A powergis.workers.celery_app worker
+      --queues narrative --concurrency 2 --loglevel INFO
+    # No hereda el `curl /health` de la imagen: no sirve HTTP.
+    healthcheck:
+      test: ["CMD-SHELL", "celery -A powergis.workers.celery_app inspect ping -d celery@$$HOSTNAME || exit 1"]
+      interval: 60s
+      timeout: 15s
+      retries: 3
+      start_period: 40s
+    deploy:
+      resources:
+        limits: { memory: 1G, cpus: "1.0" }
+
+  beat:
+    deploy:
+      resources:
+        limits: { memory: 512M, cpus: "0.5" }
+
+  n8n:
+    image: n8nio/n8n:latest
+    environment:
+      N8N_HOST: ${N8N_HOST:-n8n.powergis.es}
+      N8N_PROTOCOL: https
+      WEBHOOK_URL: https://${N8N_HOST:-n8n.powergis.es}/
+      GENERIC_TIMEZONE: Europe/Madrid
+      N8N_BASIC_AUTH_ACTIVE: "true"
+      N8N_BASIC_AUTH_USER: ${N8N_USER:-admin}
+      N8N_BASIC_AUTH_PASSWORD: ${N8N_PASSWORD:?define N8N_PASSWORD en .env}
+      N8N_ENCRYPTION_KEY: ${N8N_ENCRYPTION_KEY:?define N8N_ENCRYPTION_KEY en .env}
+    volumes: [n8ndata:/home/node/.n8n]
+    labels:
+      traefik.enable: "true"
+      traefik.http.routers.n8n.rule: Host(`${N8N_HOST:-n8n.powergis.es}`)
+      traefik.http.routers.n8n.entrypoints: websecure
+      traefik.http.routers.n8n.tls.certresolver: le
+      traefik.http.services.n8n.loadbalancer.server.port: "5678"
+    deploy:
+      resources:
+        limits: { memory: 768M, cpus: "1.0" }
+    restart: unless-stopped
+
+volumes:
+  n8ndata:

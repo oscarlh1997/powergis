@@ -1,0 +1,117 @@
+# PowerGIS · túnel de Cloudflare
+#
+# Publica el motor que tienes levantado —en tu portátil o donde sea— en un
+# nombre público con HTTPS, sin VPS, sin IP pública, sin abrir un solo puerto
+# en tu router y sin tarjeta de crédito.
+#
+#     docker compose -f docker-compose.dev.yml -f docker-compose.tunnel.yml up -d
+#     # o, con el perfil de producción en local:
+#     docker compose -f docker-compose.yml -f docker-compose.tunnel.yml up -d
+#
+# Sirve para UNA cosa concreta: que powergis.es pueda hablar con tu motor y
+# probar la integración de punta a punta. No es un despliegue: no hay Traefik
+# pidiendo certificado, ni arranque automático, ni copias. Y sólo funciona
+# mientras tu máquina esté encendida.
+#
+# ---------------------------------------------------------------------------
+# ANTES DE LEVANTAR ESTO, LEE ESTO
+# ---------------------------------------------------------------------------
+#
+# Un túnel pone tu motor en internet. Lo que en la sesión anterior desaconsejé
+# no era el túnel: era tunelizar el stack de desarrollo tal y como viene, cuyo
+# HMAC_SECRET está escrito en claro en `docker-compose.dev.yml` y por tanto en
+# el repositorio. Con ese secreto, cualquiera que haya visto el código puede
+# firmar peticiones válidas.
+#
+# Con secretos de verdad, el túnel es perfectamente razonable. Las cuatro
+# condiciones, y no son opcionales:
+#
+#   1. HMAC_SECRET y INTERNAL_API_KEY generados con `openssl rand -hex 32`.
+#      NO los del fichero de desarrollo.
+#   2. ENV=production en el `.env`, para que `check_production_ready()` se
+#      niegue a arrancar con secretos débiles. Apaga /docs, que es lo que
+#      quieres si esto es alcanzable desde fuera.
+#   3. POWERGIS_DEV_MODE NO definido en el wp-config.php de powergis.es.
+#      Con él, cualquiera desbloquea informes de pago gratis.
+#   4. Apaga el túnel cuando termines de probar:
+#         docker compose ... stop cloudflared
+#
+# Lo que sigue protegido pase lo que pase: `/internal/*` exige
+# INTERNAL_API_KEY, y las escrituras exigen firma HMAC sobre los bytes
+# exactos con una ventana de 300 s.
+#
+# ---------------------------------------------------------------------------
+# Puesta en marcha (10 minutos)
+# ---------------------------------------------------------------------------
+#
+#   1. Entra en Cloudflare (cuenta gratuita, sin tarjeta) y añade el dominio
+#      powergis.es si no está ya.
+#   2. Zero Trust → Networks → Tunnels → Create a tunnel → Cloudflared.
+#      Ponle nombre, por ejemplo `powergis-pruebas`.
+#   3. Copia el TOKEN que te da y mételo en tu `.env`:
+#
+#         TUNNEL_TOKEN=eyJhIjoi…
+#
+#   4. En «Public Hostnames» del propio túnel, añade:
+#
+#         Subdomain  motor-pruebas
+#         Domain     powergis.es
+#         Service    HTTP  →  api:8000
+#
+#      Y ANTES de esa regla, una que corte los endpoints de operación:
+#
+#         Path       ^/internal
+#         Service    HTTP_STATUS: 404
+#
+#      Es defensa en profundidad: INTERNAL_API_KEY ya los protege, pero lo
+#      que no está publicado no se puede atacar.
+#
+#   5. En el wp-config.php de powergis.es:
+#
+#         define( 'POWERGIS_ENGINE_URL',  'https://motor-pruebas.powergis.es' );
+#         define( 'POWERGIS_HMAC_SECRET', '…el mismo que en tu .env…' );
+#
+#   6. Levanta y comprueba:
+#
+#         curl -i https://motor-pruebas.powergis.es/health     → 200
+#         curl -i https://motor-pruebas.powergis.es/internal/coverage → 404
+
+name: powergis
+
+services:
+
+  # Traefik se aparta: aquí sobra y además estorba.
+  #
+  # Su trabajo es terminar TLS y pedir el certificado a Let's Encrypt por
+  # desafío HTTP. Con un túnel, el TLS lo termina Cloudflare y el puerto 80 de
+  # esta máquina no es alcanzable desde fuera — así que el desafío falla una y
+  # otra vez, y Let's Encrypt acaba limitando el dominio. Perderías la
+  # capacidad de emitir certificados justo cuando montes el VPS de verdad.
+  #
+  # Con un perfil que nunca se activa, el servicio no se levanta. Vuelve solo
+  # en cuanto dejes de aplicar este fichero.
+  traefik:
+    profiles: ["desactivado-con-tunel"]
+
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    # `--no-autoupdate`: que no se reinicie solo a mitad de una prueba.
+    command: tunnel --no-autoupdate run
+    environment:
+      TUNNEL_TOKEN: ${TUNNEL_TOKEN:?define TUNNEL_TOKEN en .env — mira la cabecera de este fichero}
+      TUNNEL_METRICS: 0.0.0.0:2000
+    # No publica ningún puerto: la conexión la abre él HACIA Cloudflare. Por
+    # eso no hay que tocar el router ni tener IP fija.
+    healthcheck:
+      test: ["CMD", "cloudflared", "--version"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+    deploy:
+      resources:
+        limits: { memory: 128M, cpus: "0.25" }
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }

@@ -1,0 +1,868 @@
+<title>Runbook de despliegue PowerGIS</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&display=swap">
+
+<style>
+	/* ---------------------------------------------------------------
+	   Paleta: neutros con sesgo cálido (piedra) para que el naranja de
+	   PowerGIS lea como elegido y no como pegado encima. El verde y el
+	   rojo NO son acentos decorativos: codifican el estado de un paso.
+	   --------------------------------------------------------------- */
+	:root {
+		--ground:      #FBFAF8;
+		--surface:     #FFFFFF;
+		--surface-alt: #F4F2EE;
+		--line:        #E4E0D9;
+		--line-strong: #CFC9BF;
+		--ink:         #171614;
+		--ink-soft:    #45423C;
+		--muted:       #726D64;
+		--accent:      #D9541A;
+		--accent-soft: #FCEDE4;
+		--ok:          #106B45;
+		--ok-soft:     #E8F3ED;
+		--warn:        #8A5A00;
+		--warn-soft:   #FBF1DC;
+		--danger:      #A32017;
+		--danger-soft: #FBEBE9;
+		--term-bg:     #1B1A17;
+		--term-ink:    #E8E4DC;
+		--term-dim:    #8B857A;
+
+		--measure: 66ch;
+		--radius: 10px;
+	}
+
+	@media (prefers-color-scheme: dark) {
+		:root:not([data-theme="light"]) {
+			--ground:      #131211;
+			--surface:     #1B1A18;
+			--surface-alt: #221F1C;
+			--line:        #302C28;
+			--line-strong: #443E38;
+			--ink:         #F2EFE9;
+			--ink-soft:    #CFC9C0;
+			--muted:       #948D82;
+			--accent:      #FF7A3D;
+			--accent-soft: #33200F;
+			--ok:          #4CBE8A;
+			--ok-soft:     #14271E;
+			--warn:        #D8A23A;
+			--warn-soft:   #2B2211;
+			--danger:      #F0796C;
+			--danger-soft: #2E1614;
+			--term-bg:     #0D0C0B;
+			--term-ink:    #E8E4DC;
+			--term-dim:    #7C766B;
+		}
+	}
+
+	:root[data-theme="dark"] {
+		--ground:      #131211;
+		--surface:     #1B1A18;
+		--surface-alt: #221F1C;
+		--line:        #302C28;
+		--line-strong: #443E38;
+		--ink:         #F2EFE9;
+		--ink-soft:    #CFC9C0;
+		--muted:       #948D82;
+		--accent:      #FF7A3D;
+		--accent-soft: #33200F;
+		--ok:          #4CBE8A;
+		--ok-soft:     #14271E;
+		--warn:        #D8A23A;
+		--warn-soft:   #2B2211;
+		--danger:      #F0796C;
+		--danger-soft: #2E1614;
+		--term-bg:     #0D0C0B;
+		--term-ink:    #E8E4DC;
+		--term-dim:    #7C766B;
+	}
+
+	* { box-sizing: border-box; }
+
+	body {
+		margin: 0;
+		background: var(--ground);
+		color: var(--ink);
+		font-family: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+		font-size: 16px;
+		line-height: 1.62;
+		-webkit-font-smoothing: antialiased;
+	}
+
+	h1, h2, h3, h4 {
+		font-family: Archivo, "Helvetica Neue", Arial, sans-serif;
+		text-wrap: balance;
+		margin: 0;
+		letter-spacing: -0.011em;
+	}
+
+	code, kbd, pre { font-family: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace; }
+
+	a { color: var(--accent); }
+
+	/* -- estructura ------------------------------------------------- */
+
+	.wrap {
+		max-width: 1180px;
+		margin: 0 auto;
+		padding: 0 28px 96px;
+	}
+
+	.layout {
+		display: grid;
+		grid-template-columns: 210px minmax(0, 1fr);
+		gap: 52px;
+		align-items: start;
+	}
+
+	/* -- cabecera --------------------------------------------------- */
+
+	.masthead {
+		border-bottom: 1px solid var(--line);
+		padding: 54px 0 34px;
+		margin-bottom: 44px;
+		display: flex;
+		flex-wrap: wrap;
+		gap: 30px 48px;
+		align-items: flex-end;
+		justify-content: space-between;
+	}
+
+	.eyebrow {
+		font-family: "IBM Plex Mono", monospace;
+		font-size: 11.5px;
+		letter-spacing: 0.13em;
+		text-transform: uppercase;
+		color: var(--muted);
+		margin: 0 0 12px;
+	}
+
+	.masthead h1 {
+		font-size: clamp(30px, 4.4vw, 44px);
+		font-weight: 700;
+		line-height: 1.08;
+		max-width: 15ch;
+	}
+
+	.masthead p {
+		margin: 14px 0 0;
+		color: var(--ink-soft);
+		max-width: 46ch;
+	}
+
+	.stamp {
+		border: 1px solid var(--line-strong);
+		border-radius: var(--radius);
+		padding: 15px 20px;
+		background: var(--surface);
+		font-family: "IBM Plex Mono", monospace;
+		font-size: 12.5px;
+		line-height: 1.85;
+		color: var(--ink-soft);
+		min-width: 232px;
+	}
+
+	.stamp b { color: var(--ink); font-weight: 500; }
+
+	/* -- rail de fases ---------------------------------------------- */
+
+	.rail { position: sticky; top: 28px; }
+
+	.rail h2 {
+		font-size: 11.5px;
+		font-family: "IBM Plex Mono", monospace;
+		letter-spacing: 0.13em;
+		text-transform: uppercase;
+		color: var(--muted);
+		font-weight: 400;
+		margin-bottom: 16px;
+	}
+
+	.rail ol { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 3px; }
+
+	.rail a {
+		display: grid;
+		grid-template-columns: 26px 1fr;
+		gap: 9px;
+		align-items: baseline;
+		padding: 8px 10px;
+		border-radius: 7px;
+		text-decoration: none;
+		color: var(--ink-soft);
+		font-size: 13.5px;
+		border: 1px solid transparent;
+	}
+
+	.rail a:hover, .rail a:focus-visible {
+		background: var(--surface);
+		border-color: var(--line);
+		color: var(--ink);
+	}
+
+	.rail .n {
+		font-family: "IBM Plex Mono", monospace;
+		font-size: 11px;
+		color: var(--accent);
+	}
+
+	/* -- estado ------------------------------------------------------ */
+
+	.status {
+		display: grid;
+		grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+		gap: 14px;
+		margin-bottom: 52px;
+	}
+
+	.status div {
+		border: 1px solid var(--line);
+		border-radius: var(--radius);
+		padding: 16px 18px;
+		background: var(--surface);
+	}
+
+	.status h3 {
+		font-size: 12px;
+		font-family: "IBM Plex Mono", monospace;
+		letter-spacing: 0.09em;
+		text-transform: uppercase;
+		font-weight: 500;
+		margin-bottom: 8px;
+	}
+
+	.status p { margin: 0; font-size: 13.5px; color: var(--ink-soft); line-height: 1.55; }
+	.status .verified h3 { color: var(--ok); }
+	.status .unverified h3 { color: var(--warn); }
+	.status .blocked h3 { color: var(--danger); }
+
+	/* -- fases ------------------------------------------------------- */
+
+	.phase { margin-bottom: 66px; scroll-margin-top: 24px; }
+
+	.phase > header {
+		border-top: 2px solid var(--ink);
+		padding-top: 14px;
+		margin-bottom: 30px;
+	}
+
+	.phase h2 {
+		font-size: 25px;
+		font-weight: 600;
+		display: flex;
+		flex-wrap: wrap;
+		align-items: baseline;
+		gap: 13px;
+	}
+
+	.phase h2 .tag {
+		font-family: "IBM Plex Mono", monospace;
+		font-size: 11.5px;
+		font-weight: 400;
+		letter-spacing: 0.09em;
+		text-transform: uppercase;
+		color: var(--accent);
+		border: 1px solid currentColor;
+		border-radius: 999px;
+		padding: 2px 10px;
+	}
+
+	.phase > header p { margin: 9px 0 0; color: var(--muted); max-width: var(--measure); font-size: 14.5px; }
+
+	/* -- pasos ------------------------------------------------------- */
+
+	.step {
+		display: grid;
+		grid-template-columns: 40px minmax(0, 1fr);
+		gap: 20px;
+		padding: 24px 0;
+		border-bottom: 1px solid var(--line);
+	}
+
+	.step:last-child { border-bottom: 0; }
+
+	.step > .num {
+		font-family: "IBM Plex Mono", monospace;
+		font-size: 13px;
+		font-variant-numeric: tabular-nums;
+		color: var(--accent);
+		padding-top: 2px;
+	}
+
+	.step h3 { font-size: 17px; font-weight: 600; margin-bottom: 7px; }
+	.step p { margin: 0 0 12px; max-width: var(--measure); color: var(--ink-soft); }
+	.step p:last-child { margin-bottom: 0; }
+	.step ul { margin: 0 0 12px; padding-left: 19px; max-width: var(--measure); color: var(--ink-soft); }
+	.step li { margin: 4px 0; }
+
+	/* -- terminal ---------------------------------------------------- */
+
+	pre {
+		background: var(--term-bg);
+		color: var(--term-ink);
+		border-radius: var(--radius);
+		padding: 15px 18px;
+		overflow-x: auto;
+		font-size: 13px;
+		line-height: 1.72;
+		margin: 0 0 12px;
+		border: 1px solid var(--line-strong);
+	}
+
+	pre .c { color: var(--term-dim); }
+	pre .p { color: var(--accent); user-select: none; }
+
+	:not(pre) > code {
+		background: var(--surface-alt);
+		border: 1px solid var(--line);
+		border-radius: 5px;
+		padding: 1px 5px;
+		font-size: 0.885em;
+		color: var(--ink);
+	}
+
+	/* -- verificación: el rasgo estructural del documento ------------ */
+	/*    Cada paso dice cómo saber que ha salido bien. Un runbook sin
+	      eso es una lista de deseos.                                   */
+
+	.check {
+		border-left: 2px solid var(--ok);
+		background: var(--ok-soft);
+		border-radius: 0 7px 7px 0;
+		padding: 11px 15px;
+		font-size: 13.5px;
+		color: var(--ink-soft);
+		max-width: var(--measure);
+	}
+
+	.check b {
+		display: block;
+		font-family: "IBM Plex Mono", monospace;
+		font-size: 10.5px;
+		letter-spacing: 0.1em;
+		text-transform: uppercase;
+		color: var(--ok);
+		font-weight: 500;
+		margin-bottom: 3px;
+	}
+
+	.check code { background: transparent; border: 0; padding: 0; }
+
+	/* -- avisos ------------------------------------------------------ */
+
+	.note {
+		border-left: 2px solid var(--warn);
+		background: var(--warn-soft);
+		border-radius: 0 7px 7px 0;
+		padding: 12px 16px;
+		font-size: 13.5px;
+		margin: 0 0 12px;
+		max-width: var(--measure);
+		color: var(--ink-soft);
+	}
+
+	.note.stop { border-left-color: var(--danger); background: var(--danger-soft); }
+
+	.note b {
+		display: block;
+		font-family: "IBM Plex Mono", monospace;
+		font-size: 10.5px;
+		letter-spacing: 0.1em;
+		text-transform: uppercase;
+		color: var(--warn);
+		font-weight: 500;
+		margin-bottom: 3px;
+	}
+
+	.note.stop b { color: var(--danger); }
+
+	/* -- tablas ------------------------------------------------------ */
+
+	.scroller { overflow-x: auto; margin: 0 0 12px; }
+
+	table {
+		border-collapse: collapse;
+		width: 100%;
+		font-size: 13.5px;
+		min-width: 440px;
+	}
+
+	th, td {
+		text-align: left;
+		padding: 8px 14px 8px 0;
+		border-bottom: 1px solid var(--line);
+		vertical-align: top;
+	}
+
+	th {
+		font-family: "IBM Plex Mono", monospace;
+		font-size: 10.5px;
+		letter-spacing: 0.09em;
+		text-transform: uppercase;
+		color: var(--muted);
+		font-weight: 500;
+	}
+
+	td.num { font-family: "IBM Plex Mono", monospace; font-variant-numeric: tabular-nums; }
+
+	/* -- cierre ------------------------------------------------------ */
+
+	.closing {
+		border: 1px solid var(--line);
+		border-radius: var(--radius);
+		background: var(--surface);
+		padding: 26px 28px;
+		margin-top: 8px;
+	}
+
+	.closing h2 { font-size: 19px; font-weight: 600; margin-bottom: 12px; }
+	.closing p { max-width: var(--measure); color: var(--ink-soft); margin: 0 0 10px; }
+	.closing p:last-child { margin-bottom: 0; }
+
+	:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+	@media (prefers-reduced-motion: reduce) {
+		* { animation: none !important; transition: none !important; }
+	}
+
+	@media (max-width: 900px) {
+		.layout { grid-template-columns: 1fr; gap: 0; }
+		.rail { position: static; margin-bottom: 40px; }
+		.rail ol { flex-direction: row; flex-wrap: wrap; }
+		.rail a { border: 1px solid var(--line); background: var(--surface); }
+	}
+
+	@media (max-width: 560px) {
+		.wrap { padding: 0 18px 64px; }
+		.step { grid-template-columns: 1fr; gap: 6px; }
+		.step > .num { padding-top: 0; }
+	}
+</style>
+
+<div class="wrap">
+
+	<header class="masthead">
+		<div>
+			<p class="eyebrow">PowerGIS · motor de informes</p>
+			<h1>Runbook de despliegue</h1>
+			<p>De la fase 0 a la 3 en un KVM2: cimientos, almacén demográfico del INE,
+			   motor de informes y cobro con Stripe. Cada paso trae cómo comprobar que
+			   ha salido bien antes de pasar al siguiente.</p>
+		</div>
+		<div class="stamp">
+			VPS &nbsp;<b>Hostinger KVM2</b><br>
+			&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;2 vCPU · 8 GB · 100 GB<br>
+			Motor <b>259 pruebas en verde</b><br>
+			Datos <b>INE (resto, más adelante)</b>
+		</div>
+	</header>
+
+	<div class="layout">
+
+		<nav class="rail" aria-label="Fases">
+			<h2>Fases</h2>
+			<ol>
+				<li><a href="#estado"><span class="n">··</span><span>Estado de partida</span></a></li>
+				<li><a href="#fase0"><span class="n">00</span><span>Cimientos</span></a></li>
+				<li><a href="#fase1"><span class="n">01</span><span>Almacén vacío</span></a></li>
+				<li><a href="#fase2"><span class="n">02</span><span>Demografía INE</span></a></li>
+				<li><a href="#fase3"><span class="n">03</span><span>WordPress y Stripe</span></a></li>
+				<li><a href="#despues"><span class="n">→</span><span>Vigilancia</span></a></li>
+			</ol>
+		</nav>
+
+		<main>
+
+			<section id="estado">
+				<div class="status">
+					<div class="verified">
+						<h3>Verificado ejecutando</h3>
+						<p>Motor, firma HMAC en bash/Python/PHP, subida básico→avanzado por HTTP,
+						   403 a usuario ajeno, migraciones arriba y abajo, export XLSX.</p>
+					</div>
+					<div class="unverified">
+						<h3>Sin verificar contra el INE</h3>
+						<p>Los IDs de tabla son una semilla. No he podido contrastarlos con la API real,
+						   así que el paso 11 los comprueba por ti y aborta si fallan.</p>
+					</div>
+					<div class="blocked">
+						<h3>Resuelto en el conector</h3>
+						<p>El formulario manda nombres de zona («Madrid»), no códigos INE, y el motor
+						   los exige. Se resuelven ya en WordPress contra el padrón, sin tocar el tema.</p>
+					</div>
+				</div>
+			</section>
+
+			<!-- ============================ FASE 0 ============================ -->
+			<section class="phase" id="fase0">
+				<header>
+					<h2>Cimientos <span class="tag">Fase 0</span></h2>
+					<p>El VPS desde cero hasta un motor que responde por HTTPS. Nada de datos todavía.</p>
+				</header>
+
+				<div class="step">
+					<div class="num">01</div>
+					<div>
+						<h3>Contratar el KVM2 con Ubuntu 24.04 LTS</h3>
+						<p>Sin panel de control preinstalado: el stack va en Docker y un panel
+						   sólo compite por la RAM que necesita PostgreSQL.</p>
+						<div class="check"><b>Comprobación</b>
+							<code>ssh root@IP</code> entra y <code>free -g</code> muestra 7 u 8 GB.</div>
+					</div>
+				</div>
+
+				<div class="step">
+					<div class="num">02</div>
+					<div>
+						<h3>Cerrar la máquina antes de poner nada dentro</h3>
+						<p>Usuario sin privilegios, clave pública, contraseña y root desactivados por SSH.</p>
+<pre><span class="c"># como root, una sola vez</span>
+<span class="p">$</span> adduser powergis &amp;&amp; usermod -aG sudo,docker powergis
+<span class="p">$</span> rsync --archive --chown=powergis:powergis ~/.ssh /home/powergis
+
+<span class="c"># /etc/ssh/sshd_config</span>
+<span class="p">$</span> sed -i 's/^#\?PermitRootLogin.*/PermitRootLogin no/;
+         s/^#\?PasswordAuthentication.*/PasswordAuthentication no/' /etc/ssh/sshd_config
+<span class="p">$</span> systemctl restart ssh
+
+<span class="p">$</span> ufw default deny incoming &amp;&amp; ufw allow OpenSSH
+<span class="p">$</span> ufw allow 80,443/tcp &amp;&amp; ufw --force enable
+<span class="p">$</span> apt install -y fail2ban unattended-upgrades
+<span class="p">$</span> dpkg-reconfigure -plow unattended-upgrades</pre>
+						<div class="note stop"><b>No te encierres fuera</b>
+							Abre una segunda sesión SSH y comprueba que entras como <code>powergis</code>
+							<em>antes</em> de cerrar la primera. Si la clave no está bien copiada, esa
+							primera sesión es la única forma de arreglarlo.</div>
+						<div class="check"><b>Comprobación</b>
+							<code>ufw status</code> lista 22, 80 y 443, y nada más. PostgreSQL y Redis
+							nunca publican puerto.</div>
+					</div>
+				</div>
+
+				<div class="step">
+					<div class="num">03</div>
+					<div>
+						<h3>Swap de 2 GB</h3>
+						<p>Con 8 GB y PostgreSQL dentro, el swap es el seguro que evita que el OOM killer
+						   se lleve la base de datos, que es el peor final posible. <code>swappiness</code>
+						   bajo para que se use sólo en apuros.</p>
+<pre><span class="p">$</span> fallocate -l 2G /swapfile &amp;&amp; chmod 600 /swapfile
+<span class="p">$</span> mkswap /swapfile &amp;&amp; swapon /swapfile
+<span class="p">$</span> echo '/swapfile none swap sw 0 0' &gt;&gt; /etc/fstab
+<span class="p">$</span> sysctl -w vm.swappiness=10
+<span class="p">$</span> echo 'vm.swappiness=10' &gt; /etc/sysctl.d/99-powergis.conf</pre>
+						<div class="check"><b>Comprobación</b>
+							<code>swapon --show</code> muestra 2G y <code>free -h</code> lo refleja.</div>
+					</div>
+				</div>
+
+				<div class="step">
+					<div class="num">04</div>
+					<div>
+						<h3>Docker y DNS</h3>
+						<p>Traefik pide el certificado por desafío HTTP, así que el DNS tiene que
+						   resolver <em>antes</em> de levantar el stack o Let's Encrypt te limita los
+						   reintentos.</p>
+<pre><span class="p">$</span> curl -fsSL https://get.docker.com | sh
+
+<span class="c"># En tu proveedor de DNS, registro A:</span>
+<span class="c">#   motor.powergis.es  →  IP del VPS</span>
+<span class="p">$</span> dig +short motor.powergis.es</pre>
+						<div class="check"><b>Comprobación</b>
+							<code>dig</code> devuelve la IP del VPS y <code>docker run --rm hello-world</code> funciona.</div>
+					</div>
+				</div>
+
+				<div class="step">
+					<div class="num">05</div>
+					<div>
+						<h3>Repositorio y secretos</h3>
+						<p>Los secretos viven en <code>.env</code> en el VPS y en <code>wp-config.php</code>
+						   en WordPress. En ningún otro sitio: ni en git, ni en la tabla
+						   <code>options</code> de WordPress.</p>
+<pre><span class="p">$</span> git clone … powergis &amp;&amp; cd powergis
+<span class="p">$</span> cp .env.example .env
+
+<span class="c"># genera cada secreto, no los inventes</span>
+<span class="p">$</span> openssl rand -hex 32   <span class="c"># HMAC_SECRET      (el mismo en wp-config.php)</span>
+<span class="p">$</span> openssl rand -hex 32   <span class="c"># INTERNAL_API_KEY</span>
+<span class="p">$</span> openssl rand -hex 24   <span class="c"># POSTGRES_PASSWORD</span></pre>
+						<div class="note stop"><b>Nunca en producción</b>
+							<code>POWERGIS_DEV_MODE</code> activa el simulador de pago. Si acaba definido
+							en el WordPress de producción, cualquiera desbloquea informes de pago gratis.
+							No lo definas ahí jamás.</div>
+						<div class="check"><b>Comprobación</b>
+							<code>make check-config</code> pasa sin avisos. Se niega a dar por buena una
+							configuración con <code>DEBUG</code>, secretos cortos o <code>ENV</code> mal puesto.</div>
+					</div>
+				</div>
+
+				<div class="step">
+					<div class="num">06</div>
+					<div>
+						<h3>Levantar el stack</h3>
+						<p>Por defecto arranca la configuración de KVM2. El perfil de teselas queda
+						   apagado: GeoLens es fase 5 y no tiene sentido gastar memoria antes de tiempo.</p>
+<pre><span class="p">$</span> make up
+<span class="p">$</span> make ps</pre>
+						<div class="check"><b>Comprobación</b>
+							<code>curl https://motor.powergis.es/health</code> responde 200 con certificado
+							válido. En <code>make ps</code> los ocho servicios están <em>healthy</em> o
+							<em>running</em>.</div>
+					</div>
+				</div>
+			</section>
+
+			<!-- ============================ FASE 1 ============================ -->
+			<section class="phase" id="fase1">
+				<header>
+					<h2>El almacén, todavía vacío <span class="tag">Fase 1</span></h2>
+					<p>Esquema, catálogo de indicadores y geografía completa hasta municipio.
+					   Sin este nivel, la ingesta del Padrón descarta cada fila sin dar un solo error.</p>
+				</header>
+
+				<div class="step">
+					<div class="num">07</div>
+					<div>
+						<h3>Migrar y montar los cimientos del almacén</h3>
+						<p>Un solo objetivo hace las cuatro cosas: migraciones, catálogo de 96
+						   indicadores, país/CCAA/provincias y los ~8.100 municipios desde el INE.</p>
+<pre><span class="p">$</span> make almacen</pre>
+						<div class="note"><b>Ojo con este paso</b>
+							La semilla del repositorio sólo llega a provincia: 72 filas. Los municipios
+							se descargan del INE y por eso este paso necesita red. <code>make bootstrap</code>
+							por sí solo <em>no</em> los carga.</div>
+						<div class="check"><b>Comprobación</b>
+							<code>make psql</code> y luego
+							<code>SELECT level, count(*) FROM dim_geo GROUP BY level;</code>.
+							Tiene que salir 1 país, 19 CCAA, 52 provincias y algo por encima de 8.000
+							municipios. Si los municipios salen a cero, para aquí.</div>
+					</div>
+				</div>
+
+				<div class="step">
+					<div class="num">08</div>
+					<div>
+						<h3>Confirmar que el catálogo tiene quien lo alimente</h3>
+						<p>Un indicador sin colector nunca tendrá dato: saldrá como hueco y parecerá
+						   secreto estadístico.</p>
+<pre><span class="p">$</span> make coverage-report</pre>
+						<div class="check"><b>Comprobación</b>
+							Los indicadores demográficos aparecen con colector. Los de competencia,
+							clima y tráfico saldrán huérfanos y está bien: sus APIs entran después del INE.</div>
+					</div>
+				</div>
+			</section>
+
+			<!-- ============================ FASE 2 ============================ -->
+			<section class="phase" id="fase2">
+				<header>
+					<h2>Demografía del INE <span class="tag">Fase 2</span></h2>
+					<p>La parte que convierte el sistema en un producto: el almacén con datos reales.
+					   Es también donde un fallo silencioso hace más daño.</p>
+				</header>
+
+				<div class="step">
+					<div class="num">09</div>
+					<div>
+						<h3>Verificar el mapeo antes de cargar nada</h3>
+						<p>El INE renumera tablas al republicar una operación, y los filtros del colector
+						   son subcadenas del nombre de la serie. Los dos fallan sin lanzar ningún error:
+						   simplemente devuelven cero hechos.</p>
+<pre><span class="p">$</span> make ine-verify</pre>
+						<div class="scroller">
+							<table>
+								<thead><tr><th>Veredicto</th><th>Qué ha pasado</th><th>Qué hacer</th></tr></thead>
+								<tbody>
+									<tr><td class="num">OK</td><td>La tabla responde y el filtro acierta</td><td>Seguir</td></tr>
+									<tr><td class="num">UNREACHABLE</td><td>El INE renumeró la tabla</td><td>Buscar el ID nuevo y fijarlo por entorno</td></tr>
+									<tr><td class="num">NO_MATCH</td><td>Cambió el nombre de las series</td><td>Ajustar <code>match</code> con lo que muestra el ejemplo</td></tr>
+									<tr><td class="num">LEVEL_MISMATCH</td><td>La tabla ya no es municipal</td><td>Cambiar el nivel del <code>TableSpec</code></td></tr>
+									<tr><td class="num">EMPTY</td><td>La tabla existe pero está vacía</td><td>Revisar en la web del INE</td></tr>
+								</tbody>
+							</table>
+						</div>
+						<p>Para arreglar un ID sin tocar código ni desplegar, mira la tabla y fíjala
+						   por variable de entorno:</p>
+<pre><span class="p">$</span> make shell
+<span class="p">$</span> powergis ine-discover 56934      <span class="c"># qué variables y series tiene</span>
+
+<span class="c"># en .env, y luego  make up  para recargar</span>
+INE_TABLE_DEM_POP_TOTAL=59525</pre>
+						<div class="check"><b>Comprobación</b>
+							El comando termina con «Las 16 tablas del INE responden y mapean» y
+							código de salida 0.</div>
+					</div>
+				</div>
+
+				<div class="step">
+					<div class="num">10</div>
+					<div>
+						<h3>Cargar el Padrón</h3>
+						<p>Va a la cola <code>etl</code>, con su propio worker y concurrencia 1, para que
+						   una carga larga no deje esperando el informe de un cliente. Medido: una ingesta
+						   de 282 s bloqueando slots compartidos retrasa informes.</p>
+<pre><span class="p">$</span> make ingest-ine        <span class="c"># verifica primero y aborta si no cuadra</span>
+<span class="p">$</span> make derive            <span class="c"># densidades, ratios, índices</span></pre>
+						<div class="note"><b>Tarda</b>
+							Son varias tablas municipales completas con límite de 2 peticiones por segundo
+							al INE. Déjalo correr y sigue los logs con <code>make logs</code>.</div>
+						<div class="check"><b>Comprobación</b>
+							En <code>make psql</code>:
+							<code>SELECT count(*) FROM fact_indicator;</code> en millones, y
+							<code>SELECT count(*) FROM fact_indicator WHERE value IS NULL;</code>
+							debe ser una minoría. Un montón de nulos significa que el filtro no acertó.</div>
+					</div>
+				</div>
+
+				<div class="step">
+					<div class="num">11</div>
+					<div>
+						<h3>Un informe de verdad, sin pasar por WordPress</h3>
+						<p>Antes de conectar el front, comprueba que el motor produce un informe con
+						   los datos que acabas de cargar.</p>
+<pre><span class="p">$</span> make smoke</pre>
+						<div class="check"><b>Comprobación</b>
+							La prueba de humo pasa entera. Los datos del informe son del INE, no
+							sintéticos: si en algún momento ejecutaste <code>make demo</code>, esos hechos
+							son de mentira y no deben salir a producción.</div>
+					</div>
+				</div>
+			</section>
+
+			<!-- ============================ FASE 3 ============================ -->
+			<section class="phase" id="fase3">
+				<header>
+					<h2>WordPress y Stripe <span class="tag">Fase 3</span></h2>
+					<p>Cerrar el circuito: formulario, informe, cobro y ampliación.</p>
+				</header>
+
+				<div class="step">
+					<div class="num">12</div>
+					<div>
+						<h3>Instalar el conector en WordPress</h3>
+						<p>Las constantes van en <code>wp-config.php</code>, por encima de
+						   <code>/* That's all, stop editing! */</code>.</p>
+<pre>define( 'POWERGIS_ENGINE_URL',  'https://motor.powergis.es' );
+define( 'POWERGIS_HMAC_SECRET', '…' );   <span class="c">// idéntico a HMAC_SECRET</span>
+define( 'POWERGIS_STRIPE_SECRET',         'sk_live_…' );
+define( 'POWERGIS_STRIPE_WEBHOOK_SECRET', 'whsec_…'  );
+define( 'POWERGIS_STRIPE_PRICE_ID',       'price_…'  );</pre>
+						<div class="check"><b>Comprobación</b>
+							El plugin activa sin avisos y el CPT <code>project</code> aparece en el
+							escritorio. Que <em>no</em> sea público es deliberado: con
+							<code>public =&gt; true</code>, un UUID filtrado abre un informe de pago.</div>
+						<div class="note stop"><b>Rota el secreto viejo</b>
+							El <code>rest-projects.php</code> anterior llevaba
+							<code>'guachineatata2026kimbapaquesuene'</code> como secreto por defecto
+							escrito en el código. Ha estado en texto plano en el repositorio: dalo por
+							comprometido y genera uno nuevo con <code>openssl rand -hex 32</code>, en
+							el motor y en <code>wp-config.php</code> a la vez.</div>
+					</div>
+				</div>
+
+				<div class="step">
+					<div class="num">13</div>
+					<div>
+						<h3>Stripe: producto, webhook y prueba en modo test</h3>
+						<p>El desbloqueo lo concede <em>sólo</em> el webhook. Nunca la
+						   <code>success_url</code>: esa la puede escribir cualquiera en la barra
+						   del navegador.</p>
+						<ul>
+							<li>Crea el precio del informe avanzado y copia su <code>price_…</code>.</li>
+							<li>Añade el endpoint <code>https://powergis.es/wp-json/saas/v1/stripe/webhook</code>
+								con el evento <code>checkout.session.completed</code>.</li>
+							<li>Prueba primero con claves de test y una tarjeta de prueba.</li>
+						</ul>
+						<div class="check"><b>Comprobación</b>
+							Pagas en modo test y el informe pasa a avanzado solo, sin recargar a mano.
+							Reenvía el mismo evento desde Stripe: la tabla de idempotencia lo ignora
+							y no se genera un segundo informe.</div>
+					</div>
+				</div>
+
+				<div class="step">
+					<div class="num">14</div>
+					<div>
+						<h3>El primer proyecto real de punta a punta</h3>
+						<p>Uno solo, tuyo, mirando los logs. Es la primera vez que el circuito completo
+						   se recorre con datos reales.</p>
+						<ul>
+							<li>Crear proyecto desde la página del formulario → informe básico.</li>
+							<li>Ver la demografía completa y las secciones bloqueadas con su índice.</li>
+							<li>Pulsar desbloquear <em>dentro del informe</em>, pagar, y ver cómo la
+								página se amplía sola sin tocar nada.</li>
+						</ul>
+						<div class="check"><b>Comprobación</b>
+							En la base de datos, <code>report_snapshot</code> tiene v1 y v2 del mismo
+							proyecto, y la v2 reutiliza la demografía en vez de recalcularla.</div>
+					</div>
+				</div>
+
+				<div class="step">
+					<div class="num">15</div>
+					<div>
+						<h3>Backups, y restaurar uno</h3>
+						<p>Los snapshots del VPS no son copia de seguridad de base de datos. Y una copia
+						   que nunca se ha restaurado no es una copia: es una carpeta.</p>
+<pre><span class="p">$</span> make backup
+<span class="p">$</span> make restore-test</pre>
+						<div class="check"><b>Comprobación</b>
+							<code>restore-test</code> levanta la copia en una base temporal y cuenta
+							geografías y hechos. Si los números cuadran, el backup sirve.</div>
+					</div>
+				</div>
+			</section>
+
+			<!-- =========================== DESPUÉS ============================ -->
+			<section class="phase" id="despues">
+				<header>
+					<h2>Vigilancia y salto a KVM4 <span class="tag">Después</span></h2>
+					<p>Cuándo hace falta más máquina, medido en vez de intuido.</p>
+				</header>
+
+				<div class="step">
+					<div class="num">→</div>
+					<div>
+						<h3>Un solo comando para decidirlo</h3>
+<pre><span class="p">$</span> make capacity</pre>
+						<p>Muestra memoria y CPU por contenedor, la profundidad de cada cola y las
+						   conexiones abiertas contra el máximo de PostgreSQL. Las señales para migrar:</p>
+						<ul>
+							<li>PostgreSQL sostenido por encima del 85 % de su techo.</li>
+							<li>Cola <code>reports.*</code> con espera habitual en hora punta.</li>
+							<li>La carga nocturna del INE sin terminar antes de las 07:00.</li>
+						</ul>
+						<p>La migración conserva los volúmenes, así que no hay que recargar el almacén:</p>
+<pre><span class="p">$</span> make backup
+<span class="p">$</span> make down
+<span class="c"># redimensionar en el panel de Hostinger</span>
+<span class="p">$</span> make up TIER=kvm4</pre>
+						<div class="check"><b>Comprobación</b>
+							<code>make capacity</code> con los techos nuevos y <code>make smoke</code>
+							en verde después del salto.</div>
+					</div>
+				</div>
+			</section>
+
+			<div class="closing">
+				<h2>El formulario no hay que tocarlo</h2>
+				<p><code>[crear_proyecto_v6]</code> envía el payload completo —definición, ticket,
+				   buyer persona, ecosistema y entorno— y el conector lo traduce entero. Lo único
+				   que faltaba era el código INE: los desplegables de ubicación mandan el nombre
+				   («Comunidad de Madrid»), y <code>scope.ine_code</code> es obligatorio en el
+				   motor, así que hoy toda creación se rechazaría en el borde. Es el
+				   <code>TODO</code> anotado en <code>rest-projects.php</code>, y la respuesta es
+				   que no, el árbol no manda código.</p>
+				<p>Se resuelve en <code>class-geo-resolver.php</code>, contra el padrón del motor y
+				   siempre dentro de la provincia —en España hay decenas de municipios homónimos y
+				   resolver «Madrid» a ciegas devuelve datos de otra zona sin dar ningún error.
+				   Verificado: el payload real del formulario entra en el motor y produce 12
+				   criterios de Match&nbsp;%.</p>
+			</div>
+
+		</main>
+	</div>
+</div>

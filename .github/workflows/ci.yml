@@ -1,0 +1,154 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+
+  engine:
+    name: Motor · lint y tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: engine
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+
+      - name: Instalar
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e '.[dev]'
+
+      - name: Lint (ruff)
+        run: python -m ruff check src tests
+
+      - name: Tipos (mypy)
+        run: python -m mypy src
+        continue-on-error: true
+
+      - name: Tests
+        run: python -m pytest -q --cov --cov-report=xml
+        env:
+          ENV: test
+          HMAC_SECRET: secreto-de-integracion-continua-1234567890
+          INTERNAL_API_KEY: clave-ci
+          LLM_ENABLED: 'false'
+
+      - name: Frontera hexagonal
+        # Falla si alguien importa SQLAlchemy o FastAPI dentro del dominio.
+        run: python -m pytest tests/test_architecture.py -q
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage
+          path: engine/coverage.xml
+
+  migrations:
+    name: Migraciones sobre PostGIS real
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgis/postgis:16-3.4
+        env:
+          POSTGRES_DB: powergis
+          POSTGRES_USER: powergis
+          POSTGRES_PASSWORD: powergis
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U powergis"
+          --health-interval 10s --health-timeout 5s --health-retries 10
+
+    defaults:
+      run:
+        working-directory: engine
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+
+      - run: |
+          python -m pip install --upgrade pip
+          pip install -e '.'
+
+      - name: Aplicar migraciones
+        run: alembic upgrade head
+        env:
+          DATABASE_URL: postgresql+psycopg://powergis:powergis@localhost:5432/powergis
+
+      - name: Comprobar que downgrade también funciona
+        # Una migración que no sabe volver atrás es una migración que da miedo.
+        run: alembic downgrade base && alembic upgrade head
+        env:
+          DATABASE_URL: postgresql+psycopg://powergis:powergis@localhost:5432/powergis
+
+      - name: Cargar catálogo y geografías
+        run: |
+          powergis sync-catalog
+          powergis seed --demo
+        env:
+          DATABASE_URL: postgresql+psycopg://powergis:powergis@localhost:5432/powergis
+          HMAC_SECRET: secreto-de-integracion-continua-1234567890
+
+  wordpress:
+    name: Plugin de WordPress
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          tools: composer
+
+      - name: Sintaxis PHP
+        run: |
+          ERRORS=0
+          for file in $(find wordpress -name '*.php'); do
+            php -l "$file" > /dev/null || ERRORS=1
+          done
+          exit $ERRORS
+
+      - name: Sintaxis JS
+        run: node --check wordpress/powergis-connector/assets/js/report.js
+
+      - name: Sin permission_callback abiertos
+        # `__return_true` en una ruta REST es un endpoint abierto a internet.
+        # La única excepción legítima es el webhook de Stripe, que valida su
+        # propia firma dentro del handler.
+        run: |
+          HITS=$(grep -rn "'permission_callback' => '__return_true'" wordpress \
+                 | grep -v 'stripe/webhook' | grep -v 'class-stripe.php' || true)
+          if [ -n "$HITS" ]; then
+            echo "Rutas REST sin control de acceso:"; echo "$HITS"; exit 1
+          fi
+          echo "OK"
+
+  docker:
+    name: Imagen Docker
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v6
+        with:
+          context: ./engine
+          target: runtime
+          push: false
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

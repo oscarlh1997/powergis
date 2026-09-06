@@ -1,0 +1,322 @@
+# PowerGIS · despliegue en Hostinger KVM 2
+# (2 vCPU / 8 GB RAM / 100 GB NVMe)
+#
+# Este fichero es la BASE y está dimensionado para KVM2, que es donde arranca
+# el negocio. Para subir a KVM4 no se edita nada aquí:
+#
+#     make up                      → KVM2  (este fichero)
+#     make up TIER=kvm4            → KVM4  (aplica docker-compose.kvm4.yml)
+#
+# Criterio de reparto en 8 GB
+# ---------------------------
+# Los `limits` son techos anti-fuga, no reservas. La suma de techos supera la
+# RAM a propósito: lo que importa es que la suma de picos REALES quepa.
+#
+#     servicio          techo    residente típico
+#     postgres          2.5G     ~1.2G   (shared_buffers 1G incluidos)
+#     worker-reports    1.5G     ~350M
+#     worker-etl        1.5G     ~400M   (pico real en una carga del INE)
+#     api               768M     ~260M
+#     redis             384M     ~70M
+#     beat              256M     ~90M
+#     traefik           128M     ~40M
+#     backup            128M     ~15M
+#                                ------
+#                                ~2.4G  → deja ~5 GB de page cache para Postgres
+#
+# Dos decisiones que cambian respecto a KVM4:
+#
+#  1. n8n NO se despliega aquí. Son ~700 MB residentes para orquestar lo que
+#     Celery beat ya orquesta. Entra en el override de KVM4.
+#  2. `narrative` deja de tener worker propio y comparte el de informes: es
+#     trabajo de espera de red (el LLM), no de CPU, y un proceso Python menos
+#     son ~150 MB.
+#
+# Lo que NO se toca al bajar de gama: las colas `etl` y `reports.*` siguen
+# separadas. Se midió una ingesta ADRH de 282 s ocupando los slots compartidos
+# y retrasando informes de cliente. Con 2 vCPU eso es peor, no mejor.
+
+name: powergis
+
+x-engine: &engine
+  build:
+    context: ./engine
+    target: runtime
+  image: powergis/engine:1.0.0
+  env_file: [.env]
+  environment:
+    # glibc reserva una arena por hilo; en una caja de 2 núcleos eso infla
+    # la RSS sin dar nada a cambio.
+    MALLOC_ARENA_MAX: "2"
+    PYTHONUNBUFFERED: "1"
+  depends_on:
+    postgres: { condition: service_healthy }
+    redis:    { condition: service_started }
+  volumes:
+    - data:/data
+  restart: unless-stopped
+  logging:
+    driver: json-file
+    options: { max-size: "10m", max-file: "3" }
+
+services:
+
+  traefik:
+    image: traefik:v3.2
+    command:
+      - --providers.docker=true
+      - --providers.docker.exposedbydefault=false
+      - --entrypoints.web.address=:80
+      - --entrypoints.web.http.redirections.entrypoint.to=websecure
+      - --entrypoints.web.http.redirections.entrypoint.scheme=https
+      - --entrypoints.websecure.address=:443
+      - --certificatesresolvers.le.acme.email=${ACME_EMAIL}
+      - --certificatesresolvers.le.acme.storage=/letsencrypt/acme.json
+      - --certificatesresolvers.le.acme.httpchallenge.entrypoint=web
+    ports: ["80:80", "443:443"]
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - letsencrypt:/letsencrypt
+    deploy:
+      resources:
+        limits: { memory: 128M }
+    restart: unless-stopped
+
+  postgres:
+    image: postgis/postgis:16-3.4
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-powergis}
+      POSTGRES_USER: ${POSTGRES_USER:-powergis}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?define POSTGRES_PASSWORD en .env}
+      POSTGRES_INITDB_ARGS: "--data-checksums"
+    # 64 MB de /dev/shm por defecto se quedan cortos en cuanto hay un sort
+    # grande sobre fact_indicator.
+    shm_size: 256mb
+    command:
+      - postgres
+      - -c
+      - shared_buffers=1GB                # 12.5 % de 8 GB: el resto rinde más
+      - -c                                #   como page cache del sistema
+      - effective_cache_size=4GB
+      - -c
+      - work_mem=12MB                     # ojo: es POR nodo de ordenación
+      - -c                                #   y POR conexión (ver max_connections)
+      - maintenance_work_mem=256MB
+      - -c
+      - max_connections=50                # ver DB_POOL_SIZE en .env.example
+      - -c
+      - random_page_cost=1.1              # NVMe
+      - -c
+      - effective_io_concurrency=200
+      - -c
+      - max_worker_processes=2
+      - -c
+      - max_parallel_workers=2
+      - -c
+      - max_parallel_workers_per_gather=1  # en 2 núcleos, más paraleliza peor
+      - -c
+      - max_parallel_maintenance_workers=1
+      - -c
+      - wal_compression=on
+      - -c
+      - min_wal_size=256MB
+      - -c
+      - max_wal_size=1GB                  # 100 GB de disco: no seas generoso
+      - -c
+      - checkpoint_completion_target=0.9
+      - -c
+      - autovacuum_vacuum_scale_factor=0.05   # fact_indicator crece por lotes
+      - -c
+      - autovacuum_analyze_scale_factor=0.02
+      - -c
+      - log_min_duration_statement=2000
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./infra/postgres/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-powergis} -d ${POSTGRES_DB:-powergis}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    # NO se publica el puerto: Postgres jamás se expone a internet.
+    expose: ["5432"]
+    deploy:
+      resources:
+        limits: { memory: 2560M, cpus: "1.5" }
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    command: >
+      redis-server
+      --maxmemory 256mb
+      --maxmemory-policy noeviction
+      --appendonly yes
+      --appendfsync everysec
+      --save ""
+    # noeviction y no allkeys-lru: aquí viven las colas de Celery. Evictar una
+    # clave bajo presión de memoria es perder el informe de un cliente que ya
+    # ha pagado. Que falle el encolado y se reintente, no que desaparezca.
+    volumes: [redisdata:/data]
+    expose: ["6379"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 20s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits: { memory: 384M, cpus: "0.5" }
+    restart: unless-stopped
+
+  api:
+    <<: *engine
+    command: >
+      uvicorn powergis.api.main:app
+      --host 0.0.0.0 --port 8000 --workers 2 --proxy-headers
+      --forwarded-allow-ips '*'
+    labels:
+      traefik.enable: "true"
+      traefik.http.routers.api.rule: Host(`${ENGINE_HOST:?define ENGINE_HOST}`)
+      traefik.http.routers.api.entrypoints: websecure
+      traefik.http.routers.api.tls.certresolver: le
+      traefik.http.services.api.loadbalancer.server.port: "8000"
+
+      # Los endpoints de operación NO se publican en internet.
+      #
+      # Lo que había aquí antes era un `stripprefix` sobre `/__never__`: un
+      # middleware con nombre tranquilizador que no hacía absolutamente nada,
+      # porque quitar un prefijo que nunca coincide no filtra ninguna
+      # petición. `/internal/*` quedaba expuesto, defendido sólo por
+      # INTERNAL_API_KEY — que es una defensa real, pero no la que decía el
+      # nombre.
+      #
+      # Esto sí bloquea: un router propio, de prioridad mayor (Traefik ordena
+      # por longitud de regla, y se fuerza explícitamente), con una lista de
+      # IPs permitidas que no incluye a nadie de fuera. Todo lo que llegue a
+      # `/internal` desde internet recibe 403 antes de tocar la aplicación.
+      #
+      # Para operar desde el propio VPS se entra por la red de Docker:
+      #     docker compose exec api curl -H "X-Internal-Key: …" \
+      #         http://127.0.0.1:8000/internal/coverage
+      traefik.http.routers.api-internal.rule: Host(`${ENGINE_HOST}`) && PathPrefix(`/internal`)
+      traefik.http.routers.api-internal.entrypoints: websecure
+      traefik.http.routers.api-internal.tls.certresolver: le
+      traefik.http.routers.api-internal.priority: "100"
+      traefik.http.routers.api-internal.service: api
+      traefik.http.routers.api-internal.middlewares: pg-solo-local@docker
+      traefik.http.middlewares.pg-solo-local.ipallowlist.sourcerange: 127.0.0.1/32
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=4).status==200 else 1)\""]
+      interval: 30s
+      timeout: 8s
+      retries: 3
+      start_period: 30s
+    deploy:
+      resources:
+        limits: { memory: 768M, cpus: "1.0" }
+
+  worker-reports:
+    <<: *engine
+    # Absorbe también `narrative`: esperar al LLM no consume CPU y no
+    # justifica un intérprete Python entero en 8 GB.
+    command: >
+      celery -A powergis.workers.celery_app worker
+      --queues reports.advanced,reports.basic,narrative
+      --concurrency 2 --prefetch-multiplier 1
+      --max-tasks-per-child 100 --loglevel INFO
+    healthcheck:
+      test: ["CMD-SHELL", "celery -A powergis.workers.celery_app inspect ping -d celery@$$HOSTNAME || exit 1"]
+      interval: 60s
+      timeout: 15s
+      retries: 3
+      start_period: 40s
+    deploy:
+      resources:
+        limits: { memory: 1536M, cpus: "1.5" }
+
+  worker-etl:
+    <<: *engine
+    # Concurrencia 1 y cola propia. Una carga del INE NO puede dejar a un
+    # cliente esperando su informe: medido, 282 s de ADRH bloqueando slots.
+    # `--max-tasks-per-child 10` porque el pico de una ingesta no se devuelve
+    # al sistema hasta que el proceso muere.
+    command: >
+      celery -A powergis.workers.celery_app worker
+      --queues etl --concurrency 1 --prefetch-multiplier 1
+      --max-tasks-per-child 10 --loglevel INFO
+    # Sin esto hereda el HEALTHCHECK de la imagen (`curl /health`), que aquí no
+    # tiene sentido: un worker no sirve HTTP y saldría enfermo para siempre.
+    healthcheck:
+      test: ["CMD-SHELL", "celery -A powergis.workers.celery_app inspect ping -d celery@$$HOSTNAME || exit 1"]
+      interval: 60s
+      timeout: 15s
+      retries: 3
+      start_period: 40s
+    deploy:
+      resources:
+        limits: { memory: 1536M, cpus: "1.0" }
+
+  beat:
+    <<: *engine
+    command: celery -A powergis.workers.celery_app beat --loglevel INFO
+    # `beat` no es un worker: no responde al ping de Celery ni sirve HTTP.
+    # Se le quita el healthcheck heredado en vez de darle uno que mienta.
+    healthcheck:
+      disable: true
+    deploy:
+      resources:
+        limits: { memory: 256M, cpus: "0.25" }
+
+  # Teselas: fase 5 (GeoLens). No arranca por defecto para no gastar RAM
+  # antes de tiempo.   docker compose --profile tiles up -d
+  tiles:
+    image: nginx:1.27-alpine
+    profiles: ["tiles"]
+    volumes:
+      - data:/usr/share/nginx/html:ro
+      - ./infra/nginx/tiles.conf:/etc/nginx/conf.d/default.conf:ro
+    labels:
+      traefik.enable: "true"
+      traefik.http.routers.tiles.rule: Host(`${TILES_HOST:-tiles.powergis.es}`)
+      traefik.http.routers.tiles.entrypoints: websecure
+      traefik.http.routers.tiles.tls.certresolver: le
+      traefik.http.services.tiles.loadbalancer.server.port: "80"
+    deploy:
+      resources:
+        limits: { memory: 128M }
+    restart: unless-stopped
+
+  # Copia de seguridad cifrada a almacenamiento externo.
+  # Los snapshots del VPS NO son backup de base de datos.
+  backup:
+    image: postgres:16-alpine
+    env_file: [.env]
+    volumes:
+      - ./infra/backup.sh:/backup.sh:ro
+      - backups:/backups
+    # `postgres:16-alpine` trae pg_dump, pero NO trae gpg ni aws. El script
+    # comprueba con `command -v` antes de cifrar y de subir, así que sin esto
+    # se saltaba las dos cosas EN SILENCIO: el backup se quedaba sin cifrar y
+    # dentro del propio VPS. Un backup que vive en la máquina que quieres
+    # poder perder no es un backup.
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        apk add --no-cache gnupg aws-cli >/dev/null 2>&1 \
+          || echo "[backup] AVISO: no se pudieron instalar gnupg/aws-cli"
+        while true; do /backup.sh || echo "[backup] FALLÓ"; sleep 86400; done
+    depends_on:
+      postgres: { condition: service_healthy }
+    deploy:
+      resources:
+        limits: { memory: 128M, cpus: "0.5" }
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+  redisdata:
+  letsencrypt:
+  backups:
+  data:

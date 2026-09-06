@@ -1,0 +1,188 @@
+# PowerGIS · override para Hetzner CX23
+# (2 vCPU compartida x86 / 4 GB RAM / 40 GB SSD)
+#
+#     make up TIER=cx23
+#
+# ###########################################################################
+# #                                                                         #
+# #   ESTA CAJA ES PARA PROBAR, NO PARA VENDER.                             #
+# #                                                                         #
+# #   4 GB no dan para el reparto que el sistema necesita en producción.    #
+# #   Aquí caben todos los servicios y el circuito funciona de punta a      #
+# #   punta —que es de lo que se trata para validar el despliegue— pero     #
+# #   con tres renuncias que en producción serían errores. Están            #
+# #   documentadas una por una más abajo, sin maquillar.                    #
+# #                                                                         #
+# ###########################################################################
+#
+# Renuncia 1 · las colas dejan de estar separadas
+# -----------------------------------------------
+# `worker-etl` se apaga y su cola se la come `worker-reports`. Esto reintroduce
+# a propósito el problema que la separación resolvía: una ingesta del INE de
+# ~282 s ocupa el único slot y deja esperando cualquier informe que llegue
+# mientras tanto. En una caja de pruebas donde eres el único usuario, es
+# aceptable. En cuanto haya un cliente al otro lado, no lo es.
+#
+# Renuncia 2 · PostgreSQL va apretado
+# -----------------------------------
+# `shared_buffers` baja de 1 GB a 384 MB y `work_mem` de 12 a 6 MB. Las
+# consultas grandes contra `fact_indicator` van a ir al disco más de lo que
+# deberían. Los tiempos que midas aquí NO sirven para dimensionar producción:
+# serán peores, y no proporcionalmente.
+#
+# Renuncia 3 · 40 GB de disco no aguantan el almacén completo
+# -----------------------------------------------------------
+# El Padrón municipal completo más los derivados son varios GB, y los backups
+# se acumulan encima. La retención baja a 3 días y `max_wal_size` a 512 MB.
+# Vigila el disco con `df -h` antes de cada carga grande; si te quedas sin
+# espacio, PostgreSQL se detiene y no siempre lo dice de forma clara.
+#
+# Para pasar a la caja de verdad (CX33) no hay que rehacer nada:
+#
+#     make backup
+#     make down
+#     # crear el CX33, restaurar el volcado
+#     make up TIER=cx33
+
+name: powergis
+
+services:
+
+  postgres:
+    shm_size: 128mb
+    command:
+      - postgres
+      - -c
+      - shared_buffers=384MB
+      - -c
+      - effective_cache_size=1536MB
+      - -c
+      - work_mem=6MB
+      - -c
+      - maintenance_work_mem=96MB
+      - -c
+      - max_connections=30          # ver la cuenta de pools al final
+      - -c
+      - random_page_cost=1.1
+      - -c
+      - effective_io_concurrency=200
+      - -c
+      - max_worker_processes=2
+      - -c
+      - max_parallel_workers=2
+      - -c
+      - max_parallel_workers_per_gather=1
+      - -c
+      - max_parallel_maintenance_workers=1
+      - -c
+      - wal_compression=on
+      - -c
+      - min_wal_size=128MB
+      - -c
+      - max_wal_size=512MB          # 40 GB de disco: no seas generoso
+      - -c
+      - checkpoint_completion_target=0.9
+      - -c
+      - autovacuum_vacuum_scale_factor=0.05
+      - -c
+      - autovacuum_analyze_scale_factor=0.02
+      - -c
+      - log_min_duration_statement=2000
+    deploy:
+      resources:
+        limits: { memory: 1152M, cpus: "1.0" }
+
+  redis:
+    command: >
+      redis-server
+      --maxmemory 128mb
+      --maxmemory-policy noeviction
+      --appendonly yes
+      --appendfsync everysec
+      --save ""
+    deploy:
+      resources:
+        limits: { memory: 192M, cpus: "0.3" }
+
+  api:
+    command: >
+      uvicorn powergis.api.main:app
+      --host 0.0.0.0 --port 8000 --workers 1 --proxy-headers
+      --forwarded-allow-ips '*'
+    environment:
+      # Pool más pequeño: con 30 conexiones no hay margen para el de .env.
+      DB_POOL_SIZE: "2"
+      DB_MAX_OVERFLOW: "2"
+    deploy:
+      resources:
+        limits: { memory: 448M, cpus: "0.8" }
+
+  worker-reports:
+    # Absorbe TAMBIÉN la cola `etl`. Ver «Renuncia 1» arriba: esto no es una
+    # simplificación inofensiva, es el problema medido volviendo a entrar.
+    command: >
+      celery -A powergis.workers.celery_app worker
+      --queues reports.advanced,reports.basic,narrative,etl
+      --concurrency 1 --prefetch-multiplier 1
+      --max-tasks-per-child 25 --loglevel INFO
+    environment:
+      DB_POOL_SIZE: "2"
+      DB_MAX_OVERFLOW: "2"
+    deploy:
+      resources:
+        limits: { memory: 768M, cpus: "1.0" }
+
+  worker-etl:
+    # No se puede borrar un servicio desde un override, así que se aparta con
+    # un perfil que nunca se activa. `docker compose ps` no lo listará.
+    profiles: ["desactivado-en-cx23"]
+
+  beat:
+    environment:
+      DB_POOL_SIZE: "2"
+      DB_MAX_OVERFLOW: "2"
+    deploy:
+      resources:
+        limits: { memory: 160M, cpus: "0.2" }
+
+  traefik:
+    deploy:
+      resources:
+        limits: { memory: 96M }
+
+  backup:
+    environment:
+      # 40 GB no dan para 14 días de volcados.
+      BACKUP_RETENTION_DAYS: "3"
+    deploy:
+      resources:
+        limits: { memory: 96M, cpus: "0.3" }
+
+# ---------------------------------------------------------------------------
+# Las dos cuentas que hay que cuadrar
+# ---------------------------------------------------------------------------
+#
+# MEMORIA — suma de techos (no de residentes):
+#
+#     postgres         1152M
+#     worker-reports    768M
+#     api               448M
+#     redis             192M
+#     beat              160M
+#     traefik            96M
+#     backup             96M
+#                      ------
+#                      2912M   sobre ~3,8 GB útiles
+#
+# Deja ~900 MB para el sistema y page cache. Es poco: por eso el swap de 2 GB
+# del cloud-init no es opcional en esta caja. Los residentes reales rondarán
+# 1,6 GB, así que en marcha se respira; el swap está para el pico.
+#
+# CONEXIONES:
+#
+#     (DB_POOL_SIZE + DB_MAX_OVERFLOW) × procesos  ≤  max_connections
+#
+#     api 1 + worker 1 + beat 1, contando padres = 6 procesos
+#     (2 + 2) × 6 = 24  ≤  30   ✔
+#
+# Vigila las dos con:   make capacity

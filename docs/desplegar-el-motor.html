@@ -1,0 +1,966 @@
+<title>Desplegar el motor</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&display=swap">
+
+<style>
+  :root {
+    --ground:#f4f7f6; --surface:#ffffff; --sunken:#eceff0;
+    --ink:#12181a; --muted:#5c6c69; --faint:#8a9793; --rule:#dbe3e1;
+    --accent:#0d6b60; --accent-soft:#e2efec;
+    --signal:#9c5209; --signal-soft:#f7ecdf;
+    --danger:#9c1f1f; --danger-soft:#f8e6e4;
+    --code-bg:#131b1a; --code-ink:#dfe9e6; --code-dim:#7f918d;
+    --f-ui:"Archivo","Helvetica Neue",Arial,sans-serif;
+    --f-body:"Source Serif 4",Georgia,"Times New Roman",serif;
+    --f-mono:"IBM Plex Mono","SFMono-Regular",Consolas,monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground:#0d1312; --surface:#141c1b; --sunken:#101817;
+      --ink:#e7edeb; --muted:#9aaba7; --faint:#71827e; --rule:#253130;
+      --accent:#58bdad; --accent-soft:#16302c;
+      --signal:#dd9a4e; --signal-soft:#2e2317;
+      --danger:#e08882; --danger-soft:#2e1a19;
+      --code-bg:#0a100f; --code-ink:#d6e2df; --code-dim:#6e807c;
+    }
+  }
+  :root[data-theme="dark"] {
+    --ground:#0d1312; --surface:#141c1b; --sunken:#101817;
+    --ink:#e7edeb; --muted:#9aaba7; --faint:#71827e; --rule:#253130;
+    --accent:#58bdad; --accent-soft:#16302c;
+    --signal:#dd9a4e; --signal-soft:#2e2317;
+    --danger:#e08882; --danger-soft:#2e1a19;
+    --code-bg:#0a100f; --code-ink:#d6e2df; --code-dim:#6e807c;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin:0; background:var(--ground); color:var(--ink);
+    font-family:var(--f-body); font-size:17px; line-height:1.62;
+    -webkit-font-smoothing:antialiased;
+  }
+
+  .wrap { max-width:47rem; margin:0 auto; padding:3.5rem 1.5rem 6rem; }
+
+  header { margin-bottom:2.5rem; }
+
+  .eyebrow {
+    font-family:var(--f-ui); font-size:.72rem; font-weight:600;
+    letter-spacing:.14em; text-transform:uppercase; color:var(--accent);
+    margin:0 0 .9rem;
+  }
+
+  h1 {
+    font-family:var(--f-ui); font-weight:700;
+    font-size:clamp(2rem,6vw,2.9rem); line-height:1.08;
+    letter-spacing:-.022em; text-wrap:balance; margin:0 0 1rem;
+  }
+
+  .standfirst { font-size:1.14rem; color:var(--muted); margin:0; max-width:35rem; }
+
+  /* --- fases: cabecera de sección con su letra --- */
+
+  .fase {
+    display:flex; align-items:baseline; gap:.9rem;
+    margin:3.6rem 0 .4rem; padding-top:1.7rem;
+    border-top:2px solid var(--ink);
+  }
+  .fase .letra {
+    font-family:var(--f-ui); font-weight:700; font-size:.78rem;
+    letter-spacing:.14em; text-transform:uppercase;
+    color:var(--accent); white-space:nowrap;
+  }
+  .fase h2 {
+    font-family:var(--f-ui); font-weight:700; font-size:1.55rem;
+    letter-spacing:-.015em; line-height:1.2; margin:0; text-wrap:balance;
+  }
+  .fase-nota { color:var(--muted); font-size:.98rem; margin:0 0 1.6rem; }
+
+  h2.suelto {
+    font-family:var(--f-ui); font-weight:700; font-size:1.55rem;
+    letter-spacing:-.015em; line-height:1.2; text-wrap:balance;
+    margin:3.6rem 0 1rem; padding-top:1.7rem; border-top:2px solid var(--ink);
+  }
+
+  h3 {
+    font-family:var(--f-ui); font-weight:600; font-size:1.04rem;
+    letter-spacing:-.008em; margin:0 0 .5rem;
+  }
+
+  p { margin:0 0 1rem; }
+  a { color:var(--accent); text-underline-offset:2px; }
+  a:focus-visible { outline:2px solid var(--accent); outline-offset:3px; border-radius:2px; }
+  strong { font-weight:600; }
+  ul, ol.plana { margin:0 0 1rem; padding-left:1.2rem; }
+  li { margin-bottom:.35rem; }
+  li::marker { color:var(--faint); }
+
+  code {
+    font-family:var(--f-mono); font-size:.855em; background:var(--sunken);
+    border:1px solid var(--rule); border-radius:3px; padding:.08em .34em;
+    white-space:nowrap;
+  }
+
+  /* --- pasos numerados --- */
+
+  .pasos { margin:1.6rem 0 0; padding:0; list-style:none; counter-reset:none; }
+
+  .paso { position:relative; padding-left:3.3rem; padding-bottom:2.3rem; }
+  .paso:last-child { padding-bottom:0; }
+
+  .paso::before {
+    content:""; position:absolute; left:1.09rem; top:2.25rem; bottom:0;
+    width:1px; background:var(--rule);
+  }
+  .paso:last-child::before { display:none; }
+
+  .paso .n {
+    position:absolute; left:0; top:.08rem;
+    width:2.2rem; height:2.2rem; border-radius:50%;
+    background:var(--accent-soft); color:var(--accent);
+    border:1px solid var(--accent);
+    display:grid; place-items:center;
+    font-family:var(--f-ui); font-weight:700; font-size:.9rem;
+    font-variant-numeric:tabular-nums;
+  }
+
+  /* --- comprobación: el listón de cada paso --- */
+
+  .check {
+    display:flex; gap:.7rem; align-items:flex-start;
+    background:var(--surface); border:1px solid var(--rule);
+    border-left:3px solid var(--accent);
+    border-radius:0 4px 4px 0; padding:.75rem 1rem;
+    margin:1rem 0 0; font-size:.94rem;
+  }
+  .check .k {
+    font-family:var(--f-ui); font-size:.66rem; font-weight:700;
+    letter-spacing:.11em; text-transform:uppercase; color:var(--accent);
+    padding-top:.28rem; white-space:nowrap;
+  }
+  .check p { margin:0; }
+  .check p + p { margin-top:.4rem; }
+
+  /* --- bloques de comando --- */
+
+  .cmd { background:var(--code-bg); border-radius:4px; margin:.9rem 0 1rem; overflow:hidden; }
+  .cmd .barra {
+    font-family:var(--f-ui); font-size:.65rem; font-weight:600;
+    letter-spacing:.12em; text-transform:uppercase; color:var(--code-dim);
+    padding:.55rem .95rem .1rem;
+  }
+  .cmd pre {
+    margin:0; padding:.3rem .95rem 1rem; overflow-x:auto;
+    font-family:var(--f-mono); font-size:.815rem; line-height:1.72;
+    color:var(--code-ink);
+  }
+  .cmd .c { color:var(--code-dim); }
+  .cmd .p { color:#6fb9ab; user-select:none; }
+  .cmd .k { color:#e0b46a; }
+
+  /* --- avisos --- */
+
+  .aviso {
+    border-left:3px solid var(--signal); background:var(--signal-soft);
+    padding:1rem 1.2rem; margin:1.3rem 0; border-radius:0 4px 4px 0;
+    font-size:.96rem;
+  }
+  .aviso.rojo { border-left-color:var(--danger); background:var(--danger-soft); }
+  .aviso p:last-child { margin-bottom:0; }
+  .aviso .cabeza {
+    font-family:var(--f-ui); font-weight:700; font-size:.72rem;
+    letter-spacing:.11em; text-transform:uppercase; color:var(--signal);
+    display:block; margin-bottom:.4rem;
+  }
+  .aviso.rojo .cabeza { color:var(--danger); }
+
+  /* --- tablas --- */
+
+  .tabla-envoltorio { overflow-x:auto; margin:1.2rem 0; }
+  table { border-collapse:collapse; width:100%; font-family:var(--f-ui); font-size:.87rem; }
+  th, td { text-align:left; padding:.6rem .8rem; border-bottom:1px solid var(--rule); vertical-align:top; }
+  th {
+    font-weight:600; font-size:.66rem; letter-spacing:.1em;
+    text-transform:uppercase; color:var(--faint); border-bottom-color:var(--ink);
+  }
+  td code { white-space:nowrap; }
+  tbody tr:last-child td { border-bottom:none; }
+
+  /* --- dos caminos, en paralelo --- */
+
+  .rutas { display:grid; gap:1rem; grid-template-columns:1fr; margin:1.5rem 0; }
+  @media (min-width:40rem) { .rutas { grid-template-columns:1fr 1fr; } }
+
+  .ruta {
+    background:var(--surface); border:1px solid var(--rule); border-radius:4px;
+    padding:1.2rem 1.3rem; display:flex; flex-direction:column; gap:.5rem;
+  }
+  .ruta .etiqueta {
+    font-family:var(--f-ui); font-size:.66rem; font-weight:700;
+    letter-spacing:.11em; text-transform:uppercase;
+  }
+  .ruta.ahora { border-color:var(--accent); }
+  .ruta.ahora .etiqueta { color:var(--accent); }
+  .ruta.luego .etiqueta { color:var(--faint); }
+  .ruta .titulo {
+    font-family:var(--f-ui); font-weight:600; font-size:1.05rem; line-height:1.25;
+  }
+  .ruta p { margin:0; font-size:.94rem; color:var(--muted); }
+
+  /* --- inventario inicial --- */
+
+  .inventario {
+    display:grid; gap:.75rem; margin:1.5rem 0 0; padding:0; list-style:none;
+  }
+  .inventario li {
+    background:var(--surface); border:1px solid var(--rule); border-radius:4px;
+    padding:.85rem 1.1rem; margin:0; font-size:.95rem;
+  }
+  .inventario .q {
+    font-family:var(--f-ui); font-weight:600; font-size:.95rem;
+    display:block; margin-bottom:.15rem;
+  }
+  .inventario .d { color:var(--muted); }
+
+  footer {
+    margin-top:4rem; padding-top:1.5rem; border-top:1px solid var(--rule);
+    font-family:var(--f-ui); font-size:.85rem; color:var(--faint);
+  }
+
+  @media (prefers-reduced-motion: reduce) { * { animation:none !important; transition:none !important; } }
+</style>
+
+<div class="wrap">
+
+  <header>
+    <p class="eyebrow">PowerGIS · camino B</p>
+    <h1>Desplegar el motor en producción</h1>
+    <p class="standfirst">Del VPS vacío a powergis.es cobrando informes. Diecinueve pasos, cada uno con el comando exacto y con cómo saber que ha salido bien antes de seguir.</p>
+  </header>
+
+  <p>Esto expande el runbook de fases&nbsp;0–3: allí está el mapa, aquí está el detalle. El orden importa —cada fase da por hecha la anterior— y cada paso trae un <strong>listón de comprobación</strong>. Si un listón no se pasa, no sigas: los fallos de este sistema son casi todos silenciosos, y arrastrarlos hasta el paso&nbsp;16 hace que el diagnóstico cueste diez veces más.</p>
+
+  <h2 class="suelto">Antes de pagar nada: dos formas de probar gratis</h2>
+
+  <p>Hetzner no tiene capa gratuita. Pero hay dos caminos sin coste que sirven para cosas distintas, y conviene saber cuál resuelve lo que tienes delante.</p>
+
+  <div class="rutas">
+    <div class="ruta ahora">
+      <span class="etiqueta">Hoy · 10 minutos · sin tarjeta</span>
+      <span class="titulo">Túnel de Cloudflare</span>
+      <p>Tu motor local, publicado en <code>motor-pruebas.powergis.es</code> con HTTPS. Sin VPS, sin IP pública, sin abrir puertos en el router. powergis.es ya puede hablar con él.</p>
+      <p><strong>Valida la integración, no el despliegue.</strong> Y sólo funciona con tu máquina encendida.</p>
+    </div>
+    <div class="ruta luego">
+      <span class="etiqueta">Gratis indefinido · con tarjeta de verificación</span>
+      <span class="titulo">Oracle Always Free</span>
+      <p>2 OCPU ARM y <strong>12 GB de RAM</strong> con 200 GB de disco, sin coste. Más máquina que el KVM2 de Hostinger y el triple que el CX23 de Hetzner.</p>
+      <p><strong>Es un VPS de verdad</strong>, así que ensaya el despliegue entero. Tiene tres pegas reales, abajo.</p>
+    </div>
+  </div>
+
+  <h3 style="margin-top:2rem;">El túnel: qué cambia respecto a lo que te dije antes</h3>
+
+  <p>En su momento desaconsejé tunelizar tu entorno de desarrollo. Esa objeción sigue en pie, pero era a <em>una cosa concreta</em>: el <code>HMAC_SECRET</code> del <code>docker-compose.dev.yml</code> está escrito en claro en el repositorio, así que cualquiera que haya visto el código puede firmar peticiones válidas. No era una objeción al túnel.</p>
+
+  <p>Con secretos generados de verdad, el túnel es perfectamente razonable. Cuatro condiciones, y no son opcionales:</p>
+
+  <div class="tabla-envoltorio">
+    <table>
+      <thead><tr><th>Condición</th><th>Por qué</th></tr></thead>
+      <tbody>
+        <tr><td><code>HMAC_SECRET</code> e <code>INTERNAL_API_KEY</code> nuevos, con <code>openssl rand -hex 32</code></td><td>Los del fichero de desarrollo son públicos.</td></tr>
+        <tr><td><code>ENV=production</code> en el <code>.env</code></td><td><code>check_production_ready()</code> se niega a arrancar con secretos débiles, y apaga <code>/docs</code>.</td></tr>
+        <tr><td>Regla de Cloudflare: <code>^/internal</code> → 404</td><td>Defensa en profundidad. <code>INTERNAL_API_KEY</code> ya los protege, pero lo que no está publicado no se puede atacar.</td></tr>
+        <tr><td>Apagarlo al terminar</td><td><code>docker compose … stop cloudflared</code>. Un túnel abierto y olvidado es una puerta abierta y olvidada.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="cmd">
+    <div class="barra">bash · con TUNNEL_TOKEN ya en el .env</div>
+<pre>docker compose -f docker-compose.yml -f docker-compose.tunnel.yml up -d
+
+curl -i https://motor-pruebas.powergis.es/health              <span class="c"># 200</span>
+curl -i https://motor-pruebas.powergis.es/internal/coverage   <span class="c"># 404</span></pre>
+  </div>
+
+  <p>Los ocho pasos completos —incluida la comprobación previa de si powergis.es está ya en Cloudflare, que decide el resto— están en su propia guía: <a href="https://claude.ai/code/artifact/1801c0ea-57ea-4819-a3f9-3a0439b2340c"><strong>El motor por un túnel</strong></a>. En el repositorio, la versión corta está en la cabecera de <code>docker-compose.tunnel.yml</code>.</p>
+
+  <h3 style="margin-top:2rem;">Oracle: generoso de verdad, con tres pegas que debes conocer</h3>
+
+  <p>Doce gigas de RAM gratis e indefinidamente no es poca cosa: es más máquina que la que ibas a pagar. Pero antes de invertir una tarde:</p>
+
+  <div class="tabla-envoltorio">
+    <table>
+      <thead><tr><th>Pega</th><th>Qué significa en la práctica</th></tr></thead>
+      <tbody>
+        <tr>
+          <td>Recortaron la cuota a la mitad en 2026</td>
+          <td>Era 4 OCPU / 24 GB y pasó a 2 / 12, <strong>sin anuncio público</strong> y con aplicación irregular. Comprueba los límites de tu cuenta antes de dimensionar, y cuenta con que pueden volver a cambiar.</td>
+        </tr>
+        <tr>
+          <td><code>Out of host capacity</code> al crear la instancia</td>
+          <td>Muy común en las regiones con demanda. No es culpa tuya: no hay hueco. Prueba otro dominio de fallo, otra región, u otra hora.</td>
+        </tr>
+        <tr>
+          <td>Es ARM (<code>aarch64</code>), no x86</td>
+          <td>Las imágenes oficiales van. La que hay que verificar es PostGIS — un comando lo resuelve, ver abajo.</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>La comprobación que decide si Oracle te vale, en la propia máquina:</p>
+
+  <div class="cmd">
+    <div class="barra">bash · en la instancia ARM</div>
+<pre>docker run --rm postgis/postgis:16-3.4 postgres --version</pre>
+  </div>
+
+  <p>Si responde con la versión, sigue y no toques nada: <code>make up TIER=oracle</code>. Si dice <code>no matching manifest for linux/arm64</code>, descomenta el <code>image:</code> de <code>docker-compose.oracle.yml</code>, que apunta a la construcción multiarco del mismo proyecto. No pude verificarlo desde aquí, así que ese comando es la respuesta, no mi suposición.</p>
+
+  <div class="aviso">
+    <span class="cabeza">En Oracle hay dos cortafuegos, y el segundo sorprende</span>
+    <p>Además de la <em>Security List</em> de la red virtual, las imágenes de Ubuntu de Oracle traen reglas de <code>iptables</code> puestas de fábrica que bloquean el 80 y el 443 <strong>aunque abras la lista de seguridad</strong>. Es la causa número uno de «he abierto el puerto y no responde». El comando para arreglarlo está al final de <code>docker-compose.oracle.yml</code>.</p>
+  </div>
+
+  <p>El resto de esta guía sirve igual para Oracle: cambia el paso&nbsp;2 (creas la instancia en su consola, no con <code>hcloud</code>) y el <code>TIER</code>. Todo lo demás —DNS, <code>.env</code>, almacén, WordPress, Stripe— es idéntico.</p>
+
+  <h2 class="suelto">Lo que necesitas tener a mano</h2>
+
+  <p>Antes de tocar nada, reúne estas cinco cosas. Si te falta alguna, el despliegue se va a parar a mitad esperándola.</p>
+
+  <ul class="inventario">
+    <li>
+      <span class="q">Un token de la API de Hetzner, con permiso de escritura</span>
+      <span class="d">Proyecto → <em>Security → API tokens</em>. Con él, un script crea el firewall y el servidor ya endurecido. Si prefieres la consola web sirve igual: el <code>LEEME.md</code> de <code>infra/hetzner/</code> explica el camino manual.</span>
+    </li>
+    <li>
+      <span class="q">Acceso al DNS de powergis.es</span>
+      <span class="d">Vas a crear un registro <code>A</code> para <code>motor.powergis.es</code> — y ninguno <code>AAAA</code>, por lo que se explica en el paso 2. Sin esto no hay certificado, y Let's Encrypt limita los reintentos si lo pides antes de tiempo.</span>
+    </li>
+    <li>
+      <span class="q">Acceso SSH y FTP/SFTP al hosting de powergis.es</span>
+      <span class="d">Para editar <code>wp-config.php</code> y subir el plugin. Si sólo tienes el panel del hosting, sirve igual, pero apunta que <code>wp-cli</code> te ahorraría varios pasos.</span>
+    </li>
+    <li>
+      <span class="q">Una cuenta de Stripe, en modo test</span>
+      <span class="d">Todo el circuito de cobro se prueba con claves <code>sk_test_</code> antes de tocar las de verdad. El paso a producción es cambiar dos constantes.</span>
+    </li>
+    <li>
+      <span class="q">Una clave SSH pública</span>
+      <span class="d">El segundo paso desactiva la contraseña por SSH. Sin la clave copiada correctamente te quedas fuera de tu propio servidor.</span>
+    </li>
+  </ul>
+
+  <!-- ============================================================ FASE A -->
+
+  <div class="fase">
+    <span class="letra">Fase A</span>
+    <h2>El servidor en Hetzner, hasta un motor que responde por HTTPS</h2>
+  </div>
+  <p class="fase-nota">Cinco pasos, porque el endurecimiento de la máquina lo hace <code>cloud-init</code> al arrancar en vez de tú a mano. Al final tienes <code>https://motor.powergis.es/health</code> devolviendo 200 con certificado válido, y ningún dato dentro todavía.</p>
+
+  <div class="aviso">
+    <span class="cabeza">Tu caja es de pruebas, y eso está bien</span>
+    <p>Con 4&nbsp;GB (un CX23) todo el circuito funciona de punta a punta, que es justo lo que quieres validar ahora. Pero el perfil <code>cx23</code> hace tres renuncias que en producción serían errores —la principal: las colas <code>etl</code> y <code>reports</code> vuelven a compartir worker, así que una carga del INE bloquea informes—. Están escritas una por una en la cabecera de <code>docker-compose.cx23.yml</code>. Los tiempos que midas aquí <strong>no sirven</strong> para dimensionar producción.</p>
+  </div>
+
+  <ol class="pasos">
+
+    <li class="paso">
+      <span class="n">1</span>
+      <h3>Prepara el token y la clave SSH</h3>
+      <p>Todo lo demás sale de estos dos. El token se genera en tu proyecto de Hetzner, en <em>Security → API tokens</em>, con permiso de lectura y escritura.</p>
+      <div class="cmd">
+        <div class="barra">bash · en tu máquina</div>
+<pre>export HCLOUD_TOKEN=…
+
+<span class="p">#</span> sube tu clave pública al proyecto
+hcloud ssh-key create --name portatil \
+  --public-key-from-file ~/.ssh/id_ed25519.pub</pre>
+      </div>
+      <p>Si no tienes el CLI: <code>brew install hcloud</code>, o el binario de <a href="https://github.com/hetznercloud/cli/releases">las releases del proyecto</a>. También puedes hacerlo todo desde la consola web —el <code>LEEME.md</code> de <code>infra/hetzner/</code> explica cómo—, pero el CLI deja el resultado reproducible.</p>
+      <div class="check"><span class="k">Listón</span><p><code>hcloud server list</code> responde sin error de autenticación.</p></div>
+    </li>
+
+    <li class="paso">
+      <span class="n">2</span>
+      <h3>Crea el servidor, ya endurecido</h3>
+      <p>Un solo comando crea el firewall de Hetzner, crea el servidor y le pasa el <code>cloud-init.yaml</code> como user-data. La máquina nace sin root, sin contraseñas por SSH, con <code>ufw</code>, swap de 2&nbsp;GB, Docker y el reloj sincronizado.</p>
+      <div class="cmd">
+        <div class="barra">bash · desde la raíz del repositorio</div>
+<pre>./infra/hetzner/crear-servidor.sh --tipo cx23</pre>
+      </div>
+      <p>Esto importa más de lo que parece: un VPS recién creado con contraseña por SSH empieza a recibir intentos de acceso en minutos. Haciéndolo en el arranque, la ventana en la que está abierto es cero.</p>
+      <div class="aviso">
+        <span class="cabeza">El servidor se crea sin IPv6, a propósito</span>
+        <p>Hetzner asigna un <code>/64</code> de IPv6 e invita a crear el registro <code>AAAA</code>. Si ese registro existe, <strong>Let's Encrypt lo prefiere</strong> sobre el <code>A</code> para el desafío HTTP — y Docker no enruta IPv6 salvo que lo configures a mano. Traefik nunca recibe el desafío, el certificado no se emite, y el error habla de tiempos de espera sin mencionar IPv6 ni una vez. Con <code>--without-ipv6</code> el problema no puede darse.</p>
+      </div>
+      <div class="check">
+        <span class="k">Listón</span>
+        <p><code>ssh powergis@&lt;IP&gt;</code> entra sin pedir contraseña, y <code>cloud-init status --wait</code> dice <code>status: done</code>.</p>
+        <p>Si la clave no era la correcta y te quedas fuera: consola web de Hetzner, <em>Server → Console</em>. Es la red de seguridad que hace que endurecer desde el minuto cero no dé miedo.</p>
+      </div>
+    </li>
+
+    <li class="paso">
+      <span class="n">3</span>
+      <h3>Comprueba lo que hizo <code>cloud-init</code></h3>
+      <p>Cuatro comprobaciones, treinta segundos. Merece la pena porque un fallo aquí se manifiesta mucho más tarde y disfrazado de otra cosa.</p>
+      <div class="cmd">
+        <div class="barra">bash · dentro del servidor</div>
+<pre>sshd -T | grep -E <span class="c">'permitrootlogin|passwordauthentication'</span>
+<span class="c"># permitrootlogin no</span>
+<span class="c"># passwordauthentication no</span>
+
+ufw status              <span class="c"># 22, 80, 443 y nada más</span>
+swapon --show           <span class="c"># 2G</span>
+timedatectl             <span class="c"># synchronized: yes</span>
+docker run --rm hello-world</pre>
+      </div>
+      <div class="aviso">
+        <span class="cabeza">Dos cosas de Hetzner que confunden si no las sabes</span>
+        <p><strong>El reloj no es un detalle.</strong> La firma HMAC lleva marca de tiempo y el motor rechaza cualquier petición fuera de una ventana de 300&nbsp;segundos. Si este reloj y el del hosting de WordPress se separan más de cinco minutos, <em>todo</em> devuelve 401 <code>invalid_signature</code> y vas a buscar el problema en los secretos, que es donde no está.</p>
+        <p><strong>Hay dos cortafuegos.</strong> El de Hetzner filtra en su red, antes de llegar a la máquina; <code>ufw</code> filtra dentro. El <code>cloud-init</code> configura los dos con las mismas reglas a propósito, para que tocar uno por error no deje la máquina abierta. Cuando algo no conecte, mira los dos.</p>
+      </div>
+      <div class="check"><span class="k">Listón</span><p>Las cinco órdenes de arriba dan lo que dicen los comentarios. <code>sshd -T</code> es la que de verdad importa: las imágenes de Ubuntu&nbsp;24.04 traen un <code>50-cloud-init.conf</code> que gana sobre <code>sshd_config</code>, así que editar el fichero principal —lo que dice casi toda guía— deja la contraseña activada y la máquina <em>parece</em> endurecida sin estarlo.</p></div>
+    </li>
+
+    <li class="paso">
+      <span class="n">4</span>
+      <h3>DNS, y espera a que resuelva</h3>
+      <p>Traefik pide el certificado por desafío HTTP: Let's Encrypt tiene que llegar a tu servidor por el nombre. Si levantas el stack antes de que el DNS haya propagado, el desafío falla, y Let's Encrypt <strong>limita los reintentos por dominio</strong> — puedes quedarte una hora sin poder pedirlo otra vez.</p>
+      <div class="cmd">
+        <div class="barra">en tu proveedor de DNS</div>
+<pre>Tipo   Nombre    Valor                 TTL
+A      motor     &lt;IP del servidor&gt;     300</pre>
+      </div>
+      <p>Sólo el <code>A</code>. Nada de <code>AAAA</code>, por lo del paso 2.</p>
+      <div class="cmd">
+        <div class="barra">hasta que responda</div>
+<pre>dig +short motor.powergis.es</pre>
+      </div>
+      <div class="check"><span class="k">Listón</span><p><code>dig</code> devuelve la IP del servidor y no otra cosa. No pases al paso 4 hasta que esto sea cierto.</p></div>
+    </li>
+
+    <li class="paso">
+      <span class="n">5</span>
+      <h3>Clona, rellena el <code>.env</code> y levanta</h3>
+      <p>Los secretos viven en el <code>.env</code> del servidor y en el <code>wp-config.php</code> de WordPress. En ningún otro sitio: ni en git, ni en la tabla <code>options</code> de WordPress, ni en un mensaje.</p>
+      <div class="cmd">
+        <div class="barra">bash · dentro del servidor</div>
+<pre>git clone &lt;tu-repo&gt; powergis && cd powergis
+cp .env.example .env
+
+<span class="p">#</span> genera cada secreto — no te los inventes de cabeza
+openssl rand -hex 32     <span class="c"># HMAC_SECRET</span>
+openssl rand -hex 32     <span class="c"># INTERNAL_API_KEY</span>
+openssl rand -hex 24     <span class="c"># POSTGRES_PASSWORD</span></pre>
+      </div>
+      <p>Lo que hay que tocar sí o sí:</p>
+      <div class="tabla-envoltorio">
+        <table>
+          <thead><tr><th>Variable</th><th>Valor</th><th>Por qué</th></tr></thead>
+          <tbody>
+            <tr><td><code>ENV</code></td><td><code>production</code></td><td>Activa <code>check_production_ready()</code> y apaga <code>/docs</code>.</td></tr>
+            <tr><td><code>DEBUG</code></td><td><code>false</code></td><td>Con <code>true</code>, el motor se niega a arrancar.</td></tr>
+            <tr><td><code>ENGINE_HOST</code></td><td><code>motor.powergis.es</code></td><td>Traefik construye la regla del router con esto.</td></tr>
+            <tr><td><code>ACME_EMAIL</code></td><td>tu correo</td><td>Avisos de caducidad de Let's Encrypt.</td></tr>
+            <tr><td><code>POSTGRES_PASSWORD</code></td><td>el generado</td><td>Obligatorio; el compose falla si está vacío.</td></tr>
+            <tr><td><code>DATABASE_URL</code></td><td>con esa misma contraseña</td><td><strong>Se olvida siempre.</strong> Lleva la contraseña embebida y hay que cambiarla en los dos sitios.</td></tr>
+            <tr><td><code>HMAC_SECRET</code></td><td>el generado, ≥32 car.</td><td>Idéntico a <code>POWERGIS_HMAC_SECRET</code> en WordPress.</td></tr>
+            <tr><td><code>INTERNAL_API_KEY</code></td><td>el generado</td><td>Protege <code>/internal/*</code>.</td></tr>
+            <tr><td><code>ALLOWED_ORIGINS</code></td><td><code>https://powergis.es,https://www.powergis.es</code></td><td>Separado por comas, sin corchetes ni comillas.</td></tr>
+            <tr><td><code>WORDPRESS_BASE_URL</code></td><td><code>https://powergis.es</code></td><td>A dónde devuelve el motor el informe terminado.</td></tr>
+            <tr><td><code>LLM_ENABLED</code></td><td><code>false</code> por ahora</td><td>Con <code>true</code> y sin <code>LLM_API_KEY</code>, no arranca.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="aviso rojo">
+        <span class="cabeza">El secreto viejo está quemado</span>
+        <p><code>guachineatata2026kimbapaquesuene</code> estuvo escrito en claro en <code>rest-projects.php</code>, en el repositorio y en nuestras conversaciones. Quien lo tenga puede firmar peticiones válidas y generar informes a tu costa. <strong>No lo reutilices en ningún sitio.</strong> Este es el momento de dejarlo atrás, antes de que el motor sea alcanzable desde internet.</p>
+      </div>
+      <p>Y ya:</p>
+      <div class="cmd">
+        <div class="barra">bash</div>
+<pre>make tier                <span class="c"># mira la máquina y te dice cuál toca</span>
+make check-config        <span class="c"># valida el .env sin levantar nada</span>
+make up TIER=cx23        <span class="c"># o cx33, lo que diga `make tier`</span>
+make ps</pre>
+      </div>
+      <p>La primera vez tarda: construye la imagen del motor. Traefik pedirá el certificado en cuanto arranque.</p>
+      <div class="check">
+        <span class="k">Listón</span>
+        <p><code>curl -i https://motor.powergis.es/health</code> devuelve 200 con certificado válido (sin <code>-k</code>).</p>
+        <p><code>curl -i https://motor.powergis.es/internal/coverage</code> devuelve <strong>403</strong>. Si devuelve 401, el bloqueo de Traefik no se aplicó: revisa que las etiquetas <code>api-internal</code> están en tu <code>docker-compose.yml</code> (ver el último apartado).</p>
+        <p><code>curl -i https://motor.powergis.es/ready</code> devolverá <strong>503</strong> ahora mismo, y está bien: la base de datos aún no tiene tablas. Eso es exactamente lo que debe decir.</p>
+      </div>
+    </li>
+
+  </ol>
+
+  <!-- ============================================================ FASE B -->
+
+  <div class="fase">
+    <span class="letra">Fase B</span>
+    <h2>El almacén: esquema, geografía y datos reales del INE</h2>
+  </div>
+  <p class="fase-nota">Cinco pasos. Es la fase donde un fallo hace más daño, porque casi todos son mudos: el almacén se queda a medias sin lanzar un solo error.</p>
+
+  <ol class="pasos">
+
+    <li class="paso">
+      <span class="n">6</span>
+      <h3>Migraciones, catálogo y geografía completa</h3>
+      <p>Un solo objetivo hace las cuatro cosas: migraciones de Alembic, catálogo de indicadores, país&nbsp;/&nbsp;CCAA&nbsp;/&nbsp;provincias, y los ~8.100 municipios descargados del INE.</p>
+      <div class="cmd">
+        <div class="barra">bash</div>
+<pre>make almacen</pre>
+      </div>
+      <div class="aviso">
+        <span class="cabeza">make bootstrap no basta</span>
+        <p>La semilla que va en el repositorio llega sólo hasta provincia: 72 filas. Los municipios se descargan del INE, y por eso este paso necesita salida a internet. Si te quedas en <code>bootstrap</code>, la ingesta del Padrón del paso&nbsp;9 <strong>descartará cada fila municipal sin dar un error</strong>, porque no encuentra la geografía a la que enganchar el dato.</p>
+      </div>
+      <div class="check">
+        <span class="k">Listón</span>
+        <p>En <code>make psql</code>:</p>
+        <div class="cmd" style="margin:.5rem 0 0;">
+          <div class="barra">sql</div>
+<pre><span class="k">SELECT</span> level, count(*) <span class="k">FROM</span> dim_geo <span class="k">GROUP BY</span> level;</pre>
+        </div>
+        <p>1 país, 19 CCAA, 52 provincias y algo por encima de 8.000 municipios. <strong>Si los municipios salen a cero, para aquí</strong> y repite el paso: todo lo que viene después dependerá de esa tabla.</p>
+      </div>
+    </li>
+
+    <li class="paso">
+      <span class="n">7</span>
+      <h3>Comprueba qué indicadores tienen quien los alimente</h3>
+      <p>Un indicador del catálogo sin colector nunca tendrá dato. Saldrá como hueco en el informe y parecerá secreto estadístico del INE, que es una cosa muy distinta.</p>
+      <div class="cmd">
+        <div class="barra">bash</div>
+<pre>make coverage-report</pre>
+      </div>
+      <div class="check">
+        <span class="k">Listón</span>
+        <p>Los demográficos aparecen con colector. Los de competencia, clima y tráfico saldrán huérfanos y <em>está bien</em>: sus APIs entran después del INE.</p>
+        <p>Lo que sí conviene que mires es la lista de huérfanos que pesan en el Match&nbsp;%: los cinco tramos de nivel socioeconómico, estructura familiar y postgrado. Son un 29&nbsp;% del peso. El motor los descarta en vez de inventárselos y ahora avisa cuando lo hace, pero la decisión —derivarlos o quitar esas preguntas del formulario— sigue pendiente.</p>
+      </div>
+    </li>
+
+    <li class="paso">
+      <span class="n">8</span>
+      <h3>Verifica el mapeo del INE <em>antes</em> de cargar</h3>
+      <p>El INE renumera las tablas cuando republica una operación, y los filtros del colector son subcadenas del nombre de la serie. Los dos fallan sin lanzar ningún error: simplemente devuelven cero hechos, y te quedas con un almacén vacío que parece lleno.</p>
+      <div class="cmd">
+        <div class="barra">bash</div>
+<pre>make ine-verify</pre>
+      </div>
+      <div class="tabla-envoltorio">
+        <table>
+          <thead><tr><th>Veredicto</th><th>Qué ha pasado</th><th>Qué hacer</th></tr></thead>
+          <tbody>
+            <tr><td><code>OK</code></td><td>La tabla responde y el filtro acierta</td><td>Seguir</td></tr>
+            <tr><td><code>UNREACHABLE</code></td><td>El INE renumeró la tabla</td><td>Buscar el ID nuevo y fijarlo por entorno</td></tr>
+            <tr><td><code>NO_MATCH</code></td><td>Cambió el nombre de las series</td><td>Ajustar <code>match</code> con lo que muestra el ejemplo</td></tr>
+            <tr><td><code>LEVEL_MISMATCH</code></td><td>La tabla ya no es municipal</td><td>Cambiar el nivel del <code>TableSpec</code></td></tr>
+            <tr><td><code>EMPTY</code></td><td>La tabla existe pero no trae datos</td><td>Revisar la operación en la web del INE</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>Para arreglar un ID sin tocar código ni volver a desplegar, míralo y fíjalo por variable de entorno:</p>
+      <div class="cmd">
+        <div class="barra">bash</div>
+<pre>make shell
+powergis ine-discover 56934    <span class="c"># qué variables y series tiene</span>
+exit
+
+<span class="p">#</span> en .env:
+<span class="c">INE_TABLE_DEM_POP_TOTAL=59525</span>
+make up                        <span class="c"># recarga la configuración</span></pre>
+      </div>
+      <div class="check"><span class="k">Listón</span><p>Termina con «Las 16 tablas del INE responden y mapean» y código de salida 0. <code>make ingest-ine</code> ejecuta esta verificación por su cuenta y aborta si no cuadra, pero es mejor verlo antes que descubrirlo a mitad.</p></div>
+    </li>
+
+    <li class="paso">
+      <span class="n">9</span>
+      <h3>Carga el Padrón y calcula los derivados</h3>
+      <p>La ingesta va a la cola <code>etl</code>, que tiene worker propio con concurrencia 1. No es un capricho: se midió una ingesta de 282&nbsp;segundos ocupando slots compartidos y retrasando informes de cliente. Con 2&nbsp;vCPU eso es peor, no mejor.</p>
+      <div class="cmd">
+        <div class="barra">bash</div>
+<pre>make ingest-ine    <span class="c"># verifica primero; aborta si el mapeo no cuadra</span>
+make derive        <span class="c"># densidades, ratios, índices</span></pre>
+      </div>
+      <p>Tarda. Son varias tablas municipales completas con un límite de 2 peticiones por segundo al INE. Déjalo correr y sigue los logs en otra sesión con <code>make logs</code>.</p>
+      <div class="check">
+        <span class="k">Listón</span>
+        <p>En <code>make psql</code>, las dos consultas:</p>
+        <div class="cmd" style="margin:.5rem 0 0;">
+          <div class="barra">sql</div>
+<pre><span class="k">SELECT</span> count(*) <span class="k">FROM</span> fact_indicator;
+<span class="k">SELECT</span> count(*) <span class="k">FROM</span> fact_indicator <span class="k">WHERE</span> value <span class="k">IS NULL</span>;</pre>
+        </div>
+        <p>La primera en millones. La segunda, una minoría clara. Un montón de nulos no es secreto estadístico: significa que el filtro no acertó, y hay que volver al paso&nbsp;8.</p>
+      </div>
+    </li>
+
+    <li class="paso">
+      <span class="n">10</span>
+      <h3>Un informe de verdad, sin pasar por WordPress</h3>
+      <p>Antes de conectar el front, comprueba que el motor produce un informe con los datos que acabas de cargar. Si algo falla aquí, no es de WordPress, y saberlo ahora te ahorra buscar en el sitio equivocado.</p>
+      <div class="cmd">
+        <div class="barra">bash</div>
+<pre>make smoke</pre>
+      </div>
+      <div class="check">
+        <span class="k">Listón</span>
+        <p>La prueba de humo pasa entera, y <code>curl https://motor.powergis.es/ready</code> ahora sí devuelve <strong>200</strong>.</p>
+        <p>Los datos del informe son del INE. Si en algún momento ejecutaste <code>make demo</code>, esos hechos son sintéticos y no pueden salir a producción: bórralos antes de seguir.</p>
+      </div>
+    </li>
+
+  </ol>
+
+  <!-- ============================================================ FASE C -->
+
+  <div class="fase">
+    <span class="letra">Fase C</span>
+    <h2>WordPress: enganchar powergis.es al motor</h2>
+  </div>
+  <p class="fase-nota">Cuatro pasos. Aquí es donde el enlace se hace de verdad, y donde el orden entre secreto y despliegue importa.</p>
+
+  <ol class="pasos">
+
+    <li class="paso">
+      <span class="n">11</span>
+      <h3>Sube el conector a powergis.es</h3>
+      <p>Copia <code>wordpress/powergis-connector/</code> completo a <code>wp-content/plugins/</code>. Todavía no lo actives: primero van las constantes, porque el plugin las lee al arrancar.</p>
+      <div class="cmd">
+        <div class="barra">bash · desde tu máquina</div>
+<pre>rsync -avz --delete wordpress/powergis-connector/ \
+  usuario@powergis.es:~/public_html/wp-content/plugins/powergis-connector/</pre>
+      </div>
+      <div class="check"><span class="k">Listón</span><p>El plugin aparece en la lista de WordPress, desactivado, sin errores de PHP.</p></div>
+    </li>
+
+    <li class="paso">
+      <span class="n">12</span>
+      <h3>Las constantes en <code>wp-config.php</code></h3>
+      <p>Van <strong>por encima</strong> de la línea <code>/* That's all, stop editing! */</code>. Si van debajo, WordPress ya ha cargado y no se aplican.</p>
+      <div class="cmd">
+        <div class="barra">wp-config.php · powergis.es</div>
+<pre><span class="p">/*</span><span class="c"> El motor. Sin barra al final. </span><span class="p">*/</span>
+define( <span class="c">'POWERGIS_ENGINE_URL'</span>,  <span class="c">'https://motor.powergis.es'</span> );
+
+<span class="p">/*</span><span class="c"> IDÉNTICO a HMAC_SECRET en el .env del VPS. Byte por byte. </span><span class="p">*/</span>
+define( <span class="c">'POWERGIS_HMAC_SECRET'</span>, <span class="c">'…el que generaste en el paso 5…'</span> );
+
+<span class="p">/*</span><span class="c"> A dónde devuelve el motor el informe terminado. </span><span class="p">*/</span>
+define( <span class="c">'POWERGIS_CALLBACK_URL'</span>,
+        <span class="c">'https://powergis.es/wp-json/saas/v1/projects/callback'</span> );
+
+<span class="p">/*</span><span class="c"> Stripe. De momento en modo TEST. </span><span class="p">*/</span>
+define( <span class="c">'POWERGIS_STRIPE_SECRET'</span>,         <span class="c">'sk_test_…'</span> );
+define( <span class="c">'POWERGIS_STRIPE_WEBHOOK_SECRET'</span>, <span class="c">'whsec_…'</span> );
+define( <span class="c">'POWERGIS_STRIPE_PRICE_ID'</span>,       <span class="c">'price_…'</span> );</pre>
+      </div>
+      <div class="aviso rojo">
+        <span class="cabeza">POWERGIS_DEV_MODE no se define aquí. Nunca.</span>
+        <p>Esa constante activa el simulador de pago. Si acaba definida en el WordPress de producción, <strong>cualquiera desbloquea informes de pago gratis</strong> con una petición. No la copies del <code>docker-compose.dev.yml</code> por inercia: es la única línea de ese fichero que no debe existir aquí.</p>
+      </div>
+      <p>Ahora sí, activa el plugin.</p>
+      <div class="check">
+        <span class="k">Listón</span>
+        <p>El CPT <code>project</code> aparece en el escritorio. Que no sea público es deliberado: con <code>public =&gt; true</code>, un UUID filtrado abriría un informe de pago sin pasar por caja.</p>
+      </div>
+    </li>
+
+    <li class="paso">
+      <span class="n">13</span>
+      <h3>Comprueba que no hay choque de rutas en producción</h3>
+      <p>El mismo problema que en local: tu plugin SaaS Studies y el conector registran <code>saas/v1/projects/create</code>, <code>/save-draft</code> y <code>/callback</code>. WordPress no protesta, apila los dos manejadores y despacha el que cargue antes.</p>
+      <p>Para que el guardia funcione en producción, el <code>rest-projects.php</code> y el <code>cpt-project.php</code> de powergis.es tienen que ser los del repositorio —los que llevan el <code>class_exists</code> al principio—, no los que están ahí ahora.</p>
+      <div class="cmd">
+        <div class="barra">bash · por SSH en powergis.es, si tienes wp-cli</div>
+<pre>wp eval <span class="c">'foreach (rest_get_server()->get_routes() as $r =&gt; $h) {
+  if (str_starts_with($r, "/saas/v1")) {
+    echo $r . "  ->  " . count($h) . PHP_EOL;
+  } }'</span></pre>
+      </div>
+      <p>Sin <code>wp-cli</code>, la página de diagnóstico del conector lo muestra igual: <em>Proyectos → Estado de PowerGIS</em>.</p>
+      <div class="check"><span class="k">Listón</span><p>Ninguna ruta con más de un manejador. Si alguna sale con dos, para: a partir de ahí lo que responda depende del orden alfabético de la carpeta de plugins.</p></div>
+    </li>
+
+    <li class="paso">
+      <span class="n">14</span>
+      <h3>El primer proyecto real, mirando los logs</h3>
+      <p>Uno solo, tuyo, con <code>make logs</code> abierto en el VPS. Es la primera vez que el circuito completo se recorre con datos reales.</p>
+      <div class="tabla-envoltorio">
+        <table>
+          <thead><tr><th>Dónde</th><th>Qué debes ver</th></tr></thead>
+          <tbody>
+            <tr><td>Navegador</td><td>El formulario envía y la página no da error.</td></tr>
+            <tr><td>WordPress</td><td>El proyecto aparece en el CPT con su UUID.</td></tr>
+            <tr><td>Log de <code>api</code></td><td><code>POST /v1/reports</code> con 201 o 202, no 401.</td></tr>
+            <tr><td>Log de <code>worker-reports</code></td><td>La tarea se ejecuta y termina.</td></tr>
+            <tr><td>WordPress</td><td>El informe básico aparece solo, sin recargar a mano.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="aviso">
+        <span class="cabeza">Si sale 401 invalid_signature</span>
+        <p>Son tres causas, en orden de probabilidad: el secreto no es idéntico byte por byte (mira espacios al final al copiarlo); los relojes se han separado más de 5 minutos (paso&nbsp;3); o algún proxy del hosting está modificando el cuerpo de la petición, y la firma se calcula sobre los bytes exactos.</p>
+      </div>
+      <div class="check"><span class="k">Listón</span><p>El informe básico se ve completo, y las secciones de pago aparecen bloqueadas con su índice de ventas pero <strong>sin valores</strong>. Eso último es la prueba de que el bloqueo es real y no cosmético.</p></div>
+    </li>
+
+  </ol>
+
+  <!-- ============================================================ FASE D -->
+
+  <div class="fase">
+    <span class="letra">Fase D</span>
+    <h2>Stripe: cobrar, y que el cobro sea lo único que desbloquea</h2>
+  </div>
+  <p class="fase-nota">Tres pasos. Todo se prueba en modo test antes de tocar dinero real.</p>
+
+  <ol class="pasos">
+
+    <li class="paso">
+      <span class="n">15</span>
+      <h3>Crea el producto y el webhook</h3>
+      <p>El precio nunca se fija en el navegador: se usa un <code>price_id</code> de Stripe. Si el importe viaja en el formulario, viaja manipulable.</p>
+      <ol class="plana">
+        <li>En Stripe, crea el producto «Informe avanzado» con su precio, y copia el <code>price_…</code>.</li>
+        <li>Añade el endpoint <code>https://powergis.es/wp-json/saas/v1/stripe/webhook</code>.</li>
+        <li>Suscríbelo a <code>checkout.session.completed</code>, <code>charge.refunded</code> y <code>charge.dispute.created</code>.</li>
+        <li>Copia el <code>whsec_…</code> que Stripe genera para ese endpoint.</li>
+      </ol>
+      <div class="check"><span class="k">Listón</span><p>Stripe muestra el endpoint en verde tras el primer evento de prueba que le envíes desde su propio panel.</p></div>
+    </li>
+
+    <li class="paso">
+      <span class="n">16</span>
+      <h3>Paga con tarjeta de prueba y comprueba las dos cosas que importan</h3>
+      <p>Con las claves <code>sk_test_</code> puestas, crea un proyecto, pulsa desbloquear y paga con <code>4242 4242 4242 4242</code>.</p>
+      <p>Hay <strong>dos</strong> comprobaciones distintas, y la segunda se salta casi siempre:</p>
+      <div class="tabla-envoltorio">
+        <table>
+          <thead><tr><th>Prueba</th><th>Cómo</th><th>Qué debe pasar</th></tr></thead>
+          <tbody>
+            <tr>
+              <td>El desbloqueo funciona</td>
+              <td>Pagar y esperar</td>
+              <td>El informe pasa a avanzado solo, sin recargar a mano.</td>
+            </tr>
+            <tr>
+              <td>El desbloqueo <em>no</em> lo concede la URL de éxito</td>
+              <td>Copia la <code>success_url</code> y visítala con otro proyecto sin pagar</td>
+              <td>No desbloquea nada. Si desbloquea, tienes un agujero por el que se cuela cualquiera.</td>
+            </tr>
+            <tr>
+              <td>Idempotencia</td>
+              <td>Reenvía el mismo evento desde el panel de Stripe</td>
+              <td>Se ignora. No se genera un segundo informe ni se cobra dos veces.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="check">
+        <span class="k">Listón</span>
+        <p>En <code>make psql</code>: <code>SELECT version, tier FROM report_snapshot WHERE project_id = …;</code> devuelve dos filas, v1 básico y v2 avanzado, del mismo proyecto. Y la v2 reutiliza la demografía en vez de recalcularla — un solo trabajo, dos perfiles de ejecución.</p>
+      </div>
+    </li>
+
+    <li class="paso">
+      <span class="n">17</span>
+      <h3>Pasa a claves de producción</h3>
+      <p>Cuando las tres pruebas del paso 16 estén en verde: en Stripe, cambia a modo <em>live</em>, recrea el producto y el webhook (los objetos de test no se migran), y sustituye las tres constantes en <code>wp-config.php</code> por las <code>sk_live_</code>, el nuevo <code>whsec_</code> y el nuevo <code>price_</code>.</p>
+      <div class="aviso">
+        <span class="cabeza">El webhook de test no vale en producción</span>
+        <p>Cada endpoint tiene su propio <code>whsec_</code>, y el de modo live es distinto. Si dejas el de test, Stripe firmará con uno y tú verificarás con otro: todos los pagos reales fallarán la verificación y ningún informe se desbloqueará.</p>
+      </div>
+      <div class="check"><span class="k">Listón</span><p>Una compra real tuya, del importe mínimo que tengas configurado, desbloquea el informe. Después la reembolsas desde Stripe y compruebas que el acceso se retira.</p></div>
+    </li>
+
+  </ol>
+
+  <!-- ============================================================ FASE E -->
+
+  <div class="fase">
+    <span class="letra">Fase E</span>
+    <h2>Que siga funcionando mañana</h2>
+  </div>
+  <p class="fase-nota">Dos pasos que no son opcionales aunque lo parezcan.</p>
+
+  <ol class="pasos">
+
+    <li class="paso">
+      <span class="n">18</span>
+      <h3>Haz una copia y <em>restáurala</em></h3>
+      <p>Los snapshots del VPS no son copia de seguridad de base de datos: capturan el volumen a mitad de una escritura. Y una copia que nunca se ha restaurado no es una copia, es una carpeta.</p>
+      <div class="cmd">
+        <div class="barra">bash</div>
+<pre>make backup
+make restore-test</pre>
+      </div>
+      <p>Para que la copia salga del servidor —que es de lo que se trata— rellena en <code>.env</code> el destino externo y la frase de cifrado. En Hetzner lo natural es su propio Object Storage, compatible con S3; las credenciales se generan en <em>Security → Object Storage keys</em>.</p>
+      <div class="cmd">
+        <div class="barra">.env</div>
+<pre>BACKUP_S3_ENDPOINT=https://nbg1.your-objectstorage.com
+BACKUP_S3_BUCKET=powergis-backups
+BACKUP_S3_KEY=…
+BACKUP_S3_SECRET=…
+BACKUP_GPG_PASSPHRASE=…    <span class="c"># guárdala donde no esté el backup</span></pre>
+      </div>
+      <p>Pon el bucket en la misma región que el servidor (<code>nbg1</code> Núremberg, <code>fsn1</code> Falkenstein, <code>hel1</code> Helsinki). Si prefieres que la copia no viva en casa del mismo proveedor, Backblaze&nbsp;B2 y Cloudflare&nbsp;R2 sirven igual.</p>
+      <div class="aviso">
+        <span class="cabeza">Los snapshots de Hetzner no son esto</span>
+        <p>Capturan el volumen a mitad de una escritura, así que un <code>pgdata</code> restaurado desde snapshot puede quedar inconsistente. Sirven para deshacer un cambio de sistema, no para recuperar la base de datos.</p>
+      </div>
+      <div class="check"><span class="k">Listón</span><p><code>make restore-test</code> levanta la copia en una base temporal y cuenta geografías y hechos. Si los números cuadran con la base real, el backup sirve. Y en el log del contenedor <code>backup</code> aparece la subida al destino externo, no el aviso de que la copia se queda en el VPS.</p></div>
+    </li>
+
+    <li class="paso">
+      <span class="n">19</span>
+      <h3>Mide antes de comprar más máquina</h3>
+      <div class="cmd">
+        <div class="barra">bash</div>
+<pre>make capacity</pre>
+      </div>
+      <p>Muestra memoria y CPU por contenedor, la profundidad de cada cola y las conexiones abiertas contra el máximo de PostgreSQL. Las tres señales para subir de máquina:</p>
+      <ul>
+        <li>PostgreSQL sostenido por encima del 85&nbsp;% de su techo.</li>
+        <li>Cola <code>reports.*</code> con espera habitual en hora punta.</li>
+        <li>La carga nocturna del INE sin terminar antes de las 07:00.</li>
+      </ul>
+      <p>En un CX23 vas a ver la primera y la tercera enseguida, y no significan nada: es la caja de pruebas haciendo lo que puede. Las señales cuentan cuando ya estás en la máquina de verdad.</p>
+      <p>Hetzner permite redimensionar conservando el disco, así que no hay que recargar el almacén:</p>
+      <div class="cmd">
+        <div class="barra">bash · desde tu máquina</div>
+<pre>make backup                          <span class="c"># por si acaso, siempre</span>
+make down
+hcloud server change-type powergis cx33 --keep-disk
+hcloud server poweron powergis
+
+<span class="c"># dentro del servidor</span>
+make up TIER=cx33</pre>
+      </div>
+      <div class="tabla-envoltorio">
+        <table>
+          <thead><tr><th>Perfil</th><th>Máquina</th><th>Para qué</th></tr></thead>
+          <tbody>
+            <tr><td><code>cx23</code></td><td>2 vCPU · 4 GB · 40 GB</td><td>Pruebas. Colas compartidas.</td></tr>
+            <tr><td><code>cx33</code></td><td>4 vCPU · 8 GB · 80 GB</td><td>Producción. Colas separadas.</td></tr>
+            <tr><td><code>oracle</code></td><td>2 OCPU ARM · 12 GB · 200 GB</td><td>Gratis. Colas separadas.</td></tr>
+            <tr><td><code>kvm2</code> / <code>kvm4</code></td><td>Hostinger</td><td>Se conservan por si vuelves.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="aviso">
+        <span class="cabeza">Si subes workers, rehaz la cuenta de conexiones</span>
+        <p>El techo real es <code>(DB_POOL_SIZE + DB_MAX_OVERFLOW) × procesos ≤ max_connections</code>. En <code>cx33</code>: <code>(3+4) × 8 = 56 ≤ 60</code>. En <code>cx23</code>, con el pool reducido a 2+2: <code>4 × 6 = 24 ≤ 30</code>. Con los valores antiguos salían 180 contra 120 y bajo carga aparecía <code>FATAL: sorry, too many clients already</code>.</p>
+      </div>
+    </li>
+
+  </ol>
+
+  <!-- ======================================================== DIAGNÓSTICO -->
+
+  <h2 class="suelto">Cuando algo falla</h2>
+
+  <p>Los síntomas de este sistema son ambiguos a propósito de nada: casi todos tienen una causa dominante. Empieza siempre por <code>make ps</code> y <code>make logs</code>.</p>
+
+  <div class="tabla-envoltorio">
+    <table>
+      <thead><tr><th>Síntoma</th><th>Causa más probable</th><th>Qué mirar</th></tr></thead>
+      <tbody>
+        <tr>
+          <td>El contenedor <code>api</code> o <code>worker</code> reinicia en bucle</td>
+          <td>Configuración inválida: el motor se niega a arrancar en producción con secretos débiles o <code>DEBUG</code></td>
+          <td><code>make logs</code> — el error dice cuál. <code>make check-config</code></td>
+        </tr>
+        <tr>
+          <td>401 <code>invalid_signature</code> en todo</td>
+          <td>Secretos distintos, o relojes separados más de 5 min</td>
+          <td>Compara <code>HMAC_SECRET</code> y <code>POWERGIS_HMAC_SECRET</code>; <code>timedatectl</code> en ambos</td>
+        </tr>
+        <tr>
+          <td><code>/health</code> da 200 pero nada funciona</td>
+          <td><code>/health</code> es liveness a propósito: responde aunque todo lo demás esté caído</td>
+          <td><code>/ready</code>, que sí comprueba base de datos, Redis y esquema</td>
+        </tr>
+        <tr>
+          <td>Todo devuelve 404 al buscar una zona</td>
+          <td><code>dim_geo</code> vacía: se ejecutó <code>bootstrap</code> y no <code>almacen</code></td>
+          <td><code>SELECT count(*) FROM dim_geo;</code></td>
+        </tr>
+        <tr>
+          <td>El informe sale con huecos por todas partes</td>
+          <td>El mapeo del INE no acertó; se cargaron cero hechos</td>
+          <td><code>make ine-verify</code>, luego el recuento de nulos del paso 9</td>
+        </tr>
+        <tr>
+          <td>El proyecto se crea pero el informe no llega nunca</td>
+          <td>El worker no arranca, o el callback no alcanza WordPress</td>
+          <td><code>make ps</code>; log de <code>worker-reports</code>; <code>WORDPRESS_BASE_URL</code></td>
+        </tr>
+        <tr>
+          <td>El certificado no se emite</td>
+          <td>El DNS no resolvía cuando Traefik lo pidió, y Let's Encrypt limitó</td>
+          <td><code>dig +short motor.powergis.es</code>; log de <code>traefik</code>; esperar antes de reintentar</td>
+        </tr>
+        <tr>
+          <td>El certificado no se emite, y el DNS <em>sí</em> resuelve</td>
+          <td>Hay un registro <code>AAAA</code>: Let's Encrypt lo prefiere y Docker no enruta IPv6</td>
+          <td>Borra el <code>AAAA</code>. El error nunca menciona IPv6</td>
+        </tr>
+        <tr>
+          <td>El 443 no responde desde fuera, pero dentro todo va</td>
+          <td>El firewall de Hetzner, que es una capa aparte de <code>ufw</code></td>
+          <td><code>hcloud firewall describe powergis-fw</code> y <code>ufw status</code>: los dos</td>
+        </tr>
+        <tr>
+          <td>Entras por SSH con contraseña cuando no deberías</td>
+          <td>El drop-in <code>50-cloud-init.conf</code> gana sobre <code>sshd_config</code></td>
+          <td><code>sshd -T | grep passwordauth</code> — es lo único que dice la verdad</td>
+        </tr>
+        <tr>
+          <td>PostgreSQL se detiene sin explicación clara</td>
+          <td>Disco lleno: 40 GB se acaban antes de lo que parece</td>
+          <td><code>df -h /</code>, <code>docker system df</code>, <code>docker image prune -af</code></td>
+        </tr>
+        <tr>
+          <td><code>FATAL: sorry, too many clients already</code></td>
+          <td>Pool por proceso mal dimensionado</td>
+          <td>La cuenta del paso 19</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>Si nada de esto encaja, <code>make diagnostico</code> vuelca el estado completo a un fichero y me lo puedes pasar entero.</p>
+
+  <!-- ========================================================= CORRECCIONES -->
+
+  <h2 class="suelto">Tres cosas que he arreglado antes de escribir esto</h2>
+
+  <p>Al repasar el camino de despliegue paso a paso aparecieron tres defectos. Los tres eran del tipo peor: fallaban en silencio, y el sistema decía que todo iba bien.</p>
+
+  <h3>El bloqueo de <code>/internal</code> no bloqueaba nada</h3>
+  <p>El <code>docker-compose.yml</code> tenía un middleware llamado <code>pg-internal-block</code> que era un <code>stripprefix</code> sobre <code>/__never__</code>. Quitar un prefijo que nunca coincide no filtra ninguna petición: los endpoints de operación quedaban publicados en internet, defendidos sólo por <code>INTERNAL_API_KEY</code>. Esa clave es una defensa real, pero no era la que anunciaba el nombre. Ahora hay un router propio con <code>ipallowlist</code>, y <code>/internal</code> desde fuera recibe 403 antes de tocar la aplicación — que es justo el listón del paso 5.</p>
+
+  <h3>El backup no se cifraba ni salía del VPS</h3>
+  <p><code>backup.sh</code> comprobaba con <code>command -v</code> si existían <code>gpg</code> y <code>aws</code>, y si no, se saltaba el cifrado y la subida <em>sin decir nada</em>. La imagen <code>postgres:16-alpine</code> no trae ninguno de los dos. Resultado: configuras el cifrado, el log dice «listo», y el fichero está en claro dentro de la misma máquina que quieres poder perder. Ahora el contenedor instala las dos herramientas al arrancar, y si pides cifrado o subida y falta la herramienta, el backup <strong>falla</strong> en vez de mentir.</p>
+
+  <h3><code>make restore-test</code> nunca restauraba nada</h3>
+  <p>Buscaba los backups en <code>./infra/backups</code>, pero viven en el volumen <code>backups</code> montado en <code>/backups</code> dentro del contenedor. Siempre decía «No hay backups» y salía. La tarea que existe precisamente para detectar que un backup no sirve, no se ejecutaba nunca.</p>
+
+  <footer>
+    PowerGIS · guía de despliegue · agosto de 2026
+  </footer>
+
+</div>

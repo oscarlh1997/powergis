@@ -1,0 +1,596 @@
+<title>Datos de prueba de la API</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@0,400;0,500;0,600&display=swap">
+
+<style>
+	:root {
+		--ground:#FBFAF8; --surface:#FFFFFF; --surface-alt:#F4F2EE;
+		--line:#E4E0D9; --line-strong:#CFC9BF;
+		--ink:#171614; --ink-soft:#45423C; --muted:#726D64;
+		--accent:#D9541A; --ok:#106B45; --ok-soft:#E8F3ED;
+		--warn:#8A5A00; --warn-soft:#FBF1DC;
+		--danger:#A32017; --danger-soft:#FBEBE9;
+		--term-bg:#1B1A17; --term-ink:#E8E4DC; --term-dim:#8B857A;
+		--radius:10px; --measure:66ch;
+	}
+	@media (prefers-color-scheme: dark) {
+		:root:not([data-theme="light"]) {
+			--ground:#131211; --surface:#1B1A18; --surface-alt:#221F1C;
+			--line:#302C28; --line-strong:#443E38;
+			--ink:#F2EFE9; --ink-soft:#CFC9C0; --muted:#948D82;
+			--accent:#FF7A3D; --ok:#4CBE8A; --ok-soft:#14271E;
+			--warn:#D8A23A; --warn-soft:#2B2211;
+			--danger:#F0796C; --danger-soft:#2E1614;
+			--term-bg:#0D0C0B; --term-ink:#E8E4DC; --term-dim:#7C766B;
+		}
+	}
+	:root[data-theme="dark"] {
+		--ground:#131211; --surface:#1B1A18; --surface-alt:#221F1C;
+		--line:#302C28; --line-strong:#443E38;
+		--ink:#F2EFE9; --ink-soft:#CFC9C0; --muted:#948D82;
+		--accent:#FF7A3D; --ok:#4CBE8A; --ok-soft:#14271E;
+		--warn:#D8A23A; --warn-soft:#2B2211;
+		--danger:#F0796C; --danger-soft:#2E1614;
+		--term-bg:#0D0C0B; --term-ink:#E8E4DC; --term-dim:#7C766B;
+	}
+	*{box-sizing:border-box}
+	body{margin:0;background:var(--ground);color:var(--ink);
+		font-family:"IBM Plex Sans",system-ui,-apple-system,sans-serif;
+		font-size:16px;line-height:1.6;-webkit-font-smoothing:antialiased}
+	h1,h2,h3{font-family:Archivo,"Helvetica Neue",Arial,sans-serif;margin:0;
+		text-wrap:balance;letter-spacing:-.011em}
+	code,pre{font-family:"IBM Plex Mono",ui-monospace,Menlo,monospace}
+	a{color:var(--accent)}
+	.wrap{max-width:1180px;margin:0 auto;padding:0 28px 96px}
+	.layout{display:grid;grid-template-columns:190px minmax(0,1fr);gap:48px;align-items:start}
+
+	.masthead{border-bottom:1px solid var(--line);padding:54px 0 30px;margin-bottom:36px}
+	.eyebrow{font-family:"IBM Plex Mono",monospace;font-size:11.5px;letter-spacing:.13em;
+		text-transform:uppercase;color:var(--muted);margin:0 0 12px}
+	.masthead h1{font-size:clamp(30px,4.4vw,42px);font-weight:700;line-height:1.08;max-width:16ch}
+	.masthead p{margin:14px 0 0;color:var(--ink-soft);max-width:58ch}
+
+	.correr{border:1px solid var(--line-strong);border-radius:var(--radius);
+		background:var(--surface);padding:18px 22px;margin:24px 0 0;max-width:var(--measure)}
+	.correr h2{font-size:15px;font-weight:600;margin-bottom:8px}
+	.correr p{margin:0 0 10px;color:var(--ink-soft);font-size:14px}
+	.correr pre{margin:0}
+	.verificado{margin:12px 0 0 !important;padding:10px 13px;border-radius:8px;
+		background:var(--ok-soft);border-left:2px solid var(--ok);font-size:13.5px}
+
+	.rail{position:sticky;top:28px}
+	.rail h2{font-size:11.5px;font-family:"IBM Plex Mono",monospace;letter-spacing:.13em;
+		text-transform:uppercase;color:var(--muted);font-weight:400;margin-bottom:14px}
+	.rail ol{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:3px}
+	.rail a{display:flex;justify-content:space-between;gap:8px;padding:8px 10px;border-radius:7px;
+		text-decoration:none;color:var(--ink-soft);font-size:13.5px;border:1px solid transparent}
+	.rail a:hover,.rail a:focus-visible{background:var(--surface);border-color:var(--line);color:var(--ink)}
+	.rail .n{font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--muted)}
+
+	.grupo{margin-bottom:56px;scroll-margin-top:24px}
+	.grupo>header{border-top:2px solid var(--ink);padding-top:13px;margin-bottom:22px}
+	.grupo h2{font-size:23px;font-weight:600}
+	.grupo>header p{margin:8px 0 0;color:var(--muted);max-width:var(--measure);font-size:14.5px}
+
+	.casos{display:flex;flex-direction:column;gap:14px}
+	.caso{border:1px solid var(--line);border-radius:var(--radius);background:var(--surface);
+		padding:16px 18px}
+	.cab{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin-bottom:9px}
+	.met{font-family:"IBM Plex Mono",monospace;font-size:10.5px;font-weight:500;
+		letter-spacing:.07em;padding:2px 8px;border-radius:5px;color:#fff}
+	.met--get{background:#3A6EA5}
+	.met--post{background:var(--accent)}
+	.ruta{font-size:13px;color:var(--ink);word-break:break-all}
+	.ruta .q{color:var(--muted)}
+	.esp{margin-left:auto;font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--muted)}
+	.caso h3{font-size:15.5px;font-weight:600;margin-bottom:6px}
+	.auth{margin:0 0 10px;font-size:12.5px;font-family:"IBM Plex Mono",monospace}
+	.auth-sig{color:var(--ok)}
+	.auth-none{color:var(--warn)}
+	.marca{display:inline-block;margin-left:8px;padding:1px 8px;border-radius:999px;
+		border:1px solid var(--line-strong);color:var(--muted);font-size:11px;
+		font-family:"IBM Plex Sans",sans-serif;letter-spacing:0}
+	.caso pre{background:var(--term-bg);color:var(--term-ink);border:1px solid var(--line-strong);
+		border-radius:8px;padding:13px 15px;overflow-x:auto;font-size:12.5px;line-height:1.65;margin:0 0 10px}
+	.vacio{font-size:13.5px;color:var(--ink-soft);margin:0 0 10px}
+	.nota{margin:0;font-size:13.5px;color:var(--ink-soft);max-width:var(--measure);
+		border-left:2px solid var(--line-strong);padding-left:12px}
+	#seguridad .caso{border-color:var(--danger);background:var(--danger-soft)}
+	#seguridad .caso pre{border-color:var(--danger)}
+	:not(pre)>code{background:var(--surface-alt);border:1px solid var(--line);border-radius:5px;
+		padding:1px 5px;font-size:.885em}
+	:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+	@media (max-width:900px){
+		.layout{grid-template-columns:1fr;gap:0}
+		.rail{position:static;margin-bottom:32px}
+		.rail ol{flex-direction:row;flex-wrap:wrap}
+		.rail a{border:1px solid var(--line);background:var(--surface)}
+	}
+	@media (max-width:560px){.wrap{padding:0 18px 64px}.esp{margin-left:0;width:100%}}
+</style>
+
+<div class="wrap">
+	<header class="masthead">
+		<p class="eyebrow">PowerGIS · motor de informes</p>
+		<h1>Datos de prueba de la API</h1>
+		<p>Los 28 casos que cubren cada endpoint del motor, con el cuerpo exacto que
+		   espera y lo que debe responder. Viven en <code>scripts/fixtures.json</code>,
+		   así que no son documentación que se queda vieja: son el fichero que se ejecuta.</p>
+		<div class="correr">
+			<h2>Dispararlos todos</h2>
+			<p>Firma cada llamada, las lanza en orden de dependencia —crea un informe,
+			   espera al worker, y luego prueba lo que lo necesita— y compara la respuesta.</p>
+<pre>$ make endpoints        <span style="color:#8B857A"># pg endpoints  en Windows</span></pre>
+			<p class="verificado">Ejecutados contra un motor real —PostgreSQL 16 + PostGIS, Redis,
+			   worker de Celery— el 26 de agosto de 2026: <strong>27 de 27 en verde</strong>,
+			   incluidos los seis de seguridad. El caso 28 necesita salida a internet
+			   hacia el INE y se salta solo cuando no la hay.</p>
+		</div>
+	</header>
+
+	<div class="layout">
+		<nav class="rail" aria-label="Grupos">
+			<h2>Grupos</h2>
+			<ol>
+				<li><a href="#salud"><span>Salud</span><span class="n">2</span></a></li>
+				<li><a href="#catalogo"><span>Catálogo</span><span class="n">2</span></a></li>
+				<li><a href="#geografia"><span>Geografía</span><span class="n">4</span></a></li>
+				<li><a href="#informes"><span>Informes</span><span class="n">10</span></a></li>
+				<li><a href="#operacion"><span>Operación</span><span class="n">4</span></a></li>
+				<li><a href="#seguridad"><span>Debe fallar</span><span class="n">6</span></a></li>
+			</ol>
+		</nav>
+		<main>
+
+      <section class="grupo" id="salud">
+        <header><h2>Salud</h2><p>Lo único que puede llamarse sin credenciales.</p></header>
+        <div class="casos">
+        <article class="caso">
+          <div class="cab">
+            <span class="met met--get">GET</span>
+            <code class="ruta">/health</code>
+            <span class="esp">→ 200</span>
+          </div>
+          <h3>estado del servicio</h3>
+          <p class="auth auth-none">ninguna</p>
+          
+          <p class="nota">Lo único que puede llamarse sin credenciales. Úsalo para monitorización.</p>
+        </article>
+        <article class="caso">
+          <div class="cab">
+            <span class="met met--get">GET</span>
+            <code class="ruta">/ready</code>
+            <span class="esp">→ 200 o 503</span>
+          </div>
+          <h3>listo para recibir tráfico</h3>
+          <p class="auth auth-none">ninguna</p>
+          
+          <p class="nota">503 si PostgreSQL o Redis no responden. Es la sonda de arranque, no la de vida.</p>
+        </article></div>
+      </section>
+
+      <section class="grupo" id="catalogo">
+        <header><h2>Catálogo comercial</h2><p>Qué incluye cada nivel. Público a propósito: alimenta la página de precios.</p></header>
+        <div class="casos">
+        <article class="caso">
+          <div class="cab">
+            <span class="met met--get">GET</span>
+            <code class="ruta">/v1/reports/catalog/basico</code>
+            <span class="esp">→ 200</span>
+          </div>
+          <h3>qué incluye el informe básico</h3>
+          <p class="auth auth-none">ninguna</p>
+          
+          <p class="nota">Público a propósito: alimenta la página comercial de precios.</p>
+        </article>
+        <article class="caso">
+          <div class="cab">
+            <span class="met met--get">GET</span>
+            <code class="ruta">/v1/reports/catalog/avanzado</code>
+            <span class="esp">→ 200</span>
+          </div>
+          <h3>qué incluye el avanzado</h3>
+          <p class="auth auth-none">ninguna</p>
+          
+          
+        </article></div>
+      </section>
+
+      <section class="grupo" id="geografia">
+        <header><h2>Geografía</h2><p>Lo que usa WordPress para traducir «Madrid» a «28». Sin firma: son datos públicos del INE.</p></header>
+        <div class="casos">
+        <article class="caso">
+          <div class="cab">
+            <span class="met met--get">GET</span>
+            <code class="ruta">/v1/geo/search<span class="q">?q=Madrid&amp;level=provincia</span></code>
+            <span class="esp">→ 200</span>
+          </div>
+          <h3>buscar por nombre</h3>
+          <p class="auth auth-none">ninguna</p>
+          
+          <p class="nota">Lo que usa el resolutor de WordPress para traducir «Madrid» a «28».</p>
+        </article>
+        <article class="caso">
+          <div class="cab">
+            <span class="met met--get">GET</span>
+            <code class="ruta">/v1/geo/provincia/28</code>
+            <span class="esp">→ 200</span>
+          </div>
+          <h3>una geografía concreta</h3>
+          <p class="auth auth-none">ninguna</p>
+          
+          
+        </article>
+        <article class="caso">
+          <div class="cab">
+            <span class="met met--get">GET</span>
+            <code class="ruta">/v1/geo/provincia/28/children<span class="q">?level=municipio</span></code>
+            <span class="esp">→ 200</span>
+          </div>
+          <h3>municipios de una provincia</h3>
+          <p class="auth auth-none">ninguna</p>
+          
+          <p class="nota">Debe devolver ~179 municipios para Madrid. Si devuelve 0, falta `load-municipios`.</p>
+        </article>
+        <article class="caso">
+          <div class="cab">
+            <span class="met met--get">GET</span>
+            <code class="ruta">/v1/geo/ccaa/13/children<span class="q">?level=provincia</span></code>
+            <span class="esp">→ 200</span>
+          </div>
+          <h3>provincias de una comunidad</h3>
+          <p class="auth auth-none">ninguna</p>
+          
+          
+        </article></div>
+      </section>
+
+      <section class="grupo" id="informes">
+        <header><h2>Informes</h2><p>El núcleo. Todo firmado, y la firma cubre la query entera. El orden importa: está explicado caso a caso.</p></header>
+        <div class="casos">
+        <article class="caso">
+          <div class="cab">
+            <span class="met met--post">POST</span>
+            <code class="ruta">/v1/reports</code>
+            <span class="esp">→ 202</span>
+          </div>
+          <h3>crear informe básico</h3>
+          <p class="auth auth-sig">firma sobre el cuerpo<span class="marca">asíncrono · espera a la vbasico</span></p>
+          <pre>{
+  &quot;project_uuid&quot;: &quot;{uuid}&quot;,
+  &quot;wp_user_id&quot;: &quot;{owner}&quot;,
+  &quot;wp_post_id&quot;: 7818,
+  &quot;tier&quot;: &quot;basico&quot;,
+  &quot;scope&quot;: {
+    &quot;level&quot;: &quot;ccaa&quot;,
+    &quot;ine_code&quot;: &quot;13&quot;,
+    &quot;children_level&quot;: &quot;provincia&quot;
+  },
+  &quot;segments&quot;: {
+    &quot;age&quot;: [
+      &quot;25-34&quot;,
+      &quot;35-44&quot;
+    ],
+    &quot;sex&quot;: [
+      &quot;F&quot;
+    ]
+  },
+  &quot;business&quot;: {
+    &quot;sector&quot;: &quot;restauracion&quot;,
+    &quot;avg_ticket&quot;: 600
+  },
+  &quot;target&quot;: {
+    &quot;age_range&quot;: [
+      &quot;25-34&quot;,
+      &quot;35-44&quot;
+    ],
+    &quot;education_level&quot;: &quot;universitario&quot;,
+    &quot;family_status&quot;: &quot;nido_lleno&quot;,
+    &quot;nse&quot;: [
+      &quot;a/b&quot;,
+      &quot;c+&quot;
+    ],
+    &quot;annual_income&quot;: &quot;45-75k&quot;,
+    &quot;monthly_available_income&quot;: &quot;801-2500&quot;,
+    &quot;average_ticket&quot;: &quot;medio_alto&quot;,
+    &quot;climate&quot;: [
+      &quot;templado&quot;
+    ],
+    &quot;pedestrian_traffic&quot;: &quot;alto&quot;,
+    &quot;vehicular_traffic&quot;: &quot;medio&quot;,
+    &quot;direct_competition&quot;: true
+  }
+}</pre>
+          <p class="nota">202, no 200: el cálculo va a una cola. El informe no existe todavía cuando responde.</p>
+        </article>
+        <article class="caso">
+          <div class="cab">
+            <span class="met met--post">POST</span>
+            <code class="ruta">/v1/reports</code>
+            <span class="esp">→ 202</span>
+          </div>
+          <h3>crear informe nacional</h3>
+          <p class="auth auth-sig">firma sobre el cuerpo</p>
+          <pre>{
+  &quot;project_uuid&quot;: &quot;{uuid2}&quot;,
+  &quot;wp_user_id&quot;: &quot;{owner}&quot;,
+  &quot;tier&quot;: &quot;basico&quot;,
+  &quot;scope&quot;: {
+    &quot;level&quot;: &quot;pais&quot;,
+    &quot;ine_code&quot;: &quot;ES&quot;,
+    &quot;children_level&quot;: &quot;ccaa&quot;
+  },
+  &quot;segments&quot;: {
+    &quot;age&quot;: [],
+    &quot;sex&quot;: []
+  },
+  &quot;business&quot;: {
+    &quot;sector&quot;: &quot;retail&quot;
+  }
+}</pre>
+          <p class="nota">Ámbito nacional: el único que usa «ES» en vez de un código numérico. Usa su propio UUID: tres altas con el mismo identificador serían la misma alta.</p>
+        </article>
+        <article class="caso">
+          <div class="cab">
+            <span class="met met--post">POST</span>
+            <code class="ruta">/v1/reports</code>
+            <span class="esp">→ 202</span>
+          </div>
+          <h3>crear informe municipal</h3>
+          <p class="auth auth-sig">firma sobre el cuerpo</p>
+          <pre>{
+  &quot;project_uuid&quot;: &quot;{uuid3}&quot;,
+  &quot;wp_user_id&quot;: &quot;{owner}&quot;,
+  &quot;tier&quot;: &quot;avanzado&quot;,
+  &quot;scope&quot;: {
+    &quot;level&quot;: &quot;municipio&quot;,
+    &quot;ine_code&quot;: &quot;28079&quot;
+  },
+  &quot;segments&quot;: {
+    &quot;age&quot;: [
+      &quot;18-24&quot;
+    ],
+    &quot;sex&quot;: [
+      &quot;M&quot;,
+      &quot;F&quot;
+    ]
+  },
+  &quot;business&quot;: {
+    &quot;sector&quot;: &quot;cafeteria&quot;,
+    &quot;avg_ticket&quot;: 30,
+    &quot;surface_m2&quot;: 85
+  }
+}</pre>
+          <p class="nota">Sin `children_level`: por debajo de municipio no hay datos en la fase del INE.</p>
+        </article>
+        <article class="caso">
+          <div class="cab">
+            <span class="met met--get">GET</span>
+            <code class="ruta">/v1/reports/{uuid}<span class="q">?wp_user_id={owner}</span></code>
+            <span class="esp">→ 200</span>
+          </div>
+          <h3>leer el informe</h3>
+          <p class="auth auth-sig">firma sobre método + ruta + query</p>
+          
+          <p class="nota">409 mientras se calcula. La firma cubre la query entera: sin eso, cambiar wp_user_id abriría el informe de otro.</p>
+        </article>
+        <article class="caso">
+          <div class="cab">
+            <span class="met met--get">GET</span>
+            <code class="ruta">/v1/reports/{uuid}<span class="q">?wp_user_id={owner}&amp;version=1</span></code>
+            <span class="esp">→ 200</span>
+          </div>
+          <h3>leer una versión concreta</h3>
+          <p class="auth auth-sig">firma sobre método + ruta + query</p>
+          
+          <p class="nota">v1 es el básico, v2 el avanzado tras el pago.</p>
+        </article>
+        <article class="caso">
+          <div class="cab">
+            <span class="met met--post">POST</span>
+            <code class="ruta">/v1/reports/{uuid}/upgrade</code>
+            <span class="esp">→ 202</span>
+          </div>
+          <h3>subir a avanzado</h3>
+          <p class="auth auth-sig">firma sobre el cuerpo<span class="marca">asíncrono · espera a la vavanzado</span></p>
+          <pre>{
+  &quot;payment_reference&quot;: &quot;pi_3PruebaStripe000&quot;,
+  &quot;force_refresh&quot;: false
+}</pre>
+          <p class="nota">Reutiliza la demografía ya calculada. `force_refresh: true` la recalcula, y sólo hace falta si los datos del almacén han cambiado. Devuelve 202: la ampliación se calcula en segundo plano, así que todo lo que necesite la v2 —PlaceRank el primero— tiene que esperar a que exista.</p>
+        </article>
+        <article class="caso">
+          <div class="cab">
+            <span class="met met--post">POST</span>
+            <code class="ruta">/v1/reports/{uuid}/placerank/rebalance</code>
+            <span class="esp">→ 200</span>
+          </div>
+          <h3>recalcular el PlaceRank con otros pesos</h3>
+          <p class="auth auth-sig">firma sobre el cuerpo</p>
+          <pre>{
+  &quot;economico&quot;: 0.4,
+  &quot;demografico&quot;: 0.3,
+  &quot;ambiental&quot;: 0.2,
+  &quot;match&quot;: 0.1
+}</pre>
+          <p class="nota">No toca la base de datos: recalcula sobre el snapshot. Devuelve el ranking COMPLETO, que es producto de pago, y por eso va firmado.</p>
+        </article>
+        <article class="caso">
+          <div class="cab">
+            <span class="met met--post">POST</span>
+            <code class="ruta">/v1/reports/{uuid}/geolens</code>
+            <span class="esp">→ 200</span>
+          </div>
+          <h3>capas del mapa</h3>
+          <p class="auth auth-sig">firma sobre el cuerpo</p>
+          <pre>{
+  &quot;indicators&quot;: [
+    &quot;dem.pop.total&quot;,
+    &quot;dem.age.mean&quot;
+  ],
+  &quot;classes&quot;: 5,
+  &quot;method&quot;: &quot;quantiles&quot;
+}</pre>
+          <p class="nota">`indicators` vacío devuelve todas las capas. Los valores viajan aquí; las geometrías, en las teselas.</p>
+        </article>
+        <article class="caso">
+          <div class="cab">
+            <span class="met met--get">GET</span>
+            <code class="ruta">/v1/reports/{uuid}/export/xlsx<span class="q">?wp_user_id={owner}</span></code>
+            <span class="esp">→ 200</span>
+          </div>
+          <h3>exportar a Excel</h3>
+          <p class="auth auth-sig">firma sobre método + ruta + query</p>
+          
+          <p class="nota">Devuelve binario, no JSON. Igual con `pdf` y `pptx`.</p>
+        </article>
+        <article class="caso">
+          <div class="cab">
+            <span class="met met--post">POST</span>
+            <code class="ruta">/v1/reports/{uuid}/downgrade</code>
+            <span class="esp">→ 200</span>
+          </div>
+          <h3>bajar a básico</h3>
+          <p class="auth auth-sig">firma sobre el cuerpo</p>
+          <p class="vacio">Cuerpo vacío <code>{}</code> — pero se firma igual.</p>
+          <p class="nota">Para reembolsos y contracargos. No borra la v2: deja de servirla. Va el ÚLTIMO de la tanda a propósito: deja el proyecto en básico, así que todo lo que necesita el avanzado —PlaceRank, GeoLens, exportaciones— tiene que probarse antes.</p>
+        </article></div>
+      </section>
+
+      <section class="grupo" id="operacion">
+        <header><h2>Operación interna</h2><p>Clave interna, y en producción Traefik ni siquiera las publica.</p></header>
+        <div class="casos">
+        <article class="caso">
+          <div class="cab">
+            <span class="met met--post">POST</span>
+            <code class="ruta">/internal/ingest</code>
+            <span class="esp">→ 200</span>
+          </div>
+          <h3>encolar una ingesta</h3>
+          <p class="auth auth-sig">X-Internal-Key</p>
+          <pre>{
+  &quot;collector&quot;: &quot;ine&quot;,
+  &quot;indicators&quot;: [
+    &quot;dem.pop.total&quot;,
+    &quot;dem.age.mean&quot;
+  ],
+  &quot;level&quot;: &quot;provincia&quot;,
+  &quot;parent_code&quot;: &quot;13&quot;,
+  &quot;period&quot;: null
+}</pre>
+          <p class="nota">Va a la cola `etl`, aislada de los informes. Estas rutas NUNCA salen a internet.</p>
+        </article>
+        <article class="caso">
+          <div class="cab">
+            <span class="met met--post">POST</span>
+            <code class="ruta">/internal/catalog/sync</code>
+            <span class="esp">→ 200</span>
+          </div>
+          <h3>sincronizar el catálogo</h3>
+          <p class="auth auth-sig">X-Internal-Key</p>
+          <p class="vacio">Cuerpo vacío <code>{}</code> — pero se firma igual.</p>
+          <p class="nota">El catálogo del código es la fuente de verdad; esto lo vuelca a la base.</p>
+        </article>
+        <article class="caso">
+          <div class="cab">
+            <span class="met met--get">GET</span>
+            <code class="ruta">/internal/coverage</code>
+            <span class="esp">→ 200</span>
+          </div>
+          <h3>indicadores sin colector</h3>
+          <p class="auth auth-sig">X-Internal-Key</p>
+          
+          <p class="nota">Un indicador huérfano nunca tendrá dato: saldrá como hueco y parecerá secreto estadístico.</p>
+        </article>
+        <article class="caso">
+          <div class="cab">
+            <span class="met met--get">GET</span>
+            <code class="ruta">/internal/ine/discover/2879</code>
+            <span class="esp">→ 200</span>
+          </div>
+          <h3>inspeccionar una tabla del INE</h3>
+          <p class="auth auth-sig">X-Internal-Key<span class="marca">necesita red</span></p>
+          
+          <p class="nota">Necesita red hacia servicios.ine.es. `powergis endpoints` lo salta si no hay salida; con `--con-red` lo exige.</p>
+        </article></div>
+      </section>
+
+      <section class="grupo" id="seguridad">
+        <header><h2>Lo que NO debe funcionar</h2><p>Comprueban que el sistema dice que no. Si alguno devuelve 200, hay una fuga.</p></header>
+        <div class="casos">
+        <article class="caso">
+          <div class="cab">
+            <span class="met met--get">GET</span>
+            <code class="ruta">/v1/reports/{uuid}<span class="q">?wp_user_id={owner}</span></code>
+            <span class="esp">→ 401</span>
+          </div>
+          <h3>lectura SIN firma</h3>
+          <p class="auth auth-none">ninguna (a propósito)</p>
+          
+          <p class="nota">Si esto devuelve 200, cualquier UUID filtrado abre un informe de pago.</p>
+        </article>
+        <article class="caso">
+          <div class="cab">
+            <span class="met met--post">POST</span>
+            <code class="ruta">/v1/reports/{uuid}/placerank/rebalance</code>
+            <span class="esp">→ 401</span>
+          </div>
+          <h3>PlaceRank SIN firma</h3>
+          <p class="auth auth-none">ninguna (a propósito)</p>
+          <pre>{
+  &quot;economico&quot;: 1.0,
+  &quot;demografico&quot;: 0.0,
+  &quot;ambiental&quot;: 0.0,
+  &quot;match&quot;: 0.0
+}</pre>
+          <p class="nota">Estuvo abierto. Devolvía el ranking entero a quien conociera el UUID.</p>
+        </article>
+        <article class="caso">
+          <div class="cab">
+            <span class="met met--post">POST</span>
+            <code class="ruta">/v1/reports</code>
+            <span class="esp">→ 401</span>
+          </div>
+          <h3>cuerpo alterado tras firmar</h3>
+          <p class="auth auth-sig">firma válida de OTRO cuerpo</p>
+          
+          <p class="nota">La firma cubre los bytes exactos. Un byte distinto y no vale.</p>
+        </article>
+        <article class="caso">
+          <div class="cab">
+            <span class="met met--get">GET</span>
+            <code class="ruta">/v1/reports/{uuid}<span class="q">?wp_user_id={owner}</span></code>
+            <span class="esp">→ 401</span>
+          </div>
+          <h3>firma caducada</h3>
+          <p class="auth auth-sig">firma con timestamp de hace una hora</p>
+          
+          <p class="nota">Ventana de 300 s. Evita que una petición capturada valga para siempre.</p>
+        </article>
+        <article class="caso">
+          <div class="cab">
+            <span class="met met--get">GET</span>
+            <code class="ruta">/v1/reports/{uuid}<span class="q">?wp_user_id=999</span></code>
+            <span class="esp">→ 403</span>
+          </div>
+          <h3>informe de otro usuario</h3>
+          <p class="auth auth-sig">firma válida<span class="marca">necesita el proyecto</span></p>
+          
+          <p class="nota">Segunda barrera: aunque la llamada esté firmada, el proyecto no es suyo. Necesita que el proyecto EXISTA para llegar al 403; suelto daría 404, que es correcto pero no prueba nada.</p>
+        </article>
+        <article class="caso">
+          <div class="cab">
+            <span class="met met--get">GET</span>
+            <code class="ruta">/internal/coverage</code>
+            <span class="esp">→ 401</span>
+          </div>
+          <h3>rutas internas desde fuera</h3>
+          <p class="auth auth-none">sin X-Internal-Key</p>
+          
+          <p class="nota">En producción, Traefik además no las publica.</p>
+        </article></div>
+      </section>
+		</main>
+	</div>
+</div>

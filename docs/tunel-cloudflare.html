@@ -1,0 +1,521 @@
+<title>El motor por un túnel</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&display=swap">
+
+<style>
+  :root {
+    --ground:#f4f7f6; --surface:#ffffff; --sunken:#eceff0;
+    --ink:#12181a; --muted:#5c6c69; --faint:#8a9793; --rule:#dbe3e1;
+    --accent:#0d6b60; --accent-soft:#e2efec;
+    --signal:#9c5209; --signal-soft:#f7ecdf;
+    --danger:#9c1f1f; --danger-soft:#f8e6e4;
+    --code-bg:#131b1a; --code-ink:#dfe9e6; --code-dim:#7f918d;
+    --f-ui:"Archivo","Helvetica Neue",Arial,sans-serif;
+    --f-body:"Source Serif 4",Georgia,"Times New Roman",serif;
+    --f-mono:"IBM Plex Mono","SFMono-Regular",Consolas,monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground:#0d1312; --surface:#141c1b; --sunken:#101817;
+      --ink:#e7edeb; --muted:#9aaba7; --faint:#71827e; --rule:#253130;
+      --accent:#58bdad; --accent-soft:#16302c;
+      --signal:#dd9a4e; --signal-soft:#2e2317;
+      --danger:#e08882; --danger-soft:#2e1a19;
+      --code-bg:#0a100f; --code-ink:#d6e2df; --code-dim:#6e807c;
+    }
+  }
+  :root[data-theme="dark"] {
+    --ground:#0d1312; --surface:#141c1b; --sunken:#101817;
+    --ink:#e7edeb; --muted:#9aaba7; --faint:#71827e; --rule:#253130;
+    --accent:#58bdad; --accent-soft:#16302c;
+    --signal:#dd9a4e; --signal-soft:#2e2317;
+    --danger:#e08882; --danger-soft:#2e1a19;
+    --code-bg:#0a100f; --code-ink:#d6e2df; --code-dim:#6e807c;
+  }
+
+  * { box-sizing:border-box; }
+  body {
+    margin:0; background:var(--ground); color:var(--ink);
+    font-family:var(--f-body); font-size:17px; line-height:1.62;
+    -webkit-font-smoothing:antialiased;
+  }
+  .wrap { max-width:47rem; margin:0 auto; padding:3.5rem 1.5rem 6rem; }
+
+  header { margin-bottom:2.5rem; }
+  .eyebrow {
+    font-family:var(--f-ui); font-size:.72rem; font-weight:600;
+    letter-spacing:.14em; text-transform:uppercase; color:var(--accent); margin:0 0 .9rem;
+  }
+  h1 {
+    font-family:var(--f-ui); font-weight:700; font-size:clamp(2rem,6vw,2.9rem);
+    line-height:1.08; letter-spacing:-.022em; text-wrap:balance; margin:0 0 1rem;
+  }
+  .standfirst { font-size:1.14rem; color:var(--muted); margin:0; max-width:35rem; }
+
+  h2 {
+    font-family:var(--f-ui); font-weight:700; font-size:1.5rem;
+    letter-spacing:-.015em; line-height:1.2; text-wrap:balance;
+    margin:3.4rem 0 1rem; padding-top:1.7rem; border-top:2px solid var(--ink);
+  }
+  h3 { font-family:var(--f-ui); font-weight:600; font-size:1.04rem; letter-spacing:-.008em; margin:0 0 .5rem; }
+  h4 { font-family:var(--f-ui); font-weight:600; font-size:.93rem; margin:1.5rem 0 .4rem; color:var(--muted); }
+
+  p { margin:0 0 1rem; }
+  a { color:var(--accent); text-underline-offset:2px; }
+  a:focus-visible { outline:2px solid var(--accent); outline-offset:3px; border-radius:2px; }
+  strong { font-weight:600; }
+  ul, ol.plana { margin:0 0 1rem; padding-left:1.2rem; }
+  li { margin-bottom:.35rem; }
+  li::marker { color:var(--faint); }
+
+  code {
+    font-family:var(--f-mono); font-size:.855em; background:var(--sunken);
+    border:1px solid var(--rule); border-radius:3px; padding:.08em .34em; white-space:nowrap;
+  }
+
+  /* --- el circuito, como diagrama --- */
+  .circuito {
+    background:var(--surface); border:1px solid var(--rule); border-radius:4px;
+    padding:1.4rem 1.2rem .9rem; margin:1.5rem 0;
+  }
+  .circuito svg { display:block; width:100%; height:auto; }
+  .circuito figcaption {
+    font-family:var(--f-ui); font-size:.82rem; color:var(--muted);
+    margin-top:.9rem; text-align:center;
+  }
+
+  /* --- pasos --- */
+  .pasos { margin:1.6rem 0 0; padding:0; list-style:none; }
+  .paso { position:relative; padding-left:3.3rem; padding-bottom:2.3rem; }
+  .paso:last-child { padding-bottom:0; }
+  .paso::before {
+    content:""; position:absolute; left:1.09rem; top:2.25rem; bottom:0;
+    width:1px; background:var(--rule);
+  }
+  .paso:last-child::before { display:none; }
+  .paso .n {
+    position:absolute; left:0; top:.08rem; width:2.2rem; height:2.2rem;
+    border-radius:50%; background:var(--accent-soft); color:var(--accent);
+    border:1px solid var(--accent); display:grid; place-items:center;
+    font-family:var(--f-ui); font-weight:700; font-size:.9rem;
+    font-variant-numeric:tabular-nums;
+  }
+
+  .check {
+    display:flex; gap:.7rem; align-items:flex-start; background:var(--surface);
+    border:1px solid var(--rule); border-left:3px solid var(--accent);
+    border-radius:0 4px 4px 0; padding:.75rem 1rem; margin:1rem 0 0; font-size:.94rem;
+  }
+  .check .k {
+    font-family:var(--f-ui); font-size:.66rem; font-weight:700; letter-spacing:.11em;
+    text-transform:uppercase; color:var(--accent); padding-top:.28rem; white-space:nowrap;
+  }
+  .check p { margin:0; }
+  .check p + p { margin-top:.4rem; }
+
+  .cmd { background:var(--code-bg); border-radius:4px; margin:.9rem 0 1rem; overflow:hidden; }
+  .cmd .barra {
+    font-family:var(--f-ui); font-size:.65rem; font-weight:600; letter-spacing:.12em;
+    text-transform:uppercase; color:var(--code-dim); padding:.55rem .95rem .1rem;
+  }
+  .cmd pre {
+    margin:0; padding:.3rem .95rem 1rem; overflow-x:auto; font-family:var(--f-mono);
+    font-size:.815rem; line-height:1.72; color:var(--code-ink);
+  }
+  .cmd .c { color:var(--code-dim); }
+  .cmd .p { color:#6fb9ab; user-select:none; }
+
+  .aviso {
+    border-left:3px solid var(--signal); background:var(--signal-soft);
+    padding:1rem 1.2rem; margin:1.3rem 0; border-radius:0 4px 4px 0; font-size:.96rem;
+  }
+  .aviso.rojo { border-left-color:var(--danger); background:var(--danger-soft); }
+  .aviso p:last-child { margin-bottom:0; }
+  .aviso .cabeza {
+    font-family:var(--f-ui); font-weight:700; font-size:.72rem; letter-spacing:.11em;
+    text-transform:uppercase; color:var(--signal); display:block; margin-bottom:.4rem;
+  }
+  .aviso.rojo .cabeza { color:var(--danger); }
+
+  .tabla-envoltorio { overflow-x:auto; margin:1.2rem 0; }
+  table { border-collapse:collapse; width:100%; font-family:var(--f-ui); font-size:.87rem; }
+  th, td { text-align:left; padding:.6rem .8rem; border-bottom:1px solid var(--rule); vertical-align:top; }
+  th {
+    font-weight:600; font-size:.66rem; letter-spacing:.1em; text-transform:uppercase;
+    color:var(--faint); border-bottom-color:var(--ink);
+  }
+  td code { white-space:nowrap; }
+  tbody tr:last-child td { border-bottom:none; }
+
+  /* --- bifurcación --- */
+  .rama {
+    background:var(--surface); border:1px solid var(--rule); border-radius:4px;
+    padding:1.1rem 1.3rem; margin:1rem 0;
+  }
+  .rama .cabeza {
+    font-family:var(--f-ui); font-weight:700; font-size:.7rem; letter-spacing:.11em;
+    text-transform:uppercase; color:var(--accent); display:block; margin-bottom:.45rem;
+  }
+  .rama p:last-child { margin-bottom:0; }
+
+  footer {
+    margin-top:4rem; padding-top:1.5rem; border-top:1px solid var(--rule);
+    font-family:var(--f-ui); font-size:.85rem; color:var(--faint);
+  }
+
+  @media (prefers-reduced-motion: reduce) { * { animation:none !important; transition:none !important; } }
+</style>
+
+<div class="wrap">
+
+  <header>
+    <p class="eyebrow">PowerGIS · la vía más factible</p>
+    <h1>El motor por un túnel</h1>
+    <p class="standfirst">Tu formulario de powergis.es hablando con el motor de tu portátil, por HTTPS, sin VPS y sin tarjeta. Ocho pasos y una tarde.</p>
+  </header>
+
+  <p>De las dos vías gratuitas, esta es la factible hoy: no depende de que Oracle tenga hueco, no depende de que PostGIS publique ARM, y no cuesta nada ni pide tarjeta. Lo que consigues al final es <strong>la integración real probada de punta a punta</strong>: el formulario de producción, el conector, la firma HMAC, el motor, el worker y el callback de vuelta.</p>
+
+  <p>Lo que <em>no</em> consigues, y conviene tenerlo claro desde el principio: esto no ensaya el despliegue. No hay Traefik pidiendo certificado, ni arranque automático al reiniciar, ni copias de seguridad, ni nada corriendo cuando cierras el portátil. Eso llega con el VPS. Aquí se valida el contrato entre las dos mitades, que es lo que ahora mismo no sabes si funciona.</p>
+
+  <figure class="circuito">
+    <svg viewBox="0 0 720 260" role="img" aria-labelledby="tit-circ desc-circ">
+      <title id="tit-circ">Recorrido de una petición con el túnel</title>
+      <desc id="desc-circ">El navegador llama a powergis.es; WordPress firma y llama al nombre público del túnel; Cloudflare entrega la petición al cloudflared que corre en el portátil; éste la pasa al contenedor de la API; el worker construye el informe y devuelve el resultado a powergis.es por internet.</desc>
+
+      <defs>
+        <marker id="f" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+          <path d="M0 0 L10 5 L0 10 z" fill="currentColor"/>
+        </marker>
+      </defs>
+
+      <g font-family="Archivo, sans-serif" font-size="12" color="var(--muted)">
+
+        <!-- navegador -->
+        <rect x="8" y="96" width="104" height="48" rx="4" fill="var(--sunken)" stroke="var(--rule)"/>
+        <text x="60" y="118" text-anchor="middle" fill="var(--ink)" font-weight="600">Navegador</text>
+        <text x="60" y="133" text-anchor="middle" fill="var(--muted)" font-size="10.5">del cliente</text>
+
+        <!-- wordpress -->
+        <rect x="152" y="96" width="128" height="48" rx="4" fill="var(--sunken)" stroke="var(--rule)"/>
+        <text x="216" y="118" text-anchor="middle" fill="var(--ink)" font-weight="600">powergis.es</text>
+        <text x="216" y="133" text-anchor="middle" fill="var(--muted)" font-size="10.5">WordPress · firma</text>
+
+        <!-- cloudflare -->
+        <rect x="320" y="96" width="112" height="48" rx="4" fill="var(--accent-soft)" stroke="var(--accent)"/>
+        <text x="376" y="118" text-anchor="middle" fill="var(--accent)" font-weight="600">Cloudflare</text>
+        <text x="376" y="133" text-anchor="middle" fill="var(--accent)" font-size="10.5">termina el TLS</text>
+
+        <!-- portatil: caja envolvente -->
+        <rect x="470" y="60" width="238" height="152" rx="6" fill="none" stroke="var(--rule)" stroke-dasharray="4 3"/>
+        <text x="589" y="80" text-anchor="middle" fill="var(--faint)" font-size="10.5" letter-spacing="1.4">TU PORTÁTIL</text>
+
+        <rect x="486" y="92" width="96" height="44" rx="4" fill="var(--sunken)" stroke="var(--rule)"/>
+        <text x="534" y="112" text-anchor="middle" fill="var(--ink)" font-weight="600" font-size="11">cloudflared</text>
+        <text x="534" y="126" text-anchor="middle" fill="var(--muted)" font-size="10">sin puertos</text>
+
+        <rect x="600" y="92" width="94" height="44" rx="4" fill="var(--sunken)" stroke="var(--rule)"/>
+        <text x="647" y="112" text-anchor="middle" fill="var(--ink)" font-weight="600" font-size="11">api:8000</text>
+        <text x="647" y="126" text-anchor="middle" fill="var(--muted)" font-size="10">motor</text>
+
+        <rect x="600" y="154" width="94" height="42" rx="4" fill="var(--sunken)" stroke="var(--rule)"/>
+        <text x="647" y="173" text-anchor="middle" fill="var(--ink)" font-weight="600" font-size="11">worker</text>
+        <text x="647" y="187" text-anchor="middle" fill="var(--muted)" font-size="10">construye</text>
+
+        <!-- flechas de ida -->
+        <g stroke="var(--faint)" fill="none" stroke-width="1.4" marker-end="url(#f)" color="var(--faint)">
+          <path d="M114 120 H150"/>
+          <path d="M282 120 H318"/>
+          <path d="M434 120 H484"/>
+          <path d="M584 114 H598"/>
+          <path d="M647 138 V152"/>
+        </g>
+
+        <!-- vuelta del callback -->
+        <g stroke="var(--accent)" fill="none" stroke-width="1.4" stroke-dasharray="5 3" marker-end="url(#f)" color="var(--accent)">
+          <path d="M600 175 H452 Q440 175 440 163 V150 H228 Q216 150 216 146"/>
+        </g>
+        <text x="330" y="196" text-anchor="middle" fill="var(--accent)" font-size="10.5">callback: el informe vuelve a WordPress por internet</text>
+
+        <!-- etiqueta de la conexion saliente -->
+        <text x="459" y="232" text-anchor="middle" fill="var(--faint)" font-size="10.5">la conexión la abre el portátil, hacia fuera</text>
+        <path d="M486 210 Q459 224 434 132" stroke="var(--rule)" fill="none" stroke-width="1.2"/>
+      </g>
+    </svg>
+    <figcaption>Nada entra a tu red: <code>cloudflared</code> abre la conexión hacia Cloudflare y las peticiones bajan por ella.</figcaption>
+  </figure>
+
+  <h2>Antes del paso 1: ¿está powergis.es en Cloudflare?</h2>
+
+  <p>Esta pregunta decide el resto. Un túnel con nombre propio necesita que el dominio esté gestionado por Cloudflare — es decir, que sus servidores de nombres apunten allí. Compruébalo:</p>
+
+  <div class="cmd">
+    <div class="barra">PowerShell</div>
+<pre>Resolve-DnsName powergis.es -Type NS | Select-Object NameHost</pre>
+  </div>
+
+  <div class="aviso">
+    <span class="cabeza">Ya está comprobado: powergis.es no está en Cloudflare</span>
+    <p>Devuelve <code>hermes.dns-parking.com</code> y <code>artemis.dns-parking.com</code>, que son los servidores de nombres de Hostinger. Así que la vía del túnel con nombre propio, tal cual, no está disponible — <strong>toca la rama de abajo</strong>, y no es mala noticia: es la que no toca nada de tu producción.</p>
+  </div>
+
+  <div class="rama">
+    <span class="cabeza">Opción 1 · túnel efímero — la recomendada</span>
+    <p>Un solo comando. Sin cuenta, sin DNS, sin tocar tu dominio ni tu correo. Cloudflare te da un nombre <code>…trycloudflare.com</code> con HTTPS.</p>
+    <div class="cmd" style="margin-bottom:.6rem;">
+      <div class="barra">PowerShell</div>
+<pre><span class="p">.\</span>pg tunel-rapido</pre>
+    </div>
+    <p>Su única pega es que <strong>el nombre cambia en cada arranque</strong>. Eso obligaría a editar <code>wp-config.php</code> por FTP en cada sesión, que es la clase de fricción por la que uno deja de probar — así que lo he quitado: el conector ahora acepta la URL desde el escritorio de WordPress, y el nombre nuevo se pega en un campo. Cinco segundos. Está explicado en el paso 7.</p>
+  </div>
+
+  <div class="rama">
+    <span class="cabeza">Opción 2 · mover powergis.es a Cloudflare</span>
+    <p>Gratis y permanente, y a la larga es donde querrás estar de todos modos. Pero mover los servidores de nombres significa que Cloudflare pasa a servir <strong>todo</strong> el DNS de powergis.es: la web, y también el correo. Su importación automática de registros es buena pero no infalible, y lo que suele quedarse por el camino son los <code>MX</code> y los <code>TXT</code> de SPF y DKIM. Si usas correo en ese dominio, un despiste ahí te deja sin recibir mensajes y sin enterarte hasta que alguien te lo dice.</p>
+    <p>Merece la pena hacerlo <em>deliberadamente</em>, revisando registro a registro y con tiempo por delante. No como efecto colateral de querer probar una integración.</p>
+  </div>
+
+  <div class="rama">
+    <span class="cabeza">Opción 3 · ngrok, si prefieres un nombre estable</span>
+    <p>Su plan gratuito da un dominio permanente del tipo <code>algo.ngrok-free.dev</code>, con 20.000 peticiones y 1&nbsp;GB al mes — de sobra para probar. Nombre fijo, así que <code>wp-config.php</code> se toca una vez.</p>
+    <p>La trampa: en el plan gratuito ngrok interpone una <strong>página de aviso</strong> que el visitante tiene que pulsar. Una llamada de servidor a servidor no pulsa nada, así que WordPress recibiría ese HTML en vez de la respuesta del motor y fallaría al interpretar el JSON, con un error que no menciona a ngrok por ningún lado. Se salta con una cabecera, y <strong>el conector ya la manda</strong> en todas sus llamadas — contra un motor normal es una cabecera de más que nadie lee.</p>
+  </div>
+
+  <p>Lo que sigue está escrito para la opción 1. Para la 2, cambia sólo el nombre del túnel; para la 3, el comando de arranque.</p>
+
+  <h2>Los ocho pasos</h2>
+
+  <ol class="pasos">
+
+    <li class="paso">
+      <span class="n">1</span>
+      <h3>Genera los secretos de verdad</h3>
+      <p>Este es el paso que convierte el túnel en algo razonable. El <code>HMAC_SECRET</code> del entorno de desarrollo está escrito en claro en <code>docker-compose.dev.yml</code>, y por tanto en el repositorio: publicar ese motor sería poner en internet un sistema cuya única llave conoce cualquiera que haya visto el código.</p>
+      <div class="cmd">
+        <div class="barra">PowerShell · dos veces, uno para cada uno</div>
+<pre><span class="p">.\</span>pg secreto</pre>
+      </div>
+      <p>Por dentro es <code>docker run --rm alpine/openssl rand -hex 32</code>, porque Windows no trae <code>openssl</code> y tú sí tienes Docker.</p>
+      <div class="check"><span class="k">Listón</span><p>Dos cadenas distintas de 64 caracteres hexadecimales. Ninguna de las dos se parece a <code>guachineatata2026kimbapaquesuene</code> ni a <code>dev-secreto-compartido</code>.</p></div>
+    </li>
+
+    <li class="paso">
+      <span class="n">2</span>
+      <h3>Prepara el <code>.env</code> de producción, en local</h3>
+      <p>Vas a levantar el perfil de producción en tu máquina, no el de desarrollo. Eso hace que <code>check_production_ready()</code> se ejecute y se niegue a arrancar con secretos débiles — exactamente lo que quieres si esto va a ser alcanzable desde fuera.</p>
+      <div class="cmd">
+        <div class="barra">PowerShell</div>
+<pre>copy .env.example .env
+notepad .env</pre>
+      </div>
+      <div class="tabla-envoltorio">
+        <table>
+          <thead><tr><th>Variable</th><th>Valor</th></tr></thead>
+          <tbody>
+            <tr><td><code>ENV</code></td><td><code>production</code></td></tr>
+            <tr><td><code>DEBUG</code></td><td><code>false</code></td></tr>
+            <tr><td><code>HMAC_SECRET</code></td><td>el primero que generaste</td></tr>
+            <tr><td><code>INTERNAL_API_KEY</code></td><td>el segundo</td></tr>
+            <tr><td><code>POSTGRES_PASSWORD</code></td><td>cualquiera largo</td></tr>
+            <tr><td><code>DATABASE_URL</code></td><td><strong>con esa misma contraseña dentro</strong></td></tr>
+            <tr><td><code>ALLOWED_ORIGINS</code></td><td><code>https://powergis.es,https://www.powergis.es</code></td></tr>
+            <tr><td><code>WORDPRESS_BASE_URL</code></td><td><code>https://powergis.es</code></td></tr>
+            <tr><td><code>LLM_ENABLED</code></td><td><code>false</code></td></tr>
+            <tr><td><code>ENGINE_HOST</code></td><td>déjalo como esté — con túnel no se usa</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="aviso">
+        <span class="cabeza">El que se olvida siempre</span>
+        <p><code>DATABASE_URL</code> lleva la contraseña embebida. Cambiar <code>POSTGRES_PASSWORD</code> y no cambiarla ahí da un error de autenticación que parece de PostgreSQL y es de copiar y pegar.</p>
+      </div>
+      <div class="check"><span class="k">Listón</span><p><code>.\pg doctor</code> —o <code>make check-config</code>— pasa sin avisos. Si se queja, arréglalo ahora: el mismo error con el túnel montado cuesta el triple de encontrar.</p></div>
+    </li>
+
+    <li class="paso">
+      <span class="n">3</span>
+      <h3>Siembra la base de datos</h3>
+      <p>El perfil de producción arranca con las tablas sin crear. Sin este paso, toda consulta de geografía devuelve 404 y parece un fallo del circuito.</p>
+      <div class="cmd">
+        <div class="barra">PowerShell</div>
+<pre>docker compose -f docker-compose.yml up -d --build
+docker compose exec -T api alembic upgrade head
+docker compose exec -T api powergis seed --demo</pre>
+      </div>
+      <div class="aviso rojo">
+        <span class="cabeza">Los datos de <code>--demo</code> son inventados</span>
+        <p>Sirven para ver el circuito andando. No enseñes un informe hecho con ellos a nadie que pueda tomárselo en serio. Para datos reales: <code>powergis load-municipios</code>, luego <code>ine-verify</code> e <code>ingest</code>.</p>
+      </div>
+      <div class="check"><span class="k">Listón</span><p><code>curl -i http://localhost:8000/ready</code> devuelve 200. Si da 503, el mensaje dice qué falta.</p></div>
+    </li>
+
+    <li class="paso">
+      <span class="n">4</span>
+      <h3>Abre el túnel</h3>
+      <div class="cmd">
+        <div class="barra">PowerShell</div>
+<pre><span class="p">.\</span>pg tunel-rapido</pre>
+      </div>
+      <p>Esta ventana <strong>se queda ocupada</strong>: el túnel vive mientras el comando corra. Entre la avalancha de líneas, busca la del nombre público:</p>
+      <div class="cmd">
+        <div class="barra">salida de cloudflared</div>
+<pre>+------------------------------------------------------+
+|  Your quick Tunnel has been created! Visit it at:    |
+|  https://algo-raro-cuatro.trycloudflare.com          |
++------------------------------------------------------+</pre>
+      </div>
+      <p>Cópiala. Es la que vas a pegar en WordPress en el paso 7.</p>
+      <div class="aviso">
+        <span class="cabeza">Aquí no hay Traefik, y es a propósito</span>
+        <p>Con un túnel, el TLS lo termina Cloudflare y el puerto 80 de tu máquina no es alcanzable desde fuera. Si Traefik estuviera levantado, reintentaría el desafío de Let's Encrypt una y otra vez hasta que el dominio quedara limitado — y perderías la capacidad de emitir certificados justo cuando montes el VPS. El fichero <code>docker-compose.tunnel.yml</code> lo aparta con un perfil muerto, y <code>pg tunel-rapido</code> ni siquiera lo arranca.</p>
+      </div>
+      <div class="check">
+        <span class="k">Listón</span>
+        <p>Desde <em>otra red</em> —el móvil con datos, no tu wifi—:</p>
+        <div class="cmd" style="margin:.5rem 0 0;">
+          <div class="barra">bash</div>
+<pre>curl -i https://algo-raro-cuatro.trycloudflare.com/health   <span class="c"># 200</span>
+curl -i https://algo-raro-cuatro.trycloudflare.com/ready    <span class="c"># 200</span></pre>
+        </div>
+        <p>El túnel efímero no filtra <code>/internal</code> por ruta como haría uno con nombre propio. Ahí la defensa es <code>INTERNAL_API_KEY</code>, que es real: sin esa clave, esos endpoints devuelven 401. Aun así, no dejes el túnel abierto más de lo que dure la prueba.</p>
+      </div>
+    </li>
+
+    <li class="paso">
+      <span class="n">5</span>
+      <h3>Sube el conector a powergis.es</h3>
+      <p>Copia <code>wordpress/powergis-connector/</code> completo a <code>wp-content/plugins/</code> y actívalo. Comprueba de paso que no hay choque de rutas con tu plugin SaaS Studies: ninguna ruta de <code>saas/v1</code> puede tener más de un manejador.</p>
+      <div class="check"><span class="k">Listón</span><p>Aparece <em>Proyectos → Diagnóstico</em> en el escritorio, sin errores de PHP.</p></div>
+    </li>
+
+    <li class="paso">
+      <span class="n">6</span>
+      <h3>Comprueba los relojes</h3>
+      <p>Parece un paso de relleno y es el que más tiempo ahorra. La firma HMAC lleva marca de tiempo y el motor rechaza cualquier petición fuera de una ventana de 300 segundos. Si el reloj de tu portátil y el del servidor de powergis.es se separan más de cinco minutos, <strong>todo devuelve 401 <code>invalid_signature</code></strong> — y vas a pasarte la tarde comparando secretos, que es donde no está el problema.</p>
+      <div class="cmd">
+        <div class="barra">PowerShell · como administrador</div>
+<pre>w32tm /resync
+w32tm /query /status</pre>
+      </div>
+      <div class="check"><span class="k">Listón</span><p>La hora de tu máquina y la que devuelve tu hosting coinciden al minuto. Si tu hosting tiene phpMyAdmin o similar, <code>SELECT NOW()</code> sirve para verlo.</p></div>
+    </li>
+
+    <li class="paso">
+      <span class="n">7</span>
+      <h3>Apunta powergis.es al túnel</h3>
+      <p>Sólo el secreto va a <code>wp-config.php</code>, <strong>por encima</strong> de <code>/* That's all, stop editing! */</code>. La URL, no:</p>
+      <div class="cmd">
+        <div class="barra">wp-config.php · powergis.es</div>
+<pre><span class="p">/*</span><span class="c"> El MISMO que HMAC_SECRET en tu .env. Byte por byte. </span><span class="p">*/</span>
+define( <span class="c">'POWERGIS_HMAC_SECRET'</span>, <span class="c">'…el primero que generaste…'</span> );
+
+define( <span class="c">'POWERGIS_CALLBACK_URL'</span>,
+        <span class="c">'https://powergis.es/wp-json/saas/v1/projects/callback'</span> );
+
+<span class="p">/*</span><span class="c"> POWERGIS_ENGINE_URL NO se define mientras pruebes con un túnel
+   efímero: la pones desde el escritorio, que es lo de abajo. </span><span class="p">*/</span></pre>
+      </div>
+      <p>La URL va en <em>Proyectos → Diagnóstico → URL del motor (modo pruebas)</em>. Pega ahí el nombre que te dio <code>cloudflared</code> y guarda. Cuando reinicies el túnel y cambie, vuelves a esa casilla: cinco segundos, sin FTP.</p>
+
+      <div class="aviso">
+        <span class="cabeza">Por qué la URL sí puede vivir en la base de datos y el secreto no</span>
+        <p>No es una relajación por comodidad. Una URL en la base de datos permite, a quien <em>ya</em> tenga acceso de administrador, redirigir las llamadas a un motor suyo. Un secreto en la base de datos se lo regala a cualquiera que consiga un volcado. Riesgos de escala muy distinta, así que uno se relaja y el otro no: <code>Signer::secret()</code> sigue leyendo sólo la constante.</p>
+        <p>Y esa casilla <strong>sólo aparece si <code>POWERGIS_ENGINE_URL</code> no está definida</strong>. En cuanto la definas —al desplegar el VPS— la constante manda y el formulario desaparece. El campo además rechaza cualquier URL que no empiece por <code>https://</code>: un <code>http://</code> mandaría el payload del cliente y la firma en claro por internet.</p>
+      </div>
+
+      <div class="aviso rojo">
+        <span class="cabeza">POWERGIS_DEV_MODE no se define aquí</span>
+        <p>Activa el simulador de pago. En un WordPress que está en internet, cualquiera desbloquearía informes de pago gratis con una petición. No lo copies del <code>docker-compose.dev.yml</code> por inercia.</p>
+      </div>
+
+      <div class="check"><span class="k">Listón</span><p>En <em>Proyectos → Diagnóstico</em>: «URL del motor» muestra tu nombre del túnel con la marca <em>provisional</em>, «Secreto HMAC» sale definido, y «Motor accesible» da <code>HTTP 200</code>. Los tres en verde antes de seguir.</p></div>
+    </li>
+
+    <li class="paso">
+      <span class="n">8</span>
+      <h3>Un proyecto real, mirando los logs</h3>
+      <p>Con los logs abiertos en otra ventana antes de pulsar enviar:</p>
+      <div class="cmd">
+        <div class="barra">PowerShell · ventana aparte</div>
+<pre>docker compose logs -f api worker-reports cloudflared</pre>
+      </div>
+      <p>Rellena el formulario en <code>powergis.es/crear-proyecto/</code> con un ámbito que el motor tenga cargado —provincia de Madrid, si sembraste con <code>--demo</code>— y sigue las cinco etapas:</p>
+      <div class="tabla-envoltorio">
+        <table>
+          <thead><tr><th>Dónde</th><th>Qué debes ver</th></tr></thead>
+          <tbody>
+            <tr><td>Navegador</td><td><code>POST</code> a <code>saas/v1/projects/create</code>, sin error.</td></tr>
+            <tr><td>WordPress</td><td>El proyecto aparece en el CPT con su UUID.</td></tr>
+            <tr><td><code>cloudflared</code></td><td>La petición entrando por el túnel.</td></tr>
+            <tr><td><code>api</code></td><td><code>POST /v1/reports</code> con 201 o 202. <strong>No 401.</strong></td></tr>
+            <tr><td><code>worker-reports</code></td><td>La tarea se ejecuta y termina.</td></tr>
+            <tr><td>WordPress</td><td>El informe básico aparece solo, sin recargar.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="check"><span class="k">Listón</span><p>El informe básico se ve completo y las secciones de pago salen bloqueadas con su índice pero <strong>sin valores</strong>. Eso último prueba que el bloqueo es real y no cosmético. Con eso, la integración está validada de punta a punta.</p></div>
+    </li>
+
+  </ol>
+
+  <h2>Al terminar, ciérralo</h2>
+
+  <div class="cmd">
+    <div class="barra">PowerShell</div>
+<pre><span class="c"># túnel efímero: Ctrl+C en la ventana donde corre</span>
+<span class="c"># túnel con nombre propio:</span>
+<span class="p">.\</span>pg tunel-off</pre>
+  </div>
+
+  <p>El motor sigue en marcha en local, pero deja de ser alcanzable desde internet. Un túnel abierto y olvidado es una puerta abierta y olvidada: mientras esté arriba, tu portátil está sirviendo tráfico público, y cualquier fallo de la pila alcanza tu red doméstica. Ábrelo para probar, ciérralo al acabar.</p>
+
+  <h2>Cuando algo falle</h2>
+
+  <div class="tabla-envoltorio">
+    <table>
+      <thead><tr><th>Síntoma</th><th>Causa más probable</th><th>Qué mirar</th></tr></thead>
+      <tbody>
+        <tr>
+          <td>401 <code>invalid_signature</code> en todo</td>
+          <td>Secretos distintos, o relojes separados</td>
+          <td>Compara <code>HMAC_SECRET</code> y <code>POWERGIS_HMAC_SECRET</code> carácter a carácter — mira los espacios al final. Luego el paso 6.</td>
+        </tr>
+        <tr>
+          <td>Error 502 desde Cloudflare</td>
+          <td><code>cloudflared</code> no alcanza <code>api:8000</code></td>
+          <td>Que el servicio en la regla sea <code>api:8000</code> y no <code>localhost:8000</code>: dentro del contenedor, localhost es él mismo.</td>
+        </tr>
+        <tr>
+          <td>El proyecto se crea pero el informe no llega</td>
+          <td>El callback no sale, o el worker no arranca</td>
+          <td><code>WORDPRESS_BASE_URL</code>; log de <code>worker-reports</code>.</td>
+        </tr>
+        <tr>
+          <td>Los contenedores reinician en bucle</td>
+          <td>Configuración inválida: en producción el motor se niega a arrancar</td>
+          <td>El log dice cuál. <code>make check-config</code>.</td>
+        </tr>
+        <tr>
+          <td><code>/health</code> da 200 pero nada más funciona</td>
+          <td><code>/health</code> es liveness a propósito</td>
+          <td><code>/ready</code>, que sí comprueba base de datos, Redis y esquema.</td>
+        </tr>
+        <tr>
+          <td>404 en todo, no sólo en <code>/internal</code></td>
+          <td>La regla de <code>^/internal</code> quedó sin ruta y captura todo</td>
+          <td>La ruta de la regla 1 tiene que ser <code>^/internal</code>, no vacía.</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h2>Y después</h2>
+
+  <p>Cuando esto funcione ya sabrás lo que hoy no sabes: que el contrato entre el front y el motor es correcto. Lo que queda es el despliegue, y ahí nada de lo que has hecho se tira — el <code>.env</code> se lleva tal cual al servidor, los secretos son los mismos, y el <code>wp-config.php</code> sólo cambia una línea: <code>POWERGIS_ENGINE_URL</code> pasa del nombre del túnel al del VPS.</p>
+
+  <footer>
+    PowerGIS · integración por túnel · agosto de 2026
+  </footer>
+
+</div>

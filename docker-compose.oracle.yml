@@ -1,0 +1,171 @@
+# PowerGIS · override para Oracle Cloud «Always Free» (Ampere A1, ARM)
+#
+#     make up TIER=oracle
+#
+# La capa gratuita de Oracle da, de forma indefinida y sin coste:
+#
+#     1.500 OCPU-horas + 9.000 GB-horas al mes de Ampere A1
+#     → una instancia continua de 2 OCPU y 12 GB de RAM
+#     + 200 GB de almacenamiento de bloque
+#
+# Doce gigas es MÁS RAM que el KVM2 de Hostinger y el triple que el CX23 de
+# Hetzner. Para lo que cuesta —nada— es la mejor máquina de esta lista.
+#
+# Tres avisos honestos antes de que inviertas una tarde
+# -----------------------------------------------------
+#
+#  1. Oracle redujo esta cuota a la mitad en 2026 (era 4 OCPU / 24 GB) sin
+#     anuncio público, y la aplicación es irregular: hay cuentas antiguas que
+#     siguen en 4/24. Comprueba los límites de TU tenencia antes de
+#     dimensionar nada, y cuenta con que pueden volver a cambiar.
+#
+#  2. «Out of host capacity» al crear la instancia es habitual en las regiones
+#     con demanda. No es un fallo tuyo: es que no hay hueco. Prueba otro
+#     dominio de fallo, otra región, o insiste a otra hora.
+#
+#  3. Es ARM (aarch64), no x86. Ver el apartado siguiente, que es el que
+#     decide si esto te vale.
+#
+# ---------------------------------------------------------------------------
+# ARM: la comprobación que hay que hacer ANTES
+# ---------------------------------------------------------------------------
+#
+# Las imágenes oficiales (python, redis, postgres, nginx) y traefik publican
+# arm64 desde hace años. La que hay que verificar es PostGIS, porque
+# `postgis/postgis` no siempre ha publicado arm64 para todas las etiquetas.
+#
+# Un comando lo resuelve, en la propia máquina ARM:
+#
+#     docker run --rm --platform linux/arm64 postgis/postgis:16-3.4 \
+#         postgres --version
+#
+# Si responde con la versión, sigue adelante y no toques nada más.
+# Si dice «no matching manifest for linux/arm64», descomenta el bloque
+# `postgres.image` de abajo: `imresamu/postgis` es la construcción multiarco
+# del mismo proyecto y trae aarch64.
+#
+# El motor se construye desde `python:3.12-slim`, que sí es multiarco, así
+# que `docker compose build` funciona igual — sólo tarda más, porque algunas
+# ruedas de Python se compilan en vez de descargarse. La primera construcción
+# puede irse a 15 minutos. No la des por colgada.
+#
+# ---------------------------------------------------------------------------
+# El reparto, para 2 OCPU y 12 GB
+# ---------------------------------------------------------------------------
+#
+# Un OCPU de Ampere es un núcleo físico, no un hilo: rinde más que las 2 vCPU
+# compartidas de un KVM2. Pero siguen siendo dos, así que el paralelismo de
+# PostgreSQL se queda como en la caja base y lo que sube es la memoria.
+
+name: powergis
+
+services:
+
+  postgres:
+    # Descomenta SÓLO si la comprobación de arriba falla:
+    # image: imresamu/postgis:16-3.4
+    shm_size: 512mb
+    command:
+      - postgres
+      - -c
+      - shared_buffers=2GB              # 12 GB dan para más caché
+      - -c
+      - effective_cache_size=7GB
+      - -c
+      - work_mem=16MB
+      - -c
+      - maintenance_work_mem=512MB
+      - -c
+      - max_connections=60
+      - -c
+      - random_page_cost=1.1
+      - -c
+      - effective_io_concurrency=200
+      - -c
+      - max_worker_processes=2
+      - -c
+      - max_parallel_workers=2
+      - -c
+      - max_parallel_workers_per_gather=1   # dos núcleos: repartir no compensa
+      - -c
+      - max_parallel_maintenance_workers=1
+      - -c
+      - wal_compression=on
+      - -c
+      - min_wal_size=512MB
+      - -c
+      - max_wal_size=2GB                # 200 GB de disco: aquí sí hay sitio
+      - -c
+      - checkpoint_completion_target=0.9
+      - -c
+      - autovacuum_vacuum_scale_factor=0.05
+      - -c
+      - autovacuum_analyze_scale_factor=0.02
+      - -c
+      - log_min_duration_statement=2000
+    deploy:
+      resources:
+        limits: { memory: 4G, cpus: "1.5" }
+
+  api:
+    command: >
+      uvicorn powergis.api.main:app
+      --host 0.0.0.0 --port 8000 --workers 2 --proxy-headers
+      --forwarded-allow-ips '*'
+    deploy:
+      resources:
+        limits: { memory: 1G, cpus: "1.0" }
+
+  worker-reports:
+    command: >
+      celery -A powergis.workers.celery_app worker
+      --queues reports.advanced,reports.basic,narrative
+      --concurrency 2 --prefetch-multiplier 1
+      --max-tasks-per-child 150 --loglevel INFO
+    deploy:
+      resources:
+        limits: { memory: 2560M, cpus: "1.5" }
+
+  worker-etl:
+    # Cola propia y concurrencia 1, igual que en las cajas de pago. Con 12 GB
+    # no hay ninguna razón para volver a mezclarlas.
+    deploy:
+      resources:
+        limits: { memory: 2560M, cpus: "1.0" }
+
+  redis:
+    command: >
+      redis-server
+      --maxmemory 384mb
+      --maxmemory-policy noeviction
+      --appendonly yes
+      --appendfsync everysec
+      --save ""
+    deploy:
+      resources:
+        limits: { memory: 512M, cpus: "0.5" }
+
+  backup:
+    environment:
+      # 200 GB: aquí sí caben dos semanas largas de volcados.
+      BACKUP_RETENTION_DAYS: "21"
+
+# ---------------------------------------------------------------------------
+# Las dos cuentas
+# ---------------------------------------------------------------------------
+#
+# MEMORIA — techos: postgres 4G · worker-reports 2560M · worker-etl 2560M ·
+# api 1G · redis 512M · beat 256M · traefik 128M · backup 128M = 11,2 G sobre
+# 12. Son techos anti-fuga, no reservas; los residentes reales rondan 2,8 G.
+#
+# CONEXIONES — (3 + 4) × (api 2 + reports 2 + etl 1 + beat 1) = 42 ≤ 60  ✔
+#
+# El cortafuegos de Oracle son DOS capas, como en Hetzner: la «Security List»
+# o «Network Security Group» de la VCN, y el iptables de la propia imagen de
+# Ubuntu, que en Oracle viene con reglas puestas de fábrica y bloquea el 80 y
+# el 443 aunque abras la lista de seguridad. Es la causa número uno de «he
+# abierto el puerto y no responde» en Oracle:
+#
+#     sudo iptables -I INPUT 6 -m state --state NEW -p tcp --dport 80  -j ACCEPT
+#     sudo iptables -I INPUT 6 -m state --state NEW -p tcp --dport 443 -j ACCEPT
+#     sudo netfilter-persistent save

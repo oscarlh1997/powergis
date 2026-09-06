@@ -1,0 +1,698 @@
+==============================================================================
+  PowerGIS · endpoints ejecutados contra el motor local
+==============================================================================
+
+  Ejecutado : 2026-08-26
+  Motor     : http://localhost:8000 · PowerGIS Engine 1.0.0
+
+  Cómo:
+    Desde el navegador de la máquina que aloja el motor, firmando cada
+    petición con HMAC-SHA256 vía Web Crypto. El firmador se contrastó
+    contra Python con un mensaje fijo: misma firma, carácter a carácter.
+
+  RESULTADO : 32 casos · 25 correctos · 7 rechazos esperados · 0 fallos
+
+  Identificadores de esta tanda (cambian en cada ejecución):
+    wp_user_id         74350
+    uuid_principal     6efe46b2-580e-4b22-8652-5a657f9ca0a2
+    uuid_nacional      d62eb8b8-1aac-49fd-9b61-166bd2700e1c
+    uuid_municipal     5119d5df-ef94-4c02-9a09-b07987e58cf6
+
+
+──────────────────────────────────────────────────────────────────────────────
+  SALUD
+──────────────────────────────────────────────────────────────────────────────
+
+[01] OK  GET /health
+     estado del servicio
+     auth: ninguna   →   HTTP 200   (8 ms)
+
+     ENTRADA   (sin cuerpo)
+
+     SALIDA
+       {
+         "status": "ok",
+         "engine_version": "1.0.0",
+         "database": true,
+         "redis": true,
+         "checks": {
+           "env": "development"
+         }
+       }
+
+[02] OK  GET /ready
+     listo para recibir tráfico
+     auth: ninguna   →   HTTP 200   (19 ms)
+
+     ENTRADA   (sin cuerpo)
+
+     SALIDA
+       {
+         "status": "ok",
+         "engine_version": "1.0.0",
+         "database": true,
+         "redis": true,
+         "checks": {
+           "config_problems": []
+         }
+       }
+
+──────────────────────────────────────────────────────────────────────────────
+  CATALOGO
+──────────────────────────────────────────────────────────────────────────────
+
+[03] OK  GET /v1/reports/catalog/basico
+     qué incluye el informe básico
+     auth: ninguna   →   HTTP 200   (4 ms)
+
+     ENTRADA   (sin cuerpo)
+
+     SALIDA
+       {
+         "tier": "basico",
+         "sections": [
+           {
+             "id": "demografia",
+             "title": "Análisis Demográfico del Público Objetivo",
+             "tier": "basico",
+             "available": true,
+             "indicators": "[31 indicadores]"
+           },
+           "…y 4 secciones más"
+         ],
+         "_nota": "15.223 bytes"
+       }
+
+[04] OK  GET /v1/reports/catalog/avanzado
+     qué incluye el avanzado
+     auth: ninguna   →   HTTP 200   (4 ms)
+
+     ENTRADA   (sin cuerpo)
+
+     SALIDA
+       {
+         "tier": "avanzado",
+         "sections": "[5 secciones, todas disponibles]",
+         "_nota": "15.221 bytes"
+       }
+
+──────────────────────────────────────────────────────────────────────────────
+  GEOGRAFIA
+──────────────────────────────────────────────────────────────────────────────
+
+[05] OK  GET /v1/geo/search?q=Madrid&level=provincia
+     buscar por nombre
+     auth: ninguna   →   HTTP 200   (6 ms)
+
+     ENTRADA   (sin cuerpo)
+
+     SALIDA
+       [
+         {
+           "geo_id": 48,
+           "level": "provincia",
+           "ine_code": "28",
+           "name": "Madrid",
+           "parent_id": 14,
+           "population": 6871000
+         }
+       ]
+
+[06] OK  GET /v1/geo/provincia/28
+     una geografía concreta
+     auth: ninguna   →   HTTP 200   (5 ms)
+
+     ENTRADA   (sin cuerpo)
+
+     SALIDA
+       {
+         "geo_id": 48,
+         "level": "provincia",
+         "ine_code": "28",
+         "name": "Madrid",
+         "parent_id": 14,
+         "population": 6871000
+       }
+
+[07] OK  GET /v1/geo/provincia/28/children?level=municipio
+     municipios de una provincia
+     auth: ninguna   →   HTTP 200   (8 ms)
+
+     ENTRADA   (sin cuerpo)
+
+     SALIDA
+       []
+
+[08] OK  GET /v1/geo/ccaa/13/children?level=provincia
+     provincias de una comunidad
+     auth: ninguna   →   HTTP 200   (7 ms)
+
+     ENTRADA   (sin cuerpo)
+
+     SALIDA
+       [
+         {
+           "geo_id": 48,
+           "level": "provincia",
+           "ine_code": "28",
+           "name": "Madrid",
+           "parent_id": 14,
+           "population": 6871000
+         }
+       ]
+
+──────────────────────────────────────────────────────────────────────────────
+  INFORMES
+──────────────────────────────────────────────────────────────────────────────
+
+[09] OK  POST /v1/reports
+     crear informe básico
+     auth: firma sobre el cuerpo   →   HTTP 202   (24 ms)
+
+     ENTRADA
+       {
+         "project_uuid": "6efe46b2-580e-4b22-8652-5a657f9ca0a2",
+         "wp_user_id": 74350,
+         "wp_post_id": 7818,
+         "tier": "basico",
+         "scope": {
+           "level": "ccaa",
+           "ine_code": "13",
+           "children_level": "provincia"
+         },
+         "segments": {
+           "age": [
+             "25-34",
+             "35-44"
+           ],
+           "sex": [
+             "F"
+           ]
+         },
+         "business": {
+           "sector": "restauracion",
+           "avg_ticket": 600
+         },
+         "target": {
+           "age_range": [
+             "25-34",
+             "35-44"
+           ],
+           "education_level": "universitario",
+           "family_status": "nido_lleno",
+           "nse": [
+             "a/b",
+             "c+"
+           ],
+           "annual_income": "45-75k",
+           "monthly_available_income": "801-2500",
+           "average_ticket": "medio_alto",
+           "climate": [
+             "templado"
+           ],
+           "pedestrian_traffic": "alto",
+           "vehicular_traffic": "medio",
+           "direct_competition": true
+         }
+       }
+
+     SALIDA
+       {
+         "run_id": 5,
+         "project_uuid": "6efe46b2-580e-4b22-8652-5a657f9ca0a2",
+         "tier": "basico",
+         "status": "queued",
+         "version": null,
+         "sections_done": [],
+         "reused": false,
+         "poll_after_seconds": 2
+       }
+
+[10] OK  POST /v1/reports
+     crear informe nacional
+     auth: firma sobre el cuerpo   →   HTTP 202   (18 ms)
+
+     ENTRADA
+       {
+         "project_uuid": "d62eb8b8-1aac-49fd-9b61-166bd2700e1c",
+         "wp_user_id": 74350,
+         "tier": "basico",
+         "scope": {
+           "level": "pais",
+           "ine_code": "ES",
+           "children_level": "ccaa"
+         },
+         "segments": {
+           "age": [],
+           "sex": []
+         },
+         "business": {
+           "sector": "retail"
+         }
+       }
+
+     SALIDA
+       {
+         "run_id": 6,
+         "project_uuid": "d62eb8b8-1aac-49fd-9b61-166bd2700e1c",
+         "tier": "basico",
+         "status": "queued",
+         "version": null,
+         "reused": false,
+         "poll_after_seconds": 2
+       }
+
+[11] OK  POST /v1/reports
+     crear informe municipal
+     auth: firma sobre el cuerpo   →   HTTP 202   (11 ms)
+
+     ENTRADA
+       {
+         "project_uuid": "5119d5df-ef94-4c02-9a09-b07987e58cf6",
+         "wp_user_id": 74350,
+         "tier": "avanzado",
+         "scope": {
+           "level": "municipio",
+           "ine_code": "28079"
+         },
+         "segments": {
+           "age": [
+             "18-24"
+           ],
+           "sex": [
+             "M",
+             "F"
+           ]
+         },
+         "business": {
+           "sector": "cafeteria",
+           "avg_ticket": 30,
+           "surface_m2": 85
+         }
+       }
+
+     SALIDA
+       {
+         "run_id": 7,
+         "project_uuid": "5119d5df-ef94-4c02-9a09-b07987e58cf6",
+         "tier": "avanzado",
+         "status": "queued",
+         "version": null,
+         "reused": false,
+         "poll_after_seconds": 2
+       }
+
+[12] OK  GET /v1/reports/6efe46b2-580e-4b22-8652-5a657f9ca0a2?wp_user_id=74350
+     leer el informe
+     auth: firma sobre método + ruta + query   →   HTTP 200   (7 ms)
+
+     ENTRADA   (sin cuerpo)
+
+     SALIDA
+       {
+         "version": 1,
+         "tier": "basico",
+         "scope": {
+           "level": "ccaa",
+           "code": "13",
+           "name": "Comunidad de Madrid",
+           "children_level": "provincia",
+           "children_count": 1,
+           "population": 6871000,
+           "area_km2": 8028
+         },
+         "sections": "demografia · socioeconomico(BLOQ) · competencia(BLOQ) · clima(BLOQ) · trafico(BLOQ)",
+         "placerank": null,
+         "warnings": [
+           "31 indicadores estaban caducos y se han encolado para recarga; el informe se actualizará automáticamente."
+         ],
+         "_nota": "respuesta completa: 22.373 bytes"
+       }
+
+[13] OK  GET /v1/reports/6efe46b2-580e-4b22-8652-5a657f9ca0a2?wp_user_id=74350&version=1
+     leer una versión concreta
+     auth: firma sobre método + ruta + query   →   HTTP 200   (7 ms)
+
+     ENTRADA   (sin cuerpo)
+
+     SALIDA
+       {
+         "version": 1,
+         "tier": "basico",
+         "scope": {
+           "level": "ccaa",
+           "code": "13",
+           "name": "Comunidad de Madrid",
+           "children_level": "provincia",
+           "children_count": 1,
+           "population": 6871000,
+           "area_km2": 8028
+         },
+         "sections": "demografia · socioeconomico(BLOQ) · competencia(BLOQ) · clima(BLOQ) · trafico(BLOQ)",
+         "placerank": null,
+         "warnings": [
+           "31 indicadores estaban caducos y se han encolado para recarga; el informe se actualizará automáticamente."
+         ],
+         "_nota": "respuesta completa: 22.373 bytes"
+       }
+
+[14] OK  POST /v1/reports/6efe46b2-580e-4b22-8652-5a657f9ca0a2/upgrade
+     subir a avanzado
+     auth: firma sobre el cuerpo   →   HTTP 202   (12 ms)
+
+     ENTRADA
+       {
+         "payment_reference": "pi_3PruebaStripe000",
+         "force_refresh": false
+       }
+
+     SALIDA
+       {
+         "run_id": 8,
+         "tier": "avanzado",
+         "status": "queued",
+         "version": null,
+         "reused": false,
+         "poll_after_seconds": 2
+       }
+
+[15] OK  POST /v1/reports/6efe46b2-580e-4b22-8652-5a657f9ca0a2/placerank/rebalance
+     recalcular el PlaceRank
+     auth: firma sobre el cuerpo   →   HTTP 200   (11 ms)
+
+     ENTRADA
+       {
+         "economico": 0.4,
+         "demografico": 0.3,
+         "ambiental": 0.2,
+         "match": 0.1
+       }
+
+     SALIDA
+       {
+         "method": "percentil normalizado dentro del ámbito consultado",
+         "rows": 1,
+         "_nota": "1 fila porque la CCAA de Madrid tiene 1 provincia"
+       }
+
+[16] OK  POST /v1/reports/6efe46b2-580e-4b22-8652-5a657f9ca0a2/geolens
+     capas del mapa
+     auth: firma sobre el cuerpo   →   HTTP 200   (11 ms)
+
+     ENTRADA
+       {
+         "indicators": [
+           "dem.pop.total",
+           "dem.age.mean"
+         ],
+         "classes": 5,
+         "method": "quantiles"
+       }
+
+     SALIDA
+       {
+         "layers": [
+           "dem.pop.total",
+           "dem.age.mean"
+         ],
+         "_nota": "1.748 bytes"
+       }
+
+[17] OK  GET /v1/reports/6efe46b2-580e-4b22-8652-5a657f9ca0a2/export/xlsx?wp_user_id=74350
+     exportar a Excel
+     auth: firma sobre método + ruta + query   →   HTTP 200   (19 ms)
+
+     ENTRADA   (sin cuerpo)
+
+     SALIDA
+       {
+         "_binario": "17.258 bytes",
+         "_tipo": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+       }
+
+[18] OK  GET /v1/reports/6efe46b2-580e-4b22-8652-5a657f9ca0a2/export/pdf?wp_user_id=74350
+     exportar a PDF
+     auth: firma sobre método + ruta + query   →   HTTP 200   (1949 ms)
+
+     ENTRADA   (sin cuerpo)
+
+     SALIDA
+       {
+         "_binario": "117.367 bytes",
+         "_tipo": "application/pdf"
+       }
+
+[19] OK  GET /v1/reports/6efe46b2-580e-4b22-8652-5a657f9ca0a2/export/pptx?wp_user_id=74350
+     exportar a PowerPoint
+     auth: firma sobre método + ruta + query   →   HTTP 200   (109 ms)
+
+     ENTRADA   (sin cuerpo)
+
+     SALIDA
+       {
+         "_binario": "51.103 bytes",
+         "_tipo": "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+       }
+
+[20] OK  POST /v1/reports/6efe46b2-580e-4b22-8652-5a657f9ca0a2/downgrade
+     bajar a básico
+     auth: firma sobre el cuerpo   →   HTTP 200   (9 ms)
+
+     ENTRADA
+       {}
+
+     SALIDA
+       {
+         "tier": "basico"
+       }
+
+──────────────────────────────────────────────────────────────────────────────
+  OPERACION
+──────────────────────────────────────────────────────────────────────────────
+
+[21] OK  POST /internal/bootstrap?demo=false
+     arrancar el almacén
+     auth: X-Internal-Key   →   HTTP 200   (117 ms)
+
+     ENTRADA   (sin cuerpo)
+
+     SALIDA
+       {
+         "geografias": 72,
+         "origen": "/app/src/powergis/seed/geographies.json",
+         "perfiles_sector": 5,
+         "indicadores": 96
+       }
+
+[22] OK  POST /internal/catalog/sync
+     sincronizar el catálogo
+     auth: X-Internal-Key   →   HTTP 200   (36 ms)
+
+     ENTRADA
+       {}
+
+     SALIDA
+       {
+         "indicators": 96
+       }
+
+[23] OK  GET /internal/coverage
+     indicadores sin colector
+     auth: X-Internal-Key   →   HTTP 200   (57 ms)
+
+     ENTRADA   (sin cuerpo)
+
+     SALIDA
+       {
+         "total": 96,
+         "routed": 78,
+         "orphans": "[18 · NSE, estructura familiar, postgrado, consumo…]"
+       }
+
+[24] OK  POST /internal/ingest
+     encolar una ingesta
+     auth: X-Internal-Key   →   HTTP 200   (6 ms)
+
+     ENTRADA
+       {
+         "collector": "ine",
+         "indicators": [
+           "dem.pop.total"
+         ],
+         "level": "provincia",
+         "parent_code": "13",
+         "period": null
+       }
+
+     SALIDA
+       {
+         "task_id": "5f9d8a03-051a-4be7-ac6b-9b2c1e699281",
+         "queue": "etl",
+         "collector": "ine"
+       }
+
+[25] OK  GET /internal/ine/discover/2879
+     inspeccionar una tabla del INE
+     auth: X-Internal-Key   →   HTTP 200   (2036 ms)
+
+     ENTRADA   (sin cuerpo)
+
+     SALIDA
+       {
+         "metadata": {
+           "table": "2879",
+           "groups": [
+             {
+               "id": 28477,
+               "name": "Municipios",
+               "values": [
+                 {
+                   "id": 3100,
+                   "name": "Ábalos"
+                 },
+                 {
+                   "id": 3101,
+                   "name": "Agoncillo"
+                 },
+                 "…"
+               ]
+             }
+           ]
+         },
+         "_nota": "salió a servicios.ine.es de verdad"
+       }
+
+──────────────────────────────────────────────────────────────────────────────
+  SEGURIDAD
+──────────────────────────────────────────────────────────────────────────────
+
+[26] !!  GET /v1/reports/6efe46b2-580e-4b22-8652-5a657f9ca0a2?wp_user_id=74350
+     lectura SIN firma
+     auth: ninguna (a propósito)   →   HTTP 401   (7 ms)
+
+     ENTRADA   (sin cuerpo)
+
+     SALIDA
+       {
+         "code": "invalid_signature",
+         "message": "Faltan cabeceras de firma",
+         "context": {}
+       }
+
+[27] !!  POST /v1/reports/6efe46b2-580e-4b22-8652-5a657f9ca0a2/placerank/rebalance
+     PlaceRank SIN firma
+     auth: ninguna (a propósito)   →   HTTP 401   (2 ms)
+
+     ENTRADA
+       {
+         "economico": 1,
+         "demografico": 0,
+         "ambiental": 0,
+         "match": 0
+       }
+
+     SALIDA
+       {
+         "code": "invalid_signature",
+         "message": "Faltan cabeceras de firma",
+         "context": {}
+       }
+
+[28] !!  POST /v1/reports
+     cuerpo alterado tras firmar
+     auth: firma válida de OTRO cuerpo   →   HTTP 401   (3 ms)
+
+     ENTRADA
+       {
+         "se_firmó": {
+           "project_uuid": "6efe46b2-580e-4b22-8652-5a657f9ca0a2",
+           "wp_user_id": 74350,
+           "tier": "basico"
+         },
+         "se_envió": {
+           "project_uuid": "6efe46b2-580e-4b22-8652-5a657f9ca0a2",
+           "wp_user_id": 999999,
+           "tier": "avanzado"
+         }
+       }
+
+     SALIDA
+       {
+         "code": "invalid_signature",
+         "message": "Firma no válida",
+         "context": {}
+       }
+
+[29] !!  GET /v1/reports/6efe46b2-580e-4b22-8652-5a657f9ca0a2?wp_user_id=74350
+     firma caducada
+     auth: firma con timestamp de hace 1 h   →   HTTP 401   (2 ms)
+
+     ENTRADA   (sin cuerpo)
+
+     SALIDA
+       {
+         "code": "stale_request",
+         "message": "Petición fuera de la ventana temporal",
+         "context": {
+           "drift_seconds": 3600
+         }
+       }
+
+[30] !!  GET /v1/reports/6efe46b2-580e-4b22-8652-5a657f9ca0a2?wp_user_id=999999
+     informe de otro usuario
+     auth: firma válida   →   HTTP 403   (6 ms)
+
+     ENTRADA   (sin cuerpo)
+
+     SALIDA
+       {
+         "code": "not_owner",
+         "message": "El proyecto no pertenece a este usuario",
+         "context": {
+           "project_owner": 74350
+         }
+       }
+
+[31] !!  GET /internal/coverage
+     rutas internas desde fuera
+     auth: sin X-Internal-Key   →   HTTP 401   (3 ms)
+
+     ENTRADA   (sin cuerpo)
+
+     SALIDA
+       {
+         "code": "invalid_signature",
+         "message": "Clave interna no válida",
+         "context": {}
+       }
+
+[32] !!  POST /internal/bootstrap
+     arranque sin clave interna
+     auth: sin X-Internal-Key   →   HTTP 401   (2 ms)
+
+     ENTRADA   (sin cuerpo)
+
+     SALIDA
+       {
+         "code": "invalid_signature",
+         "message": "Clave interna no válida",
+         "context": {}
+       }
+
+──────────────────────────────────────────────────────────────────────────────
+  NOTAS
+──────────────────────────────────────────────────────────────────────────────
+  «municipios de una provincia» devuelve [] porque la semilla llega a
+  provincia. Los ~8.100 municipios se cargan con `powergis load-municipios`,
+  que necesita salida a internet hacia el INE.
+  
+  El PlaceRank devuelve 1 fila porque la CCAA de Madrid tiene una sola
+  provincia. Con un ámbito de varias hijas devolvería el ranking completo.
+  
+  El aviso «31 indicadores caducos» es del propio motor: detecta datos
+  vencidos y los reencola. Con datos de demostración es lo esperado.
+  
+  Los 7 rechazos NO son fallos: son los intentos de saltarse el sistema, y
+  cada uno devolvió lo que debía. Si alguno hubiera dado 200, ahí sí habría
+  un problema.
+

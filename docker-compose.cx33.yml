@@ -1,0 +1,145 @@
+# PowerGIS · override para Hetzner CX33
+# (4 vCPU compartida x86 / 8 GB RAM / 80 GB SSD)
+#
+#     make up TIER=cx33
+#     # equivale a:
+#     docker compose -f docker-compose.yml -f docker-compose.cx33.yml up -d
+#
+# Misma RAM que el KVM2 de Hostinger, pero el DOBLE de CPU. Lo que cambia
+# respecto al fichero base es sólo eso: el reparto de núcleos. Los techos de
+# memoria se mueven poco, porque los 8 GB son los mismos.
+#
+# Qué se toca y por qué
+# ---------------------
+#  1. PostgreSQL puede paralelizar de verdad. En 2 núcleos, `max_parallel_
+#     workers_per_gather=1` era lo correcto: repartir un plan entre dos
+#     procesos que se pelean por el mismo núcleo cuesta más de lo que ahorra.
+#     Con 4, un gather de 2 sí gana en los recorridos grandes de
+#     `fact_indicator`.
+#  2. La API pasa de 2 a 3 workers de uvicorn. No a 4: hay que dejar núcleo
+#     para PostgreSQL y para el worker de informes, que es donde está el
+#     trabajo real.
+#  3. `worker-reports` sube a concurrencia 3.
+#
+# Lo que NO cambia, y conviene que no cambie:
+#
+#  · `shared_buffers` sigue en 1 GB. Es memoria, no CPU, y el criterio de
+#    12,5 % de la RAM dejando el resto como page cache del sistema sigue
+#    siendo el bueno con 8 GB.
+#  · Las colas `etl` y `reports.*` siguen separadas, con `worker-etl` a
+#    concurrencia 1. Medido: una ingesta ADRH de 282 s ocupando slots
+#    compartidos retrasa informes de cliente. Tener el doble de núcleos no
+#    hace que compartirlos sea buena idea, sólo que se note más tarde.
+#  · n8n no entra. Sigue siendo cosa de una caja con 16 GB.
+#
+# Disco: 80 GB, veinte menos que el KVM2. La retención de backups baja a 7
+# días y `max_wal_size` se queda en 1 GB. Si el almacén crece, se engancha un
+# Volume de Hetzner y se mueve `pgdata` ahí — se amplía en caliente.
+
+name: powergis
+
+services:
+
+  postgres:
+    command:
+      - postgres
+      - -c
+      - shared_buffers=1GB
+      - -c
+      - effective_cache_size=4GB
+      - -c
+      - work_mem=12MB
+      - -c
+      - maintenance_work_mem=256MB
+      - -c
+      - max_connections=60          # ver la cuenta de pools más abajo
+      - -c
+      - random_page_cost=1.1
+      - -c
+      - effective_io_concurrency=200
+      - -c
+      - max_worker_processes=4
+      - -c
+      - max_parallel_workers=4
+      - -c
+      - max_parallel_workers_per_gather=2
+      - -c
+      - max_parallel_maintenance_workers=2
+      - -c
+      - wal_compression=on
+      - -c
+      - min_wal_size=256MB
+      - -c
+      - max_wal_size=1GB
+      - -c
+      - checkpoint_completion_target=0.9
+      - -c
+      - autovacuum_vacuum_scale_factor=0.05
+      - -c
+      - autovacuum_analyze_scale_factor=0.02
+      - -c
+      - log_min_duration_statement=2000
+    deploy:
+      resources:
+        limits: { memory: 2560M, cpus: "2.5" }
+
+  api:
+    command: >
+      uvicorn powergis.api.main:app
+      --host 0.0.0.0 --port 8000 --workers 3 --proxy-headers
+      --forwarded-allow-ips '*'
+    deploy:
+      resources:
+        limits: { memory: 896M, cpus: "1.5" }
+
+  worker-reports:
+    command: >
+      celery -A powergis.workers.celery_app worker
+      --queues reports.advanced,reports.basic,narrative
+      --concurrency 3 --prefetch-multiplier 1
+      --max-tasks-per-child 150 --loglevel INFO
+    deploy:
+      resources:
+        limits: { memory: 1792M, cpus: "2.0" }
+
+  worker-etl:
+    # Concurrencia 1 a propósito, igual que en KVM2.
+    deploy:
+      resources:
+        limits: { memory: 1536M, cpus: "1.5" }
+
+# ---------------------------------------------------------------------------
+# La cuenta de conexiones, rehecha para esta caja
+# ---------------------------------------------------------------------------
+#
+#     (DB_POOL_SIZE + DB_MAX_OVERFLOW) × procesos  ≤  max_connections
+#
+# Procesos que abren pool con este override:
+#     api            3   (--workers 3)
+#     worker-reports 3   (--concurrency 3)
+#     worker-etl     1
+#     beat           1
+#                   ---
+#                    8
+#
+# Con los valores de `.env.example` (3 + 4 = 7):   7 × 8 = 56 ≤ 60  ✔
+#
+# Si subes `--workers` o `--concurrency`, rehaz esta cuenta ANTES de
+# desplegar. El síntoma de no hacerlo es `FATAL: sorry, too many clients
+# already` bajo carga, que aparece justo cuando peor viene.
+#
+# ---------------------------------------------------------------------------
+# Y la de memoria
+# ---------------------------------------------------------------------------
+#
+#     postgres         2560M        worker-etl       1536M
+#     worker-reports   1792M        redis             384M
+#     api               896M        beat              256M
+#     traefik           128M        backup            128M
+#                                                    ------
+#                                                     7680M
+#
+# La suma supera los 8 GB a propósito: son techos anti-fuga, no reservas.
+# Lo que tiene que caber es la suma de picos REALES, que ronda 2,6 GB. El
+# resto de la RAM trabaja como page cache de PostgreSQL, que es donde más
+# rinde. Compruébalo de vez en cuando con `make capacity`.

@@ -1,0 +1,648 @@
+[
+ {
+  "level": "pais",
+  "ine_code": "ES",
+  "name": "España",
+  "population": 48107000,
+  "area_km2": 505939
+ },
+ {
+  "level": "ccaa",
+  "ine_code": "01",
+  "name": "Andalucía",
+  "parent_level": "pais",
+  "parent_code": "ES",
+  "population": 8593000,
+  "area_km2": 87595.0
+ },
+ {
+  "level": "ccaa",
+  "ine_code": "02",
+  "name": "Aragón",
+  "parent_level": "pais",
+  "parent_code": "ES",
+  "population": 1347000,
+  "area_km2": 47720.0
+ },
+ {
+  "level": "ccaa",
+  "ine_code": "03",
+  "name": "Principado de Asturias",
+  "parent_level": "pais",
+  "parent_code": "ES",
+  "population": 1006000,
+  "area_km2": 10604.0
+ },
+ {
+  "level": "ccaa",
+  "ine_code": "04",
+  "name": "Illes Balears",
+  "parent_level": "pais",
+  "parent_code": "ES",
+  "population": 1209000,
+  "area_km2": 4992.0
+ },
+ {
+  "level": "ccaa",
+  "ine_code": "05",
+  "name": "Canarias",
+  "parent_level": "pais",
+  "parent_code": "ES",
+  "population": 2239000,
+  "area_km2": 7447.0
+ },
+ {
+  "level": "ccaa",
+  "ine_code": "06",
+  "name": "Cantabria",
+  "parent_level": "pais",
+  "parent_code": "ES",
+  "population": 588000,
+  "area_km2": 5321.0
+ },
+ {
+  "level": "ccaa",
+  "ine_code": "07",
+  "name": "Castilla y León",
+  "parent_level": "pais",
+  "parent_code": "ES",
+  "population": 2374000,
+  "area_km2": 94224.0
+ },
+ {
+  "level": "ccaa",
+  "ine_code": "08",
+  "name": "Castilla-La Mancha",
+  "parent_level": "pais",
+  "parent_code": "ES",
+  "population": 2075000,
+  "area_km2": 79417.0
+ },
+ {
+  "level": "ccaa",
+  "ine_code": "09",
+  "name": "Cataluña",
+  "parent_level": "pais",
+  "parent_code": "ES",
+  "population": 7858000,
+  "area_km2": 32113.0
+ },
+ {
+  "level": "ccaa",
+  "ine_code": "10",
+  "name": "Comunitat Valenciana",
+  "parent_level": "pais",
+  "parent_code": "ES",
+  "population": 5235000,
+  "area_km2": 23256.0
+ },
+ {
+  "level": "ccaa",
+  "ine_code": "11",
+  "name": "Extremadura",
+  "parent_level": "pais",
+  "parent_code": "ES",
+  "population": 1058000,
+  "area_km2": 41634.0
+ },
+ {
+  "level": "ccaa",
+  "ine_code": "12",
+  "name": "Galicia",
+  "parent_level": "pais",
+  "parent_code": "ES",
+  "population": 2701000,
+  "area_km2": 29574.0
+ },
+ {
+  "level": "ccaa",
+  "ine_code": "13",
+  "name": "Comunidad de Madrid",
+  "parent_level": "pais",
+  "parent_code": "ES",
+  "population": 6871000,
+  "area_km2": 8028.0
+ },
+ {
+  "level": "ccaa",
+  "ine_code": "14",
+  "name": "Región de Murcia",
+  "parent_level": "pais",
+  "parent_code": "ES",
+  "population": 1570000,
+  "area_km2": 11313.0
+ },
+ {
+  "level": "ccaa",
+  "ine_code": "15",
+  "name": "Comunidad Foral de Navarra",
+  "parent_level": "pais",
+  "parent_code": "ES",
+  "population": 674000,
+  "area_km2": 10390.0
+ },
+ {
+  "level": "ccaa",
+  "ine_code": "16",
+  "name": "País Vasco",
+  "parent_level": "pais",
+  "parent_code": "ES",
+  "population": 2217000,
+  "area_km2": 7234.0
+ },
+ {
+  "level": "ccaa",
+  "ine_code": "17",
+  "name": "La Rioja",
+  "parent_level": "pais",
+  "parent_code": "ES",
+  "population": 323000,
+  "area_km2": 5045.0
+ },
+ {
+  "level": "ccaa",
+  "ine_code": "18",
+  "name": "Ceuta",
+  "parent_level": "pais",
+  "parent_code": "ES",
+  "population": 83000,
+  "area_km2": 19.0
+ },
+ {
+  "level": "ccaa",
+  "ine_code": "19",
+  "name": "Melilla",
+  "parent_level": "pais",
+  "parent_code": "ES",
+  "population": 86000,
+  "area_km2": 13.0
+ },
+ {
+  "level": "provincia",
+  "ine_code": "01",
+  "name": "Araba/Álava",
+  "parent_level": "ccaa",
+  "parent_code": "16",
+  "population": 335000,
+  "area_km2": 3037.0
+ },
+ {
+  "level": "provincia",
+  "ine_code": "02",
+  "name": "Albacete",
+  "parent_level": "ccaa",
+  "parent_code": "08",
+  "population": 389000,
+  "area_km2": 14926.0
+ },
+ {
+  "level": "provincia",
+  "ine_code": "03",
+  "name": "Alicante/Alacant",
+  "parent_level": "ccaa",
+  "parent_code": "10",
+  "population": 1959000,
+  "area_km2": 5817.0
+ },
+ {
+  "level": "provincia",
+  "ine_code": "04",
+  "name": "Almería",
+  "parent_level": "ccaa",
+  "parent_code": "01",
+  "population": 756000,
+  "area_km2": 8775.0
+ },
+ {
+  "level": "provincia",
+  "ine_code": "05",
+  "name": "Ávila",
+  "parent_level": "ccaa",
+  "parent_code": "07",
+  "population": 158000,
+  "area_km2": 8050.0
+ },
+ {
+  "level": "provincia",
+  "ine_code": "06",
+  "name": "Badajoz",
+  "parent_level": "ccaa",
+  "parent_code": "11",
+  "population": 669000,
+  "area_km2": 21766.0
+ },
+ {
+  "level": "provincia",
+  "ine_code": "07",
+  "name": "Illes Balears",
+  "parent_level": "ccaa",
+  "parent_code": "04",
+  "population": 1209000,
+  "area_km2": 4992.0
+ },
+ {
+  "level": "provincia",
+  "ine_code": "08",
+  "name": "Barcelona",
+  "parent_level": "ccaa",
+  "parent_code": "09",
+  "population": 5774000,
+  "area_km2": 7728.0
+ },
+ {
+  "level": "provincia",
+  "ine_code": "09",
+  "name": "Burgos",
+  "parent_level": "ccaa",
+  "parent_code": "07",
+  "population": 356000,
+  "area_km2": 14292.0
+ },
+ {
+  "level": "provincia",
+  "ine_code": "10",
+  "name": "Cáceres",
+  "parent_level": "ccaa",
+  "parent_code": "11",
+  "population": 389000,
+  "area_km2": 19868.0
+ },
+ {
+  "level": "provincia",
+  "ine_code": "11",
+  "name": "Cádiz",
+  "parent_level": "ccaa",
+  "parent_code": "01",
+  "population": 1252000,
+  "area_km2": 7436.0
+ },
+ {
+  "level": "provincia",
+  "ine_code": "12",
+  "name": "Castellón/Castelló",
+  "parent_level": "ccaa",
+  "parent_code": "10",
+  "population": 596000,
+  "area_km2": 6632.0
+ },
+ {
+  "level": "provincia",
+  "ine_code": "13",
+  "name": "Ciudad Real",
+  "parent_level": "ccaa",
+  "parent_code": "08",
+  "population": 493000,
+  "area_km2": 19813.0
+ },
+ {
+  "level": "provincia",
+  "ine_code": "14",
+  "name": "Córdoba",
+  "parent_level": "ccaa",
+  "parent_code": "01",
+  "population": 776000,
+  "area_km2": 13769.0
+ },
+ {
+  "level": "provincia",
+  "ine_code": "15",
+  "name": "A Coruña",
+  "parent_level": "ccaa",
+  "parent_code": "12",
+  "population": 1124000,
+  "area_km2": 7950.0
+ },
+ {
+  "level": "provincia",
+  "ine_code": "16",
+  "name": "Cuenca",
+  "parent_level": "ccaa",
+  "parent_code": "08",
+  "population": 195000,
+  "area_km2": 17141.0
+ },
+ {
+  "level": "provincia",
+  "ine_code": "17",
+  "name": "Girona",
+  "parent_level": "ccaa",
+  "parent_code": "09",
+  "population": 802000,
+  "area_km2": 5910.0
+ },
+ {
+  "level": "provincia",
+  "ine_code": "18",
+  "name": "Granada",
+  "parent_level": "ccaa",
+  "parent_code": "01",
+  "population": 932000,
+  "area_km2": 12647.0
+ },
+ {
+  "level": "provincia",
+  "ine_code": "19",
+  "name": "Guadalajara",
+  "parent_level": "ccaa",
+  "parent_code": "08",
+  "population": 268000,
+  "area_km2": 12167.0
+ },
+ {
+  "level": "provincia",
+  "ine_code": "20",
+  "name": "Gipuzkoa",
+  "parent_level": "ccaa",
+  "parent_code": "16",
+  "population": 727000,
+  "area_km2": 1980.0
+ },
+ {
+  "level": "provincia",
+  "ine_code": "21",
+  "name": "Huelva",
+  "parent_level": "ccaa",
+  "parent_code": "01",
+  "population": 533000,
+  "area_km2": 10128.0
+ },
+ {
+  "level": "provincia",
+  "ine_code": "22",
+  "name": "Huesca",
+  "parent_level": "ccaa",
+  "parent_code": "02",
+  "population": 227000,
+  "area_km2": 15636.0
+ },
+ {
+  "level": "provincia",
+  "ine_code": "23",
+  "name": "Jaén",
+  "parent_level": "ccaa",
+  "parent_code": "01",
+  "population": 621000,
+  "area_km2": 13496.0
+ },
+ {
+  "level": "provincia",
+  "ine_code": "24",
+  "name": "León",
+  "parent_level": "ccaa",
+  "parent_code": "07",
+  "population": 445000,
+  "area_km2": 15581.0
+ },
+ {
+  "level": "provincia",
+  "ine_code": "25",
+  "name": "Lleida",
+  "parent_level": "ccaa",
+  "parent_code": "09",
+  "population": 444000,
+  "area_km2": 12172.0
+ },
+ {
+  "level": "provincia",
+  "ine_code": "26",
+  "name": "La Rioja",
+  "parent_level": "ccaa",
+  "parent_code": "17",
+  "population": 323000,
+  "area_km2": 5045.0
+ },
+ {
+  "level": "provincia",
+  "ine_code": "27",
+  "name": "Lugo",
+  "parent_level": "ccaa",
+  "parent_code": "12",
+  "population": 325000,
+  "area_km2": 9856.0
+ },
+ {
+  "level": "provincia",
+  "ine_code": "28",
+  "name": "Madrid",
+  "parent_level": "ccaa",
+  "parent_code": "13",
+  "population": 6871000,
+  "area_km2": 8028.0
+ },
+ {
+  "level": "provincia",
+  "ine_code": "29",
+  "name": "Málaga",
+  "parent_level": "ccaa",
+  "parent_code": "01",
+  "population": 1762000,
+  "area_km2": 7308.0
+ },
+ {
+  "level": "provincia",
+  "ine_code": "30",
+  "name": "Murcia",
+  "parent_level": "ccaa",
+  "parent_code": "14",
+  "population": 1570000,
+  "area_km2": 11313.0
+ },
+ {
+  "level": "provincia",
+  "ine_code": "31",
+  "name": "Navarra",
+  "parent_level": "ccaa",
+  "parent_code": "15",
+  "population": 674000,
+  "area_km2": 10390.0
+ },
+ {
+  "level": "provincia",
+  "ine_code": "32",
+  "name": "Ourense",
+  "parent_level": "ccaa",
+  "parent_code": "12",
+  "population": 305000,
+  "area_km2": 7273.0
+ },
+ {
+  "level": "provincia",
+  "ine_code": "33",
+  "name": "Asturias",
+  "parent_level": "ccaa",
+  "parent_code": "03",
+  "population": 1006000,
+  "area_km2": 10604.0
+ },
+ {
+  "level": "provincia",
+  "ine_code": "34",
+  "name": "Palencia",
+  "parent_level": "ccaa",
+  "parent_code": "07",
+  "population": 158000,
+  "area_km2": 8053.0
+ },
+ {
+  "level": "provincia",
+  "ine_code": "35",
+  "name": "Las Palmas",
+  "parent_level": "ccaa",
+  "parent_code": "05",
+  "population": 1167000,
+  "area_km2": 4066.0
+ },
+ {
+  "level": "provincia",
+  "ine_code": "36",
+  "name": "Pontevedra",
+  "parent_level": "ccaa",
+  "parent_code": "12",
+  "population": 947000,
+  "area_km2": 4495.0
+ },
+ {
+  "level": "provincia",
+  "ine_code": "37",
+  "name": "Salamanca",
+  "parent_level": "ccaa",
+  "parent_code": "07",
+  "population": 327000,
+  "area_km2": 12350.0
+ },
+ {
+  "level": "provincia",
+  "ine_code": "38",
+  "name": "Santa Cruz de Tenerife",
+  "parent_level": "ccaa",
+  "parent_code": "05",
+  "population": 1072000,
+  "area_km2": 3381.0
+ },
+ {
+  "level": "provincia",
+  "ine_code": "39",
+  "name": "Cantabria",
+  "parent_level": "ccaa",
+  "parent_code": "06",
+  "population": 588000,
+  "area_km2": 5321.0
+ },
+ {
+  "level": "provincia",
+  "ine_code": "40",
+  "name": "Segovia",
+  "parent_level": "ccaa",
+  "parent_code": "07",
+  "population": 155000,
+  "area_km2": 6921.0
+ },
+ {
+  "level": "provincia",
+  "ine_code": "41",
+  "name": "Sevilla",
+  "parent_level": "ccaa",
+  "parent_code": "01",
+  "population": 1961000,
+  "area_km2": 14036.0
+ },
+ {
+  "level": "provincia",
+  "ine_code": "42",
+  "name": "Soria",
+  "parent_level": "ccaa",
+  "parent_code": "07",
+  "population": 89000,
+  "area_km2": 10306.0
+ },
+ {
+  "level": "provincia",
+  "ine_code": "43",
+  "name": "Tarragona",
+  "parent_level": "ccaa",
+  "parent_code": "09",
+  "population": 838000,
+  "area_km2": 6303.0
+ },
+ {
+  "level": "provincia",
+  "ine_code": "44",
+  "name": "Teruel",
+  "parent_level": "ccaa",
+  "parent_code": "02",
+  "population": 134000,
+  "area_km2": 14810.0
+ },
+ {
+  "level": "provincia",
+  "ine_code": "45",
+  "name": "Toledo",
+  "parent_level": "ccaa",
+  "parent_code": "08",
+  "population": 730000,
+  "area_km2": 15370.0
+ },
+ {
+  "level": "provincia",
+  "ine_code": "46",
+  "name": "València",
+  "parent_level": "ccaa",
+  "parent_code": "10",
+  "population": 2680000,
+  "area_km2": 10807.0
+ },
+ {
+  "level": "provincia",
+  "ine_code": "47",
+  "name": "Valladolid",
+  "parent_level": "ccaa",
+  "parent_code": "07",
+  "population": 521000,
+  "area_km2": 8110.0
+ },
+ {
+  "level": "provincia",
+  "ine_code": "48",
+  "name": "Bizkaia",
+  "parent_level": "ccaa",
+  "parent_code": "16",
+  "population": 1155000,
+  "area_km2": 2217.0
+ },
+ {
+  "level": "provincia",
+  "ine_code": "49",
+  "name": "Zamora",
+  "parent_level": "ccaa",
+  "parent_code": "07",
+  "population": 165000,
+  "area_km2": 10561.0
+ },
+ {
+  "level": "provincia",
+  "ine_code": "50",
+  "name": "Zaragoza",
+  "parent_level": "ccaa",
+  "parent_code": "02",
+  "population": 986000,
+  "area_km2": 17274.0
+ },
+ {
+  "level": "provincia",
+  "ine_code": "51",
+  "name": "Ceuta",
+  "parent_level": "ccaa",
+  "parent_code": "18",
+  "population": 83000,
+  "area_km2": 19.0
+ },
+ {
+  "level": "provincia",
+  "ine_code": "52",
+  "name": "Melilla",
+  "parent_level": "ccaa",
+  "parent_code": "19",
+  "population": 86000,
+  "area_km2": 13.0
+ }
+]

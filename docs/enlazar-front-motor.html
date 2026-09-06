@@ -1,0 +1,582 @@
+<title>Enlazar front y motor</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&display=swap">
+
+<style>
+  :root {
+    --ground:   #f4f7f6;
+    --surface:  #ffffff;
+    --sunken:   #eceff0;
+    --ink:      #12181a;
+    --muted:    #5c6c69;
+    --faint:    #8a9793;
+    --rule:     #dbe3e1;
+    --accent:   #0d6b60;
+    --accent-soft: #e2efec;
+    --signal:   #9c5209;
+    --signal-soft: #f7ecdf;
+    --code-bg:  #131b1a;
+    --code-ink: #dfe9e6;
+    --code-dim: #7f918d;
+
+    --f-ui:   "Archivo", "Helvetica Neue", Arial, sans-serif;
+    --f-body: "Source Serif 4", Georgia, "Times New Roman", serif;
+    --f-mono: "IBM Plex Mono", "SFMono-Regular", Consolas, monospace;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground:   #0d1312;
+      --surface:  #141c1b;
+      --sunken:   #101817;
+      --ink:      #e7edeb;
+      --muted:    #9aaba7;
+      --faint:    #71827e;
+      --rule:     #253130;
+      --accent:   #58bdad;
+      --accent-soft: #16302c;
+      --signal:   #dd9a4e;
+      --signal-soft: #2e2317;
+      --code-bg:  #0a100f;
+      --code-ink: #d6e2df;
+      --code-dim: #6e807c;
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --ground:   #0d1312;
+    --surface:  #141c1b;
+    --sunken:   #101817;
+    --ink:      #e7edeb;
+    --muted:    #9aaba7;
+    --faint:    #71827e;
+    --rule:     #253130;
+    --accent:   #58bdad;
+    --accent-soft: #16302c;
+    --signal:   #dd9a4e;
+    --signal-soft: #2e2317;
+    --code-bg:  #0a100f;
+    --code-ink: #d6e2df;
+    --code-dim: #6e807c;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--ground);
+    color: var(--ink);
+    font-family: var(--f-body);
+    font-size: 17px;
+    line-height: 1.62;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .wrap {
+    max-width: 46rem;
+    margin: 0 auto;
+    padding: 3.5rem 1.5rem 6rem;
+  }
+
+  /* ---------------------------------------------------------- cabecera -- */
+
+  header { margin-bottom: 3rem; }
+
+  .eyebrow {
+    font-family: var(--f-ui);
+    font-size: .72rem;
+    font-weight: 600;
+    letter-spacing: .14em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin: 0 0 .9rem;
+  }
+
+  h1 {
+    font-family: var(--f-ui);
+    font-weight: 700;
+    font-size: clamp(2rem, 6vw, 2.9rem);
+    line-height: 1.08;
+    letter-spacing: -.022em;
+    text-wrap: balance;
+    margin: 0 0 1rem;
+  }
+
+  .standfirst {
+    font-size: 1.14rem;
+    color: var(--muted);
+    margin: 0;
+    max-width: 34rem;
+  }
+
+  /* ------------------------------------------------------------ texto -- */
+
+  h2 {
+    font-family: var(--f-ui);
+    font-weight: 700;
+    font-size: 1.5rem;
+    letter-spacing: -.015em;
+    line-height: 1.2;
+    text-wrap: balance;
+    margin: 3.4rem 0 1rem;
+    padding-top: 1.6rem;
+    border-top: 1px solid var(--rule);
+  }
+
+  h3 {
+    font-family: var(--f-ui);
+    font-weight: 600;
+    font-size: 1.03rem;
+    letter-spacing: -.008em;
+    margin: 2rem 0 .5rem;
+  }
+
+  p { margin: 0 0 1rem; }
+
+  a { color: var(--accent); text-decoration-thickness: 1px; text-underline-offset: 2px; }
+  a:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 2px; }
+
+  strong { font-weight: 600; }
+
+  ul { margin: 0 0 1rem; padding-left: 1.2rem; }
+  li { margin-bottom: .35rem; }
+  li::marker { color: var(--faint); }
+
+  code {
+    font-family: var(--f-mono);
+    font-size: .855em;
+    background: var(--sunken);
+    border: 1px solid var(--rule);
+    border-radius: 3px;
+    padding: .08em .34em;
+    white-space: nowrap;
+  }
+
+  /* -------------------------------------------------------- de un vistazo -- */
+
+  .resumen {
+    background: var(--surface);
+    border: 1px solid var(--rule);
+    border-radius: 4px;
+    padding: 1.4rem 1.6rem;
+    margin-bottom: 1rem;
+  }
+
+  .resumen h3 { margin-top: 0; }
+
+  .rutas {
+    display: grid;
+    gap: 1rem;
+    grid-template-columns: 1fr;
+  }
+
+  @media (min-width: 40rem) {
+    .rutas { grid-template-columns: 1fr 1fr; }
+  }
+
+  .ruta {
+    background: var(--surface);
+    border: 1px solid var(--rule);
+    border-radius: 4px;
+    padding: 1.2rem 1.3rem;
+    display: flex;
+    flex-direction: column;
+    gap: .5rem;
+  }
+
+  .ruta .etiqueta {
+    font-family: var(--f-ui);
+    font-size: .68rem;
+    font-weight: 600;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+  }
+
+  .ruta.ahora { border-color: var(--accent); }
+  .ruta.ahora .etiqueta { color: var(--accent); }
+  .ruta.luego .etiqueta { color: var(--faint); }
+
+  .ruta .titulo {
+    font-family: var(--f-ui);
+    font-weight: 600;
+    font-size: 1.05rem;
+    line-height: 1.25;
+  }
+
+  .ruta p { margin: 0; font-size: .95rem; color: var(--muted); }
+
+  /* ------------------------------------------------------------ pasos -- */
+
+  .pasos { margin: 2rem 0 0; padding: 0; list-style: none; }
+
+  .paso {
+    position: relative;
+    padding-left: 3.2rem;
+    padding-bottom: 2.2rem;
+  }
+
+  .paso:last-child { padding-bottom: 0; }
+
+  /* La línea que encadena los pasos: el orden importa de verdad — el 4 no
+     funciona si el 2 no se hizo. */
+  .paso::before {
+    content: "";
+    position: absolute;
+    left: 1.06rem;
+    top: 2.2rem;
+    bottom: 0;
+    width: 1px;
+    background: var(--rule);
+  }
+
+  .paso:last-child::before { display: none; }
+
+  .paso .n {
+    position: absolute;
+    left: 0;
+    top: .1rem;
+    width: 2.15rem;
+    height: 2.15rem;
+    border-radius: 50%;
+    background: var(--accent-soft);
+    color: var(--accent);
+    border: 1px solid var(--accent);
+    display: grid;
+    place-items: center;
+    font-family: var(--f-ui);
+    font-weight: 700;
+    font-size: .92rem;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .paso h3 { margin-top: .25rem; }
+
+  /* ------------------------------------------------------------ código -- */
+
+  .cmd {
+    background: var(--code-bg);
+    border-radius: 4px;
+    margin: .9rem 0 1rem;
+    overflow: hidden;
+  }
+
+  .cmd .barra {
+    font-family: var(--f-ui);
+    font-size: .66rem;
+    font-weight: 600;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+    color: var(--code-dim);
+    padding: .55rem .95rem .1rem;
+  }
+
+  .cmd pre {
+    margin: 0;
+    padding: .3rem .95rem 1rem;
+    overflow-x: auto;
+    font-family: var(--f-mono);
+    font-size: .82rem;
+    line-height: 1.75;
+    color: var(--code-ink);
+  }
+
+  .cmd .c { color: var(--code-dim); }
+  .cmd .p { color: #6fb9ab; user-select: none; }
+
+  /* -------------------------------------------------------------- aviso -- */
+
+  .aviso {
+    border-left: 3px solid var(--signal);
+    background: var(--signal-soft);
+    padding: 1rem 1.2rem;
+    margin: 1.4rem 0;
+    border-radius: 0 4px 4px 0;
+    font-size: .96rem;
+  }
+
+  .aviso p:last-child { margin-bottom: 0; }
+
+  .aviso .cabeza {
+    font-family: var(--f-ui);
+    font-weight: 600;
+    font-size: .78rem;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: var(--signal);
+    display: block;
+    margin-bottom: .35rem;
+  }
+
+  /* -------------------------------------------------------------- tabla -- */
+
+  .tabla-envoltorio { overflow-x: auto; margin: 1.2rem 0; }
+
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    font-family: var(--f-ui);
+    font-size: .88rem;
+  }
+
+  th, td {
+    text-align: left;
+    padding: .6rem .8rem;
+    border-bottom: 1px solid var(--rule);
+    vertical-align: top;
+  }
+
+  th {
+    font-weight: 600;
+    font-size: .68rem;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: var(--faint);
+    border-bottom-color: var(--ink);
+  }
+
+  td code { white-space: nowrap; }
+
+  /* ------------------------------------------------------------- final -- */
+
+  footer {
+    margin-top: 4rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid var(--rule);
+    font-family: var(--f-ui);
+    font-size: .85rem;
+    color: var(--faint);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { animation: none !important; transition: none !important; }
+  }
+</style>
+
+<div class="wrap">
+
+  <header>
+    <p class="eyebrow">PowerGIS · integración</p>
+    <h1>Enlazar el front real con el motor</h1>
+    <p class="standfirst">El formulario que ya tienes publicado, hablando con el motor que tienes levantado. Qué se puede hacer hoy y qué exige desplegar primero.</p>
+  </header>
+
+  <h2 style="border-top:none; padding-top:0; margin-top:0;">Lo primero: lo que pides no se puede tal cual</h2>
+
+  <p><strong>powergis.es está en internet; <code>localhost:8000</code> está en tu portátil.</strong> Cuando el PHP de tu servidor ejecuta <code>wp_remote_post('http://localhost:8000/v1/reports')</code>, «localhost» es <em>el propio servidor</em>. No hay ninguna configuración de WordPress que arregle eso: son dos máquinas distintas y una no ve a la otra.</p>
+
+  <p>Podría abrirse un túnel (ngrok, cloudflared) para exponer tu portátil. <strong>No te lo recomiendo</strong>, y no es por prudencia genérica: el secreto HMAC del entorno de pruebas está escrito en claro en <code>docker-compose.dev.yml</code>, dentro del repositorio. Un túnel publicaría en internet un motor cuya única autenticación es una clave que cualquiera con acceso al código ya conoce.</p>
+
+  <p>Quedan dos caminos de verdad. Los dos sirven, para cosas distintas.</p>
+
+  <div class="rutas">
+    <div class="ruta ahora">
+      <span class="etiqueta">Hoy · 15 minutos</span>
+      <span class="titulo">Bajar el front al motor</span>
+      <p>El formulario real, el de producción, corriendo en <code>localhost:8080</code> contra tu motor local. Es una prueba de integración completa: el mismo payload, el mismo contrato, la misma firma.</p>
+    </div>
+    <div class="ruta luego">
+      <span class="etiqueta">Cuando toque desplegar</span>
+      <span class="titulo">Subir el motor al front</span>
+      <p>El motor en la KVM2, con TLS y su propio secreto. Es el único enlace que sirve para powergis.es de verdad. Está en el runbook de fases 0–3.</p>
+    </div>
+  </div>
+
+  <p style="margin-top:1.5rem;">Lo que sigue es el primero, paso a paso. El segundo lo resumo al final, porque tiene una condición previa que no conviene saltarse.</p>
+
+  <h2>Camino A · el front real contra el motor local</h2>
+
+  <p>La buena noticia es que <strong>no hay que tocar el formulario</strong>. Tu <code>shortcodes.php</code> hace <code>fetch()</code> contra <code>rest_url('saas/v1/projects/create')</code> con la cabecera <code>X-WP-Nonce</code>, y el conector registra exactamente esa ruta y pide exactamente ese nonce. El front no sabe ni tiene que saber que detrás hay otro plugin: el contrato entre ellos es la ruta REST, y coincide.</p>
+
+  <ol class="pasos">
+
+    <li class="paso">
+      <span class="n">1</span>
+      <h3>Completa el plugin en el repositorio</h3>
+      <p>En <code>wordpress/saas-studies/</code> están los tres ficheros que cambian —los que me mandaste en agosto—, pero falta el resto del plugin y ese lo tienes tú. Cópialo desde <code>SAAS_STUDY/SAAS_studies/</code> de tus Descargas:</p>
+      <div class="cmd">
+        <div class="barra">PowerShell · desde la raíz del repositorio</div>
+<pre><span class="c"># Ajusta la ruta de origen a donde lo tengas</span>
+<span class="p">$</span>origen = <span class="c">"$HOME\Downloads\SAAS_STUDY\SAAS_studies"</span>
+
+Copy-Item <span class="c">"$origen\saas-studies.php"</span>          wordpress\saas-studies\
+Copy-Item <span class="c">"$origen\uninstall.php"</span>             wordpress\saas-studies\
+Copy-Item <span class="c">"$origen\includes\helpers.php"</span>      wordpress\saas-studies\includes\
+Copy-Item <span class="c">"$origen\includes\roles.php"</span>        wordpress\saas-studies\includes\
+Copy-Item <span class="c">"$origen\includes\taxonomies.php"</span>   wordpress\saas-studies\includes\
+Copy-Item <span class="c">"$origen\data\*"</span>                    wordpress\saas-studies\data\ -Recurse</pre>
+      </div>
+      <p>El <code>data/</code> pesa cerca de 1&nbsp;MB y es el que alimenta los tres desplegables del formulario: <code>arbol.json</code> (ubicación), <code>Estructura_CNAE2025.csv</code> (actividad) y <code>paises.csv</code> (nacionalidad). Sin él el formulario carga pero se queda mudo.</p>
+
+      <div class="aviso">
+        <span class="cabeza">No copies el shortcodes.php de esa carpeta</span>
+        <p>El de tus Descargas es de febrero: manda un payload plano de cinco campos, no el anidado que envía tu web hoy. Probar con esa copia sería probar un contrato que ya no existe. Por eso el repositorio trae los tres de agosto, y por eso la lista de arriba no los incluye.</p>
+      </div>
+    </li>
+
+    <li class="paso">
+      <span class="n">2</span>
+      <h3>Levanta todo de cero</h3>
+      <p>El <code>docker-compose.dev.yml</code> ya monta <code>wordpress/saas-studies</code> dentro del contenedor, y <code>setup-wordpress.sh</code> activa el plugin y crea las páginas. Un solo comando encadena borrado, arranque, migraciones, semilla e instalación de WordPress:</p>
+      <div class="cmd">
+        <div class="barra">PowerShell</div>
+<pre><span class="p">.\</span>pg reset</pre>
+      </div>
+      <p>Tarda unos minutos porque reconstruye la imagen. Al terminar imprime las URLs y las credenciales.</p>
+      <p>Si prefieres no perder los datos que ya tengas cargados, basta con <code>.\pg dev</code> seguido de <code>.\pg setup</code>; el efecto sobre el plugin es el mismo.</p>
+    </li>
+
+    <li class="paso">
+      <span class="n">3</span>
+      <h3>Comprueba que el plugin se activó</h3>
+      <p>La activación es condicional: el script se salta el plugin si no encuentra <code>saas-studies.php</code>, y lo dice. Busca esta línea en la salida:</p>
+      <div class="cmd">
+        <div class="barra">Salida esperada</div>
+<pre>· Activando el front (SaaS Studies)…
+Plugin 'saas-studies' activated.
+  · /crear-proyecto creada
+  · /crear-proyecto-geolocalizado creada</pre>
+      </div>
+      <p>Si en su lugar aparece <code>SaaS Studies no está completo: se omite</code>, falta algún fichero del paso&nbsp;1. Vuelve, cópialo y repite <code>.\pg setup</code> —no hace falta reiniciar nada más.</p>
+    </li>
+
+    <li class="paso">
+      <span class="n">4</span>
+      <h3>Verifica que no hay choque de rutas</h3>
+      <p>Este es el paso que no se puede saltar, y lo explico entero en la sección siguiente. De momento, el comando:</p>
+      <div class="cmd">
+        <div class="barra">PowerShell</div>
+<pre><span class="p">.\</span>pg rutas</pre>
+      </div>
+      <div class="tabla-envoltorio">
+        <table>
+          <thead>
+            <tr><th>Salida</th><th>Qué significa</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>1 manejador(es)</code> en todas</td>
+              <td>Correcto. El guardia funcionó: el conector lleva las rutas, tu plugin lleva el formulario.</td>
+            </tr>
+            <tr>
+              <td>Alguna con <code>OJO: CHOQUE</code></td>
+              <td>Los dos plugins registraron la misma ruta. Para y avísame antes de seguir: lo que responda a partir de ahí es aleatorio.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </li>
+
+    <li class="paso">
+      <span class="n">5</span>
+      <h3>Rellena el formulario como lo haría un cliente</h3>
+      <p>Entra con el usuario normal, no con el administrador —así compruebas de paso los permisos:</p>
+      <div class="tabla-envoltorio">
+        <table>
+          <tbody>
+            <tr><td>Formulario</td><td><code>http://localhost:8080/crear-proyecto/</code></td></tr>
+            <tr><td>Usuario</td><td><code>cliente</code> / <code>cliente</code></td></tr>
+            <tr><td>Sus proyectos</td><td><code>http://localhost:8080/mis-proyectos/</code></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>Para la primera prueba elige un ámbito que el motor tenga cargado: <strong>provincia de Madrid</strong> o <strong>Comunidad de Madrid</strong>. La semilla <code>--demo</code> trae datos sintéticos de esa zona; si eliges un municipio de Soria el informe saldrá vacío y parecerá un fallo del circuito cuando sólo es falta de datos.</p>
+    </li>
+
+    <li class="paso">
+      <span class="n">6</span>
+      <h3>Sigue el recorrido de la petición</h3>
+      <p>Con los logs abiertos en otra ventana antes de pulsar «enviar», ves las cuatro etapas en vivo:</p>
+      <div class="cmd">
+        <div class="barra">PowerShell · ventana aparte</div>
+<pre><span class="p">.\</span>pg logs</pre>
+      </div>
+      <div class="tabla-envoltorio">
+        <table>
+          <thead>
+            <tr><th>Dónde</th><th>Qué pasa</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>Navegador</td><td>El formulario hace <code>POST</code> a <code>saas/v1/projects/create</code> con el nonce.</td></tr>
+            <tr><td>WordPress</td><td>El conector traduce el payload anidado con <code>Form_Mapper</code>, resuelve «Comunidad de Madrid» a su código INE con <code>Geo_Resolver</code>, firma y llama al motor.</td></tr>
+            <tr><td>API</td><td><code>POST /v1/reports</code> verifica la firma, crea el proyecto y encola el trabajo. Responde en milisegundos.</td></tr>
+            <tr><td>Worker</td><td>Construye el informe básico y devuelve el resultado al <code>callback</code> de WordPress.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>Cuando el proyecto aparezca en «Mis proyectos» con el informe básico, el circuito está cerrado de punta a punta. Con <code>POWERGIS_DEV_MODE</code> activo puedes además simular el pago desde el administrador y ver la promoción a avanzado sin Stripe.</p>
+
+      <div class="aviso">
+        <span class="cabeza">Si el informe no llega nunca</span>
+        <p>El worker conserva el código con el que arrancó: <code>--reload</code> sólo afecta a la API. Después de cualquier cambio en <code>engine/src</code>, reinícialo —o levanta con <code>.\pg reset</code>, que ya lo hace.</p>
+        <div class="cmd" style="margin-bottom:0;">
+          <div class="barra">PowerShell</div>
+<pre>docker compose -f docker-compose.dev.yml restart worker</pre>
+        </div>
+      </div>
+    </li>
+
+  </ol>
+
+  <h2>El choque de rutas, y por qué lleva guardia</h2>
+
+  <p>Tu plugin y el conector registran <strong>las mismas tres rutas</strong>. No es un desacuerdo de diseño, es un accidente: cada uno se escribió sin saber del otro.</p>
+
+  <div class="tabla-envoltorio">
+    <table>
+      <thead>
+        <tr><th>Ruta</th><th>SaaS Studies</th><th>Conector</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><code>saas/v1/projects/create</code></td><td><code>saas_rest_create_project</code></td><td><code>REST_Projects::create</code></td></tr>
+        <tr><td><code>saas/v1/projects/save-draft</code></td><td><code>saas_rest_save_draft</code></td><td><code>REST_Projects::save_draft</code></td></tr>
+        <tr><td><code>saas/v1/projects/callback</code></td><td><code>saas_rest_project_callback</code></td><td><code>REST_Callback::handle</code></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>WordPress no protesta ante esto. Apila los dos manejadores y despacha el primero que coincida en método, así que <strong>gana el que se cargue antes</strong> —es decir, el orden alfabético de la carpeta de plugins. Un detalle invisible decidiendo qué código atiende tus formularios.</p>
+
+  <p>La solución que llevan los ficheros del repositorio es un guardia de tres líneas al principio de <code>rest-projects.php</code> y dentro de <code>saas_register_project_cpt()</code>:</p>
+
+  <div class="cmd">
+    <div class="barra">wordpress/saas-studies/includes/rest-projects.php</div>
+<pre><span class="p">if</span> (class_exists(<span class="c">'\PowerGIS\REST_Projects'</span>)) {
+    <span class="p">return</span>;
+}</pre>
+  </div>
+
+  <p>Con el conector activo, tu plugin se aparta de las rutas REST y del CPT, y <strong>conserva todo lo demás</strong>: el shortcode, las taxonomías, los roles, los datos. Desactiva el conector y vuelve a hacerse cargo él solo, sin tocar nada. Es reversible por diseño, precisamente porque no quiero que una decisión de integración te bloquee el sitio.</p>
+
+  <p>El motivo de que gane el conector y no al revés: es el que tiene <code>Form_Mapper</code> —que traduce tu payload anidado al contrato del motor— y <code>Geo_Resolver</code>, que convierte «Comunidad de Madrid» en el código INE&nbsp;13. Eso último era el <code>TODO</code> que quedaba anotado en tu propio fichero.</p>
+
+  <h2>Camino B · el enlace de verdad</h2>
+
+  <p>Para que powergis.es hable con el motor, el motor tiene que estar en un sitio al que powergis.es llegue. El runbook de fases&nbsp;0–3 lo cubre entero; el resumen del enlace en sí es corto:</p>
+
+  <ul>
+    <li>Despliega el motor en la KVM2 con <code>docker-compose.yml</code> (el de producción, con Traefik y TLS), sobre un subdominio propio: <code>motor.powergis.es</code>.</li>
+    <li>Genera un secreto HMAC nuevo y ponlo en las variables de entorno del VPS y en el <code>wp-config.php</code> de powergis.es. En ningún otro sitio: ni en la tabla de opciones, ni en git.</li>
+    <li>En ese <code>wp-config.php</code>: <code>POWERGIS_ENGINE_URL</code> apuntando a <code>https://motor.powergis.es</code>, <code>POWERGIS_CALLBACK_URL</code> a <code>https://powergis.es/wp-json/saas/v1/projects/callback</code>, y <code>ALLOWED_ORIGINS</code> del motor con el dominio del sitio.</li>
+    <li><code>POWERGIS_DEV_MODE</code> no se define. El simulador de pago no puede existir en producción: promocionar a avanzado sólo lo hace el webhook de Stripe.</li>
+  </ul>
+
+  <div class="aviso">
+    <span class="cabeza">Antes de nada, rota el secreto</span>
+    <p>El valor <code>guachineatata2026kimbapaquesuene</code> ha circulado por el repositorio y por nuestras conversaciones. Está comprometido: quien lo tenga puede firmar peticiones válidas contra el motor y crear informes a tu costa. Genérate uno nuevo y largo antes de que el motor sea alcanzable desde internet, no después.</p>
+  </div>
+
+  <h2>Lo que queda pendiente</h2>
+
+  <p>Dos cosas que no bloquean esta prueba pero conviene que estén en tu lista:</p>
+
+  <ul>
+    <li>El almacén sólo tiene la semilla de demostración. Para datos reales necesitas <code>.\pg almacen</code>, que descarga del INE los ~8.100 municipios con su padrón. Requiere red hacia el INE —desde tu máquina la tienes.</li>
+    <li>Un 29&nbsp;% del peso del Match&nbsp;% no se puede medir todavía: faltan los indicadores de nivel socioeconómico, estructura familiar y postgrado. El motor los descarta en vez de inventárselos, y ahora avisa cuando lo hace, pero la decisión sigue abierta: derivarlos o quitar esas preguntas del formulario.</li>
+  </ul>
+
+  <footer>
+    PowerGIS · guía de integración del front · agosto de 2026
+  </footer>
+
+</div>

@@ -1,0 +1,539 @@
+<title>Primer despliegue</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&display=swap">
+
+<style>
+  :root {
+    --ground:#f4f7f6; --surface:#ffffff; --sunken:#eceff0;
+    --ink:#12181a; --muted:#5c6c69; --faint:#8a9793; --rule:#dbe3e1;
+    --accent:#0d6b60; --accent-soft:#e2efec;
+    --local:#2b5f8a; --local-soft:#e3edf5;
+    --signal:#9c5209; --signal-soft:#f7ecdf;
+    --danger:#9c1f1f; --danger-soft:#f8e6e4;
+    --code-bg:#131b1a; --code-ink:#dfe9e6; --code-dim:#7f918d;
+    --f-ui:"Archivo","Helvetica Neue",Arial,sans-serif;
+    --f-body:"Source Serif 4",Georgia,"Times New Roman",serif;
+    --f-mono:"IBM Plex Mono","SFMono-Regular",Consolas,monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground:#0d1312; --surface:#141c1b; --sunken:#101817;
+      --ink:#e7edeb; --muted:#9aaba7; --faint:#71827e; --rule:#253130;
+      --accent:#58bdad; --accent-soft:#16302c;
+      --local:#7fb3dd; --local-soft:#16242f;
+      --signal:#dd9a4e; --signal-soft:#2e2317;
+      --danger:#e08882; --danger-soft:#2e1a19;
+      --code-bg:#0a100f; --code-ink:#d6e2df; --code-dim:#6e807c;
+    }
+  }
+  :root[data-theme="dark"] {
+    --ground:#0d1312; --surface:#141c1b; --sunken:#101817;
+    --ink:#e7edeb; --muted:#9aaba7; --faint:#71827e; --rule:#253130;
+    --accent:#58bdad; --accent-soft:#16302c;
+    --local:#7fb3dd; --local-soft:#16242f;
+    --signal:#dd9a4e; --signal-soft:#2e2317;
+    --danger:#e08882; --danger-soft:#2e1a19;
+    --code-bg:#0a100f; --code-ink:#d6e2df; --code-dim:#6e807c;
+  }
+
+  * { box-sizing:border-box; }
+  body {
+    margin:0; background:var(--ground); color:var(--ink);
+    font-family:var(--f-body); font-size:17px; line-height:1.62;
+    -webkit-font-smoothing:antialiased;
+  }
+  .wrap { max-width:47rem; margin:0 auto; padding:3.5rem 1.5rem 6rem; }
+
+  header { margin-bottom:2rem; }
+  .eyebrow {
+    font-family:var(--f-ui); font-size:.72rem; font-weight:600;
+    letter-spacing:.14em; text-transform:uppercase; color:var(--accent); margin:0 0 .9rem;
+  }
+  h1 {
+    font-family:var(--f-ui); font-weight:700; font-size:clamp(2rem,6vw,2.9rem);
+    line-height:1.08; letter-spacing:-.022em; text-wrap:balance; margin:0 0 1rem;
+  }
+  .standfirst { font-size:1.14rem; color:var(--muted); margin:0; max-width:35rem; }
+
+  h2 {
+    font-family:var(--f-ui); font-weight:700; font-size:1.5rem;
+    letter-spacing:-.015em; line-height:1.2; text-wrap:balance;
+    margin:3.4rem 0 1rem; padding-top:1.7rem; border-top:2px solid var(--ink);
+  }
+  h3 { font-family:var(--f-ui); font-weight:600; font-size:1.04rem; letter-spacing:-.008em; margin:0 0 .5rem; }
+
+  p { margin:0 0 1rem; }
+  a { color:var(--accent); text-underline-offset:2px; }
+  a:focus-visible { outline:2px solid var(--accent); outline-offset:3px; border-radius:2px; }
+  strong { font-weight:600; }
+  ul { margin:0 0 1rem; padding-left:1.2rem; }
+  li { margin-bottom:.35rem; }
+  li::marker { color:var(--faint); }
+
+  code {
+    font-family:var(--f-mono); font-size:.855em; background:var(--sunken);
+    border:1px solid var(--rule); border-radius:3px; padding:.08em .34em; white-space:nowrap;
+  }
+
+  /* --- ficha de la máquina --- */
+  .ficha {
+    display:grid; grid-template-columns:1fr; gap:0;
+    background:var(--surface); border:1px solid var(--rule); border-radius:4px;
+    overflow:hidden; margin:1.5rem 0 0;
+  }
+  @media (min-width:34rem) { .ficha { grid-template-columns:1fr 1fr; } }
+  .ficha div {
+    padding:.7rem 1rem; border-bottom:1px solid var(--rule);
+    display:flex; justify-content:space-between; gap:1rem; align-items:baseline;
+    font-family:var(--f-ui); font-size:.87rem;
+  }
+  @media (min-width:34rem) {
+    .ficha div:nth-last-child(-n+2) { border-bottom:none; }
+    .ficha div:nth-child(odd) { border-right:1px solid var(--rule); }
+  }
+  @media (max-width:33.99rem) { .ficha div:last-child { border-bottom:none; } }
+  .ficha dt { color:var(--muted); }
+  .ficha dd { margin:0; font-weight:600; font-variant-numeric:tabular-nums; }
+
+  /* --- pasos --- */
+  .pasos { margin:1.6rem 0 0; padding:0; list-style:none; }
+  .paso { position:relative; padding-left:3.3rem; padding-bottom:2.4rem; }
+  .paso:last-child { padding-bottom:0; }
+  .paso::before {
+    content:""; position:absolute; left:1.09rem; top:2.25rem; bottom:0;
+    width:1px; background:var(--rule);
+  }
+  .paso:last-child::before { display:none; }
+  .paso .n {
+    position:absolute; left:0; top:.08rem; width:2.2rem; height:2.2rem;
+    border-radius:50%; background:var(--accent-soft); color:var(--accent);
+    border:1px solid var(--accent); display:grid; place-items:center;
+    font-family:var(--f-ui); font-weight:700; font-size:.9rem;
+    font-variant-numeric:tabular-nums;
+  }
+
+  .check {
+    display:flex; gap:.7rem; align-items:flex-start; background:var(--surface);
+    border:1px solid var(--rule); border-left:3px solid var(--accent);
+    border-radius:0 4px 4px 0; padding:.75rem 1rem; margin:1rem 0 0; font-size:.94rem;
+  }
+  .check .k {
+    font-family:var(--f-ui); font-size:.66rem; font-weight:700; letter-spacing:.11em;
+    text-transform:uppercase; color:var(--accent); padding-top:.28rem; white-space:nowrap;
+  }
+  .check p { margin:0; }
+  .check p + p { margin-top:.4rem; }
+
+  /* --- bloques de comando, etiquetados por DÓNDE se ejecutan --- */
+  .cmd { background:var(--code-bg); border-radius:4px; margin:.9rem 0 1rem; overflow:hidden; }
+  .cmd .barra {
+    font-family:var(--f-ui); font-size:.66rem; font-weight:600; letter-spacing:.1em;
+    text-transform:uppercase; padding:.5rem .95rem .45rem;
+    display:flex; align-items:center; gap:.5rem;
+    border-bottom:1px solid rgba(255,255,255,.07); color:var(--code-dim);
+  }
+  .cmd .donde {
+    border-radius:3px; padding:.12rem .45rem; font-weight:700; letter-spacing:.08em;
+  }
+  .cmd .donde.win { background:var(--local-soft); color:var(--local); }
+  .cmd .donde.vps { background:var(--accent-soft); color:var(--accent); }
+  .cmd .donde.sal { background:var(--sunken); color:var(--muted); }
+  .cmd pre {
+    margin:0; padding:.75rem .95rem 1rem; overflow-x:auto; font-family:var(--f-mono);
+    font-size:.815rem; line-height:1.72; color:var(--code-ink);
+  }
+  .cmd .c { color:var(--code-dim); }
+  .cmd .p { color:#6fb9ab; user-select:none; }
+
+  .aviso {
+    border-left:3px solid var(--signal); background:var(--signal-soft);
+    padding:1rem 1.2rem; margin:1.3rem 0; border-radius:0 4px 4px 0; font-size:.96rem;
+  }
+  .aviso.rojo { border-left-color:var(--danger); background:var(--danger-soft); }
+  .aviso p:last-child { margin-bottom:0; }
+  .aviso .cabeza {
+    font-family:var(--f-ui); font-weight:700; font-size:.72rem; letter-spacing:.11em;
+    text-transform:uppercase; color:var(--signal); display:block; margin-bottom:.4rem;
+  }
+  .aviso.rojo .cabeza { color:var(--danger); }
+
+  .tabla-envoltorio { overflow-x:auto; margin:1.2rem 0; }
+  table { border-collapse:collapse; width:100%; font-family:var(--f-ui); font-size:.87rem; }
+  th, td { text-align:left; padding:.6rem .8rem; border-bottom:1px solid var(--rule); vertical-align:top; }
+  th {
+    font-weight:600; font-size:.66rem; letter-spacing:.1em; text-transform:uppercase;
+    color:var(--faint); border-bottom-color:var(--ink);
+  }
+  td code { white-space:nowrap; }
+  tbody tr:last-child td { border-bottom:none; }
+
+  footer {
+    margin-top:4rem; padding-top:1.5rem; border-top:1px solid var(--rule);
+    font-family:var(--f-ui); font-size:.85rem; color:var(--faint);
+  }
+
+  @media (prefers-reduced-motion: reduce) { * { animation:none !important; transition:none !important; } }
+</style>
+
+<div class="wrap">
+
+  <header>
+    <p class="eyebrow">PowerGIS · sesión de hoy</p>
+    <h1>Poner el motor en tu VPS</h1>
+    <p class="standfirst">Siete pasos, con el comando exacto y lo que tiene que salir en cada uno. Al final el motor responde en <code>https://motor.powergis.es</code>.</p>
+  </header>
+
+  <dl class="ficha">
+    <div><dt>Servidor</dt><dd>KVM 2 · París</dd></div>
+    <div><dt>IP</dt><dd>72.62.178.78</dd></div>
+    <div><dt>Sistema</dt><dd>Ubuntu 26.04 LTS</dd></div>
+    <div><dt>Recursos</dt><dd>2 vCPU · 8 GB · 100 GB</dd></div>
+    <div><dt>Perfil del stack</dt><dd><code>make up</code> (kvm2)</dd></div>
+    <div><dt>Usuario en el VPS</dt><dd>oscar</dd></div>
+    <div><dt>Carpeta del código</dt><dd><code>~/powergis</code></dd></div>
+    <div><dt>WordPress</dt><dd>se queda donde está</dd></div>
+  </dl>
+
+  <p style="margin-top:1.5rem;">Cada bloque de comandos lleva una etiqueta que dice <strong>dónde</strong> se ejecuta: azul para tu Windows, verde para el VPS. Es la confusión número uno en un despliegue, así que mírala antes de pegar nada.</p>
+
+  <p>Los pasos 1 a 4 no dependen del DNS. El 5 sí, y el 7 no puede hacerse sin él.</p>
+
+  <ol class="pasos">
+
+    <!-- 1 -->
+    <li class="paso">
+      <span class="n">1</span>
+      <h3>La contraseña de root y tu clave SSH</h3>
+
+      <p>La pantalla <em>«Secure your VPS access»</em> te pide dos cosas, y las dos importan por motivos distintos.</p>
+
+      <h4 style="font-family:var(--f-ui);font-weight:600;font-size:.95rem;margin:1.4rem 0 .4rem;">La contraseña: pulsa <em>Generate</em></h4>
+
+      <div class="aviso rojo">
+        <span class="cabeza">Una contraseña tipo «VPSgis@54321» no aguanta</span>
+        <p>Cumple las reglas del formulario, pero es exactamente la forma que prueban primero los diccionarios: palabra del proyecto, símbolo, secuencia numérica. Un VPS con IP pública empieza a recibir intentos de acceso por SSH a los pocos minutos de existir, y aquí el usuario es <code>root</code>.</p>
+        <p>Usa el botón <strong>Generate</strong> del propio formulario y guarda el resultado en tu gestor de contraseñas. No hace falta que te la aprendas: en cuanto termines el paso 2 no se usa para entrar, sólo queda como respaldo para la consola web del panel.</p>
+      </div>
+
+      <h4 style="font-family:var(--f-ui);font-weight:600;font-size:.95rem;margin:1.4rem 0 .4rem;">La clave: pégala en esa misma pantalla</h4>
+
+      <p>Donde dice <em>«optionally add an SSH key»</em>. No es opcional para lo que vas a hacer — el script del paso 2 se niega a desactivar las contraseñas si no encuentra una clave instalada, precisamente para que no te quedes fuera.</p>
+
+      <p>Si aún no tienes par de claves, créalo. Cuando pregunte por una frase de paso puedes dejarla vacía pulsando Enter.</p>
+      <div class="cmd">
+        <div class="barra"><span class="donde win">Tu Windows</span> PowerShell</div>
+<pre>ssh-keygen -t ed25519 -C powergis</pre>
+      </div>
+      <p>Ahora muestra la clave <strong>pública</strong> y cópiala entera:</p>
+      <div class="cmd">
+        <div class="barra"><span class="donde win">Tu Windows</span> PowerShell</div>
+<pre>Get-Content $env:USERPROFILE\.ssh\id_ed25519.pub</pre>
+      </div>
+      <div class="cmd">
+        <div class="barra"><span class="donde sal">Salida</span> una sola línea</div>
+<pre>ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAI... powergis</pre>
+      </div>
+      <p>Pega esa línea en el campo de la clave SSH. Si ya cerraste esa pantalla, el sitio equivalente es <strong>tu VPS → Clave SSH → Administrar → Añadir clave</strong>.</p>
+      <div class="aviso">
+        <span class="cabeza">La pública, nunca la privada</span>
+        <p>Se sube <code>id_ed25519.pub</code>, con extensión <code>.pub</code>. El fichero sin extensión es la clave privada y no sale de tu máquina jamás.</p>
+      </div>
+
+      <div class="check">
+        <span class="k">Listón</span>
+        <p><code>ssh root@72.62.178.78</code> entra <strong>sin pedirte contraseña</strong>.</p>
+        <p>Si te la pide, la clave no quedó instalada. Puedes entrar con la contraseña y seguir igualmente al paso 2 — el script te dirá que falta la clave y parará antes de desactivar nada, que es justo lo que tiene que hacer.</p>
+      </div>
+    </li>
+
+    <!-- 2 -->
+    <li class="paso">
+      <span class="n">2</span>
+      <h3>Prepara la máquina</h3>
+      <p>Sube el script y ejecútalo. Deja usuario sin privilegios, SSH sólo por clave, cortafuegos, swap, Docker y el reloj sincronizado.</p>
+      <div class="cmd">
+        <div class="barra"><span class="donde win">Tu Windows</span> PowerShell</div>
+<pre>cd C:\Users\oscar\Downloads\powergis-backend\powergis
+scp infra\hostinger\preparar-vps.sh root@72.62.178.78:/root/
+ssh root@72.62.178.78</pre>
+      </div>
+      <div class="cmd">
+        <div class="barra"><span class="donde vps">En el VPS</span> como root</div>
+<pre><span class="c"># tu usuario administrador se llama oscar, no el que asume por defecto</span>
+USUARIO=oscar bash /root/preparar-vps.sh</pre>
+      </div>
+      <p>Tarda un par de minutos. Verás secciones con <code>ok</code> en verde. Dos merecen atención:</p>
+      <div class="cmd">
+        <div class="barra"><span class="donde sal">Salida</span> lo que importa</div>
+<pre>== Docker
+   ok  instalado con el script oficial
+       <span class="c">(o bien: "el script oficial no soportó esta versión</span>
+       <span class="c"> de Ubuntu; voy por el repositorio" — también vale)</span>
+
+== SSH
+   ok  1 clave(s) instaladas · root y contraseñas desactivados</pre>
+      </div>
+      <div class="aviso">
+        <span class="cabeza">Ubuntu 26.04 es reciente</span>
+        <p>El instalador oficial de Docker tarda meses en reconocer cada versión nueva de Ubuntu. Si aborta, el script instala desde el repositorio de Docker y, si tampoco existe carpeta para esta versión, usa la del LTS anterior. Los paquetes son los mismos; lo que falta es la carpeta, no el software.</p>
+      </div>
+      <div class="aviso rojo">
+        <span class="cabeza">No cierres esta ventana todavía</span>
+        <p>El script acaba de desactivar el acceso por contraseña. Si algo salió mal con la clave, <strong>esta sesión es tu única forma de arreglarlo</strong> — y la consola web de Hostinger, la segunda.</p>
+      </div>
+      <div class="check">
+        <span class="k">Listón</span>
+        <p>La línea de SSH dice <code>root y contraseñas desactivados</code>.</p>
+        <p>Si en su lugar sale <code>NO voy a desactivar las contraseñas</code>, es que no encontró ninguna clave. No es un fallo: es el seguro para que no te quedes fuera. Todo lo demás —cortafuegos, swap, Docker, reloj— sí quedó hecho; instala la clave y vuelve a lanzar el script, que es idempotente.</p>
+      </div>
+    </li>
+
+    <!-- 3 -->
+    <li class="paso">
+      <span class="n">3</span>
+      <h3>Comprueba lo que hizo, desde otra ventana</h3>
+      <p>Abre una <strong>segunda</strong> ventana de PowerShell, sin cerrar la primera.</p>
+      <div class="cmd">
+        <div class="barra"><span class="donde win">Tu Windows</span> ventana nueva</div>
+<pre>ssh oscar@72.62.178.78</pre>
+      </div>
+      <div class="cmd">
+        <div class="barra"><span class="donde vps">En el VPS</span> como oscar</div>
+<pre>sshd -T | grep -E <span class="c">'permitrootlogin|passwordauthentication'</span>
+ufw status
+swapon --show
+timedatectl
+docker run --rm hello-world</pre>
+      </div>
+      <div class="tabla-envoltorio">
+        <table>
+          <thead><tr><th>Comando</th><th>Tiene que decir</th></tr></thead>
+          <tbody>
+            <tr><td><code>sshd -T</code></td><td><code>permitrootlogin no</code> y <code>passwordauthentication no</code></td></tr>
+            <tr><td><code>ufw status</code></td><td><code>Status: active</code>, con 22, 80 y 443. Nada más.</td></tr>
+            <tr><td><code>swapon --show</code></td><td>una línea con <code>2G</code></td></tr>
+            <tr><td><code>timedatectl</code></td><td><code>System clock synchronized: yes</code></td></tr>
+            <tr><td><code>docker run</code></td><td><code>Hello from Docker!</code></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>Lo de <code>sshd -T</code> no es rutina: las imágenes de Ubuntu traen un <code>50-cloud-init.conf</code> que gana sobre <code>sshd_config</code>, así que editar el fichero principal —lo que dice casi toda guía— deja la contraseña activada y la máquina <em>parece</em> endurecida sin estarlo. Ese comando es lo único que dice la verdad.</p>
+      <div class="check">
+        <span class="k">Listón</span>
+        <p>Las cinco comprobaciones en verde. Entonces sí puedes cerrar la primera ventana.</p>
+      </div>
+    </li>
+
+    <!-- 4 -->
+    <li class="paso">
+      <span class="n">4</span>
+      <h3>Sube el código</h3>
+      <div class="cmd">
+        <div class="barra"><span class="donde win">Tu Windows</span> desde la raíz del repositorio</div>
+<pre>cd C:\Users\oscar\Downloads\powergis-backend\powergis
+<span class="p">.\</span>infra\hostinger\subir.ps1 -Ip 72.62.178.78 -Usuario oscar</pre>
+      </div>
+      <div class="cmd">
+        <div class="barra"><span class="donde sal">Salida</span> esperada</div>
+<pre>== Empaquetando
+   ok  0,97 MB
+   ok  rutas conservadas (engine/src/... dentro del paquete)
+   ok  .env excluido: el del servidor se conserva
+
+== Subiendo a oscar@72.62.178.78
+   ok  subido
+
+== Desplegando en ~/powergis
+  .env: no existe todavia  ->  cp .env.example .env</pre>
+      </div>
+      <p>Empaqueta con <code>tar</code>, sube y descomprime. <strong>El <code>.env</code> nunca entra en el paquete</strong>, así que las veces siguientes descomprimir encima no se lleva por delante tus secretos.</p>
+      <div class="aviso">
+        <span class="cabeza">Por qué tar y no Compress-Archive</span>
+        <p><code>Compress-Archive</code> aplana las carpetas cuando se le pasa una lista de ficheros: <code>engine/src/powergis/cli.py</code> llegaría como <code>cli.py</code> suelto en la raíz y no arrancaría nada. El script comprueba que las rutas están dentro antes de subir, y se niega si no.</p>
+      </div>
+      <div class="check">
+        <span class="k">Listón</span>
+        <p>Las tres líneas de «Empaquetando» en verde, y la lista de la raíz mostrando <code>docker-compose.yml</code>, <code>engine</code>, <code>infra</code>, <code>Makefile</code>.</p>
+      </div>
+    </li>
+
+    <!-- 5 -->
+    <li class="paso">
+      <span class="n">5</span>
+      <h3>El registro DNS</h3>
+      <p>En hPanel, <strong>Dominios → powergis.es → DNS</strong>. No es la sección del VPS: es la del dominio.</p>
+      <div class="tabla-envoltorio">
+        <table>
+          <thead><tr><th>Campo</th><th>Valor</th></tr></thead>
+          <tbody>
+            <tr><td>Tipo</td><td><code>A</code></td></tr>
+            <tr><td>Nombre</td><td><code>motor</code> — sólo eso</td></tr>
+            <tr><td>Apunta a</td><td><code>72.62.178.78</code></td></tr>
+            <tr><td>TTL</td><td><code>300</code></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>Pulsa <strong>Añadir registro</strong> y comprueba que aparece en la tabla de abajo, junto a tus <code>MX</code>. Esa es la confirmación real; si no está ahí, no se guardó.</p>
+      <div class="cmd">
+        <div class="barra"><span class="donde win">Tu Windows</span> saltándote la caché local</div>
+<pre>ipconfig /flushdns
+Resolve-DnsName motor.powergis.es -Server 1.1.1.1 -Type A</pre>
+      </div>
+      <div class="aviso">
+        <span class="cabeza">Sólo el A. Nada de AAAA</span>
+        <p>Si existe un registro <code>AAAA</code>, Let's Encrypt lo prefiere para el desafío, y Docker no enruta IPv6 salvo que lo configures. El certificado no se emitiría y el error hablaría de tiempos de espera sin mencionar IPv6 ni una vez.</p>
+      </div>
+      <div class="check">
+        <span class="k">Listón</span>
+        <p>Devuelve <code>72.62.178.78</code>. <strong>No pases al paso 7 hasta que esto sea cierto:</strong> si Traefik pide el certificado antes, el desafío falla y Let's Encrypt limita los reintentos por dominio durante un rato largo.</p>
+      </div>
+    </li>
+
+    <!-- 6 -->
+    <li class="paso">
+      <span class="n">6</span>
+      <h3>La configuración y los secretos</h3>
+      <div class="cmd">
+        <div class="barra"><span class="donde vps">En el VPS</span> como oscar</div>
+<pre>cd ~/powergis
+cp .env.example .env
+
+<span class="p">#</span> genera cada uno y cópialos a mano al .env
+openssl rand -hex 32     <span class="c"># HMAC_SECRET</span>
+openssl rand -hex 32     <span class="c"># INTERNAL_API_KEY</span>
+openssl rand -hex 24     <span class="c"># POSTGRES_PASSWORD</span>
+
+nano .env</pre>
+      </div>
+      <div class="tabla-envoltorio">
+        <table>
+          <thead><tr><th>Variable</th><th>Valor</th></tr></thead>
+          <tbody>
+            <tr><td><code>ENV</code></td><td><code>production</code></td></tr>
+            <tr><td><code>DEBUG</code></td><td><code>false</code></td></tr>
+            <tr><td><code>ENGINE_HOST</code></td><td><code>motor.powergis.es</code></td></tr>
+            <tr><td><code>ACME_EMAIL</code></td><td>tu correo</td></tr>
+            <tr><td><code>POSTGRES_PASSWORD</code></td><td>el de 24 bytes</td></tr>
+            <tr><td><code>DATABASE_URL</code></td><td><strong>con esa misma contraseña dentro</strong></td></tr>
+            <tr><td><code>HMAC_SECRET</code></td><td>el primero de 32</td></tr>
+            <tr><td><code>INTERNAL_API_KEY</code></td><td>el segundo de 32</td></tr>
+            <tr><td><code>ALLOWED_ORIGINS</code></td><td><code>https://powergis.es,https://www.powergis.es</code></td></tr>
+            <tr><td><code>WORDPRESS_BASE_URL</code></td><td><code>https://powergis.es</code></td></tr>
+            <tr><td><code>LLM_ENABLED</code></td><td><code>false</code> por ahora</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>En <code>nano</code>: escribes, y luego <code>Ctrl+O</code>, Enter, <code>Ctrl+X</code>.</p>
+      <div class="aviso">
+        <span class="cabeza">El que se olvida siempre</span>
+        <p><code>DATABASE_URL</code> lleva la contraseña embebida en la propia URL. Cambiar <code>POSTGRES_PASSWORD</code> y no cambiarla ahí da un error de autenticación que parece de PostgreSQL y es de copiar y pegar.</p>
+      </div>
+      <div class="aviso rojo">
+        <span class="cabeza">El secreto viejo está quemado</span>
+        <p><code>guachineatata2026kimbapaquesuene</code> ha circulado por el repositorio y por nuestras conversaciones. Quien lo tenga puede firmar peticiones válidas y generar informes a tu costa. No lo reutilices en ningún sitio.</p>
+      </div>
+      <div class="check">
+        <span class="k">Listón</span>
+        <p><code>make check-config</code> pasa sin avisos. Valida el <code>.env</code> sin levantar nada, así que arregla aquí lo que se queje: el mismo error con el stack en marcha cuesta el triple de encontrar.</p>
+      </div>
+    </li>
+
+    <!-- 7 -->
+    <li class="paso">
+      <span class="n">7</span>
+      <h3>Levanta el motor</h3>
+      <div class="cmd">
+        <div class="barra"><span class="donde vps">En el VPS</span> como oscar</div>
+<pre>make up
+make ps</pre>
+      </div>
+      <p>La primera vez tarda varios minutos: construye la imagen del motor. El KVM 2 es el perfil por defecto, así que <code>make up</code> a secas — sin <code>TIER</code>.</p>
+      <div class="cmd">
+        <div class="barra"><span class="donde vps">En el VPS</span> comprobaciones</div>
+<pre>curl -i https://motor.powergis.es/health              <span class="c"># 200</span>
+curl -i https://motor.powergis.es/internal/coverage   <span class="c"># 403</span>
+curl -i https://motor.powergis.es/ready               <span class="c"># 503, y está bien</span></pre>
+      </div>
+      <div class="tabla-envoltorio">
+        <table>
+          <thead><tr><th>Respuesta</th><th>Qué significa</th></tr></thead>
+          <tbody>
+            <tr><td><code>/health</code> → 200</td><td>El motor vive y el certificado es válido. Sin <code>-k</code>: si necesitas esa bandera, el certificado no se emitió.</td></tr>
+            <tr><td><code>/internal</code> → 403</td><td>Traefik bloquea los endpoints de operación desde fuera. Si sale 401, ese bloqueo no se aplicó.</td></tr>
+            <tr><td><code>/ready</code> → 503</td><td><strong>Correcto ahora mismo.</strong> La base de datos aún no tiene tablas y el motor lo dice en vez de fingir que está listo.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="check">
+        <span class="k">Listón</span>
+        <p>Los tres códigos tal cual. Con eso, el motor está desplegado y accesible desde internet.</p>
+      </div>
+    </li>
+
+  </ol>
+
+  <h2>Qué viene después</h2>
+
+  <p>Con el motor en pie, quedan tres bloques, y están en la <a href="https://claude.ai/code/artifact/11d4c898-f684-4830-84c1-f1b7154cd078">guía de despliegue completa</a>:</p>
+
+  <ul>
+    <li><strong>El almacén</strong> — <code>make almacen</code>, <code>make ine-verify</code>, <code>make ingest-ine</code>. Ahí <code>/ready</code> pasa a 200.</li>
+    <li><strong>WordPress</strong> — subir el conector y poner <code>POWERGIS_ENGINE_URL</code> y el mismo <code>HMAC_SECRET</code> en <code>wp-config.php</code>.</li>
+    <li><strong>Stripe</strong> — producto, webhook y las pruebas en modo test.</li>
+  </ul>
+
+  <p>Para volver a subir código después de un cambio, el paso 4 otra vez y luego <code>make up</code>. No toca los volúmenes: la base de datos se queda como está.</p>
+
+  <h2>Si algo sale distinto</h2>
+
+  <div class="tabla-envoltorio">
+    <table>
+      <thead><tr><th>Síntoma</th><th>Causa más probable</th><th>Qué hacer</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><code>Permission denied (publickey)</code></td>
+          <td>La clave no está en el servidor, o estás usando el usuario que no es</td>
+          <td>Antes del paso 2 es <code>root</code>; después, <code>oscar</code></td>
+        </tr>
+        <tr>
+          <td>El <code>scp</code> se queda colgado</td>
+          <td>Tu red bloquea el puerto 22</td>
+          <td>Prueba desde otra red, o usa la consola web del panel</td>
+        </tr>
+        <tr>
+          <td>Contenedores reiniciando en bucle</td>
+          <td>Configuración inválida: en producción el motor se niega a arrancar con secretos débiles o <code>DEBUG</code></td>
+          <td><code>make logs</code> dice cuál. Luego <code>make check-config</code></td>
+        </tr>
+        <tr>
+          <td>El certificado no se emite</td>
+          <td>El DNS no resolvía cuando Traefik lo pidió</td>
+          <td>Comprueba el paso 5 y mira <code>make logs</code> de <code>traefik</code>. Espera antes de reintentar</td>
+        </tr>
+        <tr>
+          <td><code>/health</code> no responde desde fuera</td>
+          <td><code>ufw</code>, o el certificado</td>
+          <td><code>sudo ufw status</code> en el VPS; el firewall de Hostinger lo tienes a 0 reglas, así que no es él</td>
+        </tr>
+        <tr>
+          <td><code>make: command not found</code></td>
+          <td>Falta <code>make</code></td>
+          <td><code>sudo apt-get install -y make</code>. El script lo instala, así que si falta es que no llegó a terminar</td>
+        </tr>
+        <tr>
+          <td><code>docker: permission denied</code></td>
+          <td>El grupo <code>docker</code> no se aplicó a tu sesión</td>
+          <td>Sal y vuelve a entrar por SSH</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>Si nada encaja, <code>make diagnostico</code> vuelca el estado completo a un fichero y me lo puedes pasar entero.</p>
+
+  <footer>
+    PowerGIS · primer despliegue · septiembre de 2026
+  </footer>
+
+</div>

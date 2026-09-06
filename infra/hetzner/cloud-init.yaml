@@ -1,0 +1,181 @@
+#cloud-config
+# ---------------------------------------------------------------------------
+# PowerGIS · endurecimiento del servidor en el PRIMER arranque
+#
+# Hetzner acepta este fichero como «user data» al crear el servidor, y
+# cloud-init lo ejecuta antes de que la máquina esté accesible. Eso importa:
+# un VPS recién creado con contraseña por SSH empieza a recibir intentos de
+# acceso en cuestión de minutos. Con esto, la ventana en la que está abierto
+# es cero.
+#
+# Hace lo mismo que los pasos 2, 3 y 4 de la guía de despliegue, pero sin que
+# haya que acordarse de ninguno.
+#
+# Uso
+# ---
+#   1. Sustituye AQUI_TU_CLAVE_PUBLICA por el contenido de ~/.ssh/id_ed25519.pub
+#      (la línea entera, empieza por `ssh-ed25519` o `ssh-rsa`).
+#   2. Al crear el servidor, pégalo en «Cloud config» / «User data».
+#      O con el CLI:  hcloud server create --user-data-from-file …
+#      (el script `crear-servidor.sh` de esta carpeta ya lo hace).
+#
+# Comprobar que terminó bien, una vez dentro:
+#
+#     cloud-init status --wait        → "status: done"
+#     cat /var/log/cloud-init-output.log
+# ---------------------------------------------------------------------------
+
+users:
+  - name: powergis
+    # Sólo `sudo`. El grupo `docker` NO puede ir aquí: todavía no existe
+    # —Docker se instala más abajo, en `runcmd`— y cloud-init falla al crear
+    # un usuario con un grupo inexistente, dejando la máquina sin usuario y
+    # sin forma de entrar. Se añade después, con `usermod -aG docker`.
+    groups: [sudo]
+    shell: /bin/bash
+    sudo: "ALL=(ALL) NOPASSWD:ALL"
+    lock_passwd: true          # sin contraseña: sólo clave
+    ssh_authorized_keys:
+      - AQUI_TU_CLAVE_PUBLICA
+
+# `ssh_pwauth: false` por sí solo NO basta en las imágenes de Ubuntu 24.04.
+# Esas imágenes traen `/etc/ssh/sshd_config.d/50-cloud-init.conf`, y los
+# ficheros de ese directorio ganan sobre el `sshd_config` principal. Editar
+# el principal —que es lo que dice la mayoría de guías— deja la contraseña
+# activada y la máquina parece endurecida sin estarlo.
+#
+# Por eso abajo se escribe un drop-in `99-` que ordena después que el de
+# cloud-init y tiene la última palabra.
+ssh_pwauth: false
+disable_root: true
+
+package_update: true
+package_upgrade: true
+
+packages:
+  - ufw
+  - fail2ban
+  - unattended-upgrades
+  - ca-certificates
+  - curl
+  - git
+  - make
+  - jq
+
+write_files:
+
+  # -- SSH: la última palabra sobre el drop-in de cloud-init ---------------
+  - path: /etc/ssh/sshd_config.d/99-powergis.conf
+    permissions: "0644"
+    content: |
+      # Ordena después de 50-cloud-init.conf, así que gana.
+      PermitRootLogin no
+      PasswordAuthentication no
+      KbdInteractiveAuthentication no
+      ChallengeResponseAuthentication no
+      PubkeyAuthentication yes
+      X11Forwarding no
+      MaxAuthTries 3
+
+  # -- swap: el seguro contra el OOM killer -------------------------------
+  #
+  # Con 4 u 8 GB y PostgreSQL dentro, el peor final posible es que el kernel
+  # elija matar la base de datos en un pico de memoria. `swappiness` bajo para
+  # que el swap se use en apuros, no como rutina.
+  - path: /etc/sysctl.d/99-powergis.conf
+    permissions: "0644"
+    content: |
+      vm.swappiness = 10
+      vm.overcommit_memory = 1
+      net.core.somaxconn = 1024
+
+  # -- fail2ban ------------------------------------------------------------
+  - path: /etc/fail2ban/jail.d/powergis.conf
+    permissions: "0644"
+    content: |
+      [sshd]
+      enabled  = true
+      port     = ssh
+      maxretry = 3
+      findtime = 10m
+      bantime  = 1h
+
+  # -- actualizaciones de seguridad desatendidas ---------------------------
+  - path: /etc/apt/apt.conf.d/20auto-upgrades
+    permissions: "0644"
+    content: |
+      APT::Periodic::Update-Package-Lists "1";
+      APT::Periodic::Unattended-Upgrade "1";
+
+  # -- nota para quien entre por primera vez -------------------------------
+  - path: /etc/motd
+    permissions: "0644"
+    content: |
+
+        PowerGIS · motor de informes
+
+        El stack va en Docker, en /home/powergis/powergis.
+          make ps          estado de los servicios
+          make logs        seguir los logs
+          make capacity    memoria, colas y conexiones
+          make doctor      diagnóstico del motor
+
+        PostgreSQL y Redis no publican puerto. No los expongas.
+
+runcmd:
+  # -- swap de 2 GB --------------------------------------------------------
+  - [ sh, -c, "test -f /swapfile || fallocate -l 2G /swapfile" ]
+  - [ chmod, "0600", /swapfile ]
+  - [ sh, -c, "swapon --show | grep -q /swapfile || { mkswap /swapfile && swapon /swapfile; }" ]
+  - [ sh, -c, "grep -q '^/swapfile' /etc/fstab || echo '/swapfile none swap sw 0 0' >> /etc/fstab" ]
+  - [ sysctl, --system ]
+
+  # -- reloj: no es un detalle ---------------------------------------------
+  #
+  # La firma HMAC lleva marca de tiempo y el motor rechaza cualquier petición
+  # fuera de una ventana de 300 s. Si este reloj y el del hosting de
+  # WordPress se separan más de cinco minutos, TODO devuelve 401
+  # invalid_signature y parece un problema de secretos.
+  - [ timedatectl, set-ntp, "true" ]
+  - [ timedatectl, set-timezone, Europe/Madrid ]
+
+  # -- cortafuegos del sistema ---------------------------------------------
+  #
+  # Se solapa a propósito con el firewall de Hetzner: son dos capas
+  # independientes. La de Hetzner filtra antes de llegar a la máquina; ufw
+  # protege si alguien toca la de Hetzner por error.
+  - [ ufw, default, deny, incoming ]
+  - [ ufw, default, allow, outgoing ]
+  - [ ufw, allow, OpenSSH ]
+  - [ ufw, allow, "80/tcp" ]
+  - [ ufw, allow, "443/tcp" ]
+  - [ ufw, --force, enable ]
+
+  # -- Docker --------------------------------------------------------------
+  - [ sh, -c, "curl -fsSL https://get.docker.com | sh" ]
+  - [ systemctl, enable, --now, docker ]
+  - [ usermod, -aG, docker, powergis ]
+
+  # Rotación de logs de Docker en el propio demonio: sin esto, un contenedor
+  # hablador llena el disco. Los servicios ya la declaran en el compose, pero
+  # esto cubre cualquiera que se levante a mano.
+  - [ sh, -c, "printf '{\\n  \"log-driver\": \"json-file\",\\n  \"log-opts\": { \"max-size\": \"10m\", \"max-file\": \"3\" }\\n}\\n' > /etc/docker/daemon.json" ]
+  - [ systemctl, restart, docker ]
+
+  - [ systemctl, enable, --now, fail2ban ]
+  - [ systemctl, restart, ssh ]
+
+final_message: |
+  ---------------------------------------------------------------
+  Servidor listo tras $UPTIME segundos.
+
+  Entra con:   ssh powergis@<IP>
+  Comprueba:   ufw status
+               swapon --show
+               timedatectl          → synchronized: yes
+               docker run --rm hello-world
+
+  Root y las contraseñas por SSH están desactivados. Si la clave
+  pública no era la correcta, entra por la consola web de Hetzner
+  (Server → Console) y arréglalo desde ahí.
+  ---------------------------------------------------------------
