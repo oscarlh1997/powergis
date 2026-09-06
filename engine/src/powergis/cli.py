@@ -574,7 +574,18 @@ def smoke(base_url: str = "http://localhost:8000") -> None:
 
 @app.command()
 def endpoints(
-    base_url: str = "http://localhost:8000",
+    # Posicional a propósito. Con un `str` y su valor por defecto a secas,
+    # Typer lo convierte en la opción `--base-url`, y entonces la invocación
+    # obvia —la que está escrita en esta misma ayuda—
+    #
+    #     powergis endpoints https://motor.powergis.es
+    #
+    # falla con «Got unexpected extra argument(s)». Declararlo como argumento
+    # hace que la herramienta se use como se documenta.
+    base_url: str = typer.Argument(
+        "http://localhost:8000",
+        help="Motor a probar. Por dentro del contenedor o por el dominio público.",
+    ),
     fixtures: str | None = typer.Option(None, help="Ruta a fixtures.json"),
     grupo: str | None = typer.Option(
         None,
