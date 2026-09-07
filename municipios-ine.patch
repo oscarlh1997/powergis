@@ -1,0 +1,555 @@
+From 8888f428f1a05b29fe4d7bec42ddbab27980753a Mon Sep 17 00:00:00 2001
+From: Aldo <oscarlh1997@gmail.com>
+Date: Sun, 6 Sep 2026 18:53:23 +0000
+Subject: [PATCH 1/2] Diagnostica el fallo del INE al cargar municipios
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+`load-municipios` moría con un `JSONDecodeError` pelado: «Expecting value:
+line 1 column 1 (char 0)». Esa traza no dice ni qué URL era, ni qué código
+llegó, ni cuántos bytes: sólo que el cuerpo no era JSON. Con el almacén sin
+nivel municipal, los informes salen vacíos sin dar un solo error, así que
+este es exactamente el fallo que no puede ser mudo.
+
+Dos cambios:
+
+1. `HttpClient.get_json` traduce «esto no es JSON» a un `CollectorError` con
+   URL final, código, tipo de contenido, tamaño y los primeros bytes. Llegar
+   ahí significa que la fuente contestó bien y aun así no se puede leer, que
+   es el caso más caro de diagnosticar de todos.
+
+2. `IneCollector.municipalities` reintenta con `?page=` cuando la petición
+   entera no devuelve nada. Los ~8.100 municipios son la lista más larga que
+   publica el INE y es justo la que a veces no le cabe: responde 200 con el
+   cuerpo vacío en vez de un error. El paginador para en cuanto una página no
+   aporta valores nuevos, porque un INE que ignora `page` devuelve siempre lo
+   mismo y si no daría sesenta vueltas para nada.
+
+Si fallan los dos caminos, el error nombra los dos y trae el `curl` que lo
+reproduce a mano.
+
+Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01XLURZYZbsxa6TxNnJNL3KB
+---
+ .../src/powergis/adapters/collectors/base.py  |  37 ++++++-
+ .../src/powergis/adapters/collectors/ine.py   | 100 +++++++++++++++++-
+ engine/tests/test_http_client.py              |  65 ++++++++++++
+ engine/tests/test_ine_verify.py               |  87 +++++++++++++++
+ 4 files changed, 285 insertions(+), 4 deletions(-)
+ create mode 100644 engine/tests/test_http_client.py
+
+diff --git a/engine/src/powergis/adapters/collectors/base.py b/engine/src/powergis/adapters/collectors/base.py
+index ed37779..201fa1d 100644
+--- a/engine/src/powergis/adapters/collectors/base.py
++++ b/engine/src/powergis/adapters/collectors/base.py
+@@ -75,7 +75,42 @@ class HttpClient:
+         self.close()
+ 
+     def get_json(self, path: str, params: dict[str, Any] | None = None) -> Any:
+-        return self._request("GET", path, params=params).json()
++        return self._decode_json(self._request("GET", path, params=params))
++
++    @staticmethod
++    def _decode_json(response: httpx.Response) -> Any:
++        """Convierte «esto no es JSON» en un diagnóstico legible.
++
++        `_request` ya ha descartado los 4xx/5xx, así que llegar aquí significa
++        que la fuente contestó *bien* y aun así el cuerpo no se puede leer. Es
++        el fallo más caro de diagnosticar de todos: el INE, cuando una consulta
++        le viene grande, responde 200 con el cuerpo vacío en vez de un error, y
++        `httpx` lo traduce a un `JSONDecodeError` pelado — «Expecting value:
++        line 1 column 1 (char 0)» — que no dice ni qué URL era ni qué llegó.
++
++        Aquí se guarda todo lo que hace falta para saberlo sin volver a
++        lanzarlo: URL final (tras redirecciones), código, tipo de contenido,
++        tamaño y los primeros bytes.
++        """
++        try:
++            return response.json()
++        except ValueError as exc:
++            cuerpo = response.text
++            muestra = cuerpo[:300].strip() or "(cuerpo vacío)"
++            tipo = response.headers.get("content-type", "(sin cabecera)")
++            raise CollectorError(
++                f"La fuente respondió {response.status_code} pero el cuerpo no es JSON.\n"
++                f"  URL:     {response.request.url}\n"
++                f"  Tipo:    {tipo}\n"
++                f"  Tamaño:  {len(response.content)} bytes\n"
++                f"  Empieza: {muestra}",
++                url=str(response.request.url),
++                status=response.status_code,
++                content_type=tipo,
++                length=len(response.content),
++                body=muestra,
++                cause=str(exc),
++            ) from exc
+ 
+     def post_text(self, path: str, data: str, params: dict[str, Any] | None = None) -> str:
+         return self._request("POST", path, params=params, content=data).text
+diff --git a/engine/src/powergis/adapters/collectors/ine.py b/engine/src/powergis/adapters/collectors/ine.py
+index 734422d..90928b1 100644
+--- a/engine/src/powergis/adapters/collectors/ine.py
++++ b/engine/src/powergis/adapters/collectors/ine.py
+@@ -94,6 +94,10 @@ class IneCollector(BaseCollector):
+ 
+     def __init__(self, client: HttpClient | None = None) -> None:
+         cfg = get_settings()
++        #: Se guarda sólo para poder escribir en los errores el `curl` exacto
++        #: que reproduce el fallo. Un diagnóstico que no se puede repetir a
++        #: mano obliga a adivinar.
++        self._base_url = cfg.ine_base_url.rstrip("/")
+         self._client = client or HttpClient(
+             cfg.ine_base_url,
+             timeout=cfg.ine_timeout,
+@@ -397,11 +401,42 @@ class IneCollector(BaseCollector):
+         Derivarla es más fiable que arrastrar otro campo que puede venir vacío.
+         """
+         vid = variable_id if variable_id is not None else self.municipality_variable_id()
+-        payload = self._client.get_json(f"VALORES_VARIABLES/{vid}")
++        ruta = f"VALORES_VARIABLES/{vid}"
++
++        # Primero de una vez. Es lo normal y lo más barato.
++        fallo_directo: Exception | None = None
++        try:
++            payload = self._client.get_json(ruta)
++            valores = list(payload) if isinstance(payload, list) else []
++        except CollectorError as exc:
++            fallo_directo = exc
++            valores = []
++
++        # Los municipios son la lista más larga que publica el INE (~8.100
++        # valores) y es justo la que a veces no cabe: contesta 200 con el
++        # cuerpo vacío. Para eso existe `?page=`, así que se reintenta paginado
++        # antes de darse por vencido. Si sale bien, el usuario no se entera; si
++        # sale mal, el error dice las dos cosas que se intentaron.
++        if not valores:
++            log.warning(
++                "VALORES_VARIABLES/%s no devolvió nada de una vez (%s); reintento paginado",
++                vid, fallo_directo or "lista vacía",
++            )
++            try:
++                valores = self._paginar(ruta)
++            except CollectorError as exc:
++                raise CollectorError(
++                    f"El INE no devuelve los valores de la variable {vid} ni entero ni "
++                    f"paginado.\n  Entero:   {fallo_directo or 'lista vacía'}\n"
++                    f"  Paginado: {exc}\n"
++                    f"Compruébalo a mano:\n"
++                    f'  curl -sS -i "{self._base_url}/{ruta}?page=1" | head -20',
++                    variable=vid,
++                ) from exc
+ 
+         out: list[dict[str, str]] = []
+         seen: set[str] = set()
+-        for value in payload if isinstance(payload, list) else []:
++        for value in valores:
+             code = str(value.get("Codigo") or value.get("codigo") or "").strip()
+             name = str(value.get("Nombre") or value.get("nombre") or "").strip()
+             if not code.isdigit() or len(code) != 5 or not name:
+@@ -412,9 +447,68 @@ class IneCollector(BaseCollector):
+             out.append({"ine_code": code, "name": name, "province_code": code[:2]})
+ 
+         if not out:
+-            raise CollectorError(f"La variable {vid} no devolvió municipios reconocibles")
++            raise CollectorError(
++                f"La variable {vid} devolvió {len(valores)} valores, pero ninguno "
++                f"parece un municipio (código de 5 dígitos). Probablemente no sea "
++                f"la variable de municipios: `powergis ine-discover` la localiza.",
++                variable=vid,
++                recibidos=len(valores),
++            )
+         return out
+ 
++    #: El INE pagina a 500 registros cuando se le pasa `?page=`. Es el único
++    #: camino cuando la lista entera no le cabe en una respuesta.
++    PAGE_SIZE: int = 500
++    #: ~8.100 municipios a 500 por página son 17. El tope deja margen de sobra
++    #: y evita un bucle infinito si un día `page` deja de tener efecto.
++    MAX_PAGES: int = 60
++
++    def _paginar(self, ruta: str) -> list[dict[str, Any]]:
++        """Recorre `?page=1,2,3…` hasta que se acaba la lista.
++
++        Se para en tres sitios, y los tres importan:
++
++          · una página vacía — fin normal;
++          · una página más corta que `PAGE_SIZE` — la última;
++          · una página que no aporta ningún valor nuevo — significa que la API
++            está IGNORANDO `page` y devolviendo siempre lo mismo. Sin esta
++            comprobación el bucle daría 60 vueltas para acabar con la misma
++            lista repetida 60 veces.
++        """
++        acumulado: list[dict[str, Any]] = []
++        vistos: set[str] = set()
++
++        for pagina in range(1, self.MAX_PAGES + 1):
++            trozo = self._client.get_json(ruta, params={"page": pagina})
++            if not isinstance(trozo, list) or not trozo:
++                break
++
++            nuevos = 0
++            for value in trozo:
++                clave = str(
++                    value.get("Id")
++                    or value.get("Codigo")
++                    or value.get("codigo")
++                    or ""
++                )
++                if clave and clave in vistos:
++                    continue
++                if clave:
++                    vistos.add(clave)
++                acumulado.append(value)
++                nuevos += 1
++
++            if nuevos == 0:
++                log.warning(
++                    "El INE ignora ?page= en %s: la página %d repite lo anterior",
++                    ruta, pagina,
++                )
++                break
++            if len(trozo) < self.PAGE_SIZE:
++                break
++
++        return acumulado
++
+     @staticmethod
+     def _detect_level(names: Sequence[str]) -> str | None:
+         """Deduce el nivel por la longitud del código que encabeza la serie.
+diff --git a/engine/tests/test_http_client.py b/engine/tests/test_http_client.py
+new file mode 100644
+index 0000000..69f5f88
+--- /dev/null
++++ b/engine/tests/test_http_client.py
+@@ -0,0 +1,65 @@
++"""El cliente HTTP compartido por los colectores.
++
++Aquí se comprueba una sola cosa, pero es la que costó una tarde: **un cuerpo
++que no es JSON tiene que decir por qué**.
++
++El INE, cuando una consulta le viene grande, no devuelve un error: devuelve
++200 con el cuerpo vacío. `httpx` lo traduce a un `JSONDecodeError` que dice
++«Expecting value: line 1 column 1 (char 0)» y nada más — ni la URL, ni el
++código, ni cuántos bytes llegaron. Con esa traza no se puede saber si la
++fuente se cayó, si cambió de formato, si nos está limitando o si el cuerpo
++venía vacío, que es justo lo que pasaba.
++"""
++
++from __future__ import annotations
++
++import httpx
++import pytest
++
++from powergis.adapters.collectors.base import HttpClient
++from powergis.domain.errors import CollectorError
++
++
++def cliente(respuesta: httpx.Response) -> HttpClient:
++    c = HttpClient("https://ejemplo.test")
++    c._client = httpx.Client(
++        transport=httpx.MockTransport(lambda _req: respuesta),
++    )
++    return c
++
++
++class TestCuerpoQueNoEsJson:
++    def test_un_cuerpo_vacio_explica_que_estaba_vacio(self):
++        with pytest.raises(CollectorError) as exc:
++            cliente(httpx.Response(200, text="")).get_json("VALORES_VARIABLES/19")
++
++        mensaje = str(exc.value)
++        assert "cuerpo vacío" in mensaje
++        assert "VALORES_VARIABLES/19" in mensaje, "hay que saber qué se pidió"
++        assert "0 bytes" in mensaje
++
++    def test_una_pagina_de_error_html_se_ve_en_el_mensaje(self):
++        html = "<html><body>Servicio temporalmente no disponible</body></html>"
++        with pytest.raises(CollectorError) as exc:
++            cliente(
++                httpx.Response(200, text=html, headers={"content-type": "text/html"})
++            ).get_json("VARIABLES")
++
++        mensaje = str(exc.value)
++        assert "text/html" in mensaje
++        assert "Servicio temporalmente" in mensaje
++
++    def test_el_contexto_queda_disponible_para_el_log(self):
++        """El mensaje es para el humano; el contexto, para el log estructurado."""
++        with pytest.raises(CollectorError) as exc:
++            cliente(httpx.Response(200, text="no soy json")).get_json("VARIABLES")
++
++        ctx = exc.value.context
++        assert ctx["status"] == 200
++        assert ctx["length"] == len("no soy json")
++        assert "no soy json" in ctx["body"]
++
++    def test_un_json_valido_sigue_pasando_tal_cual(self):
++        datos = cliente(httpx.Response(200, json=[{"Id": 19}])).get_json("VARIABLES")
++
++        assert datos == [{"Id": 19}]
+diff --git a/engine/tests/test_ine_verify.py b/engine/tests/test_ine_verify.py
+index 98b9cd2..af11fd2 100644
+--- a/engine/tests/test_ine_verify.py
++++ b/engine/tests/test_ine_verify.py
+@@ -223,6 +223,93 @@ class TestPadronDeMunicipios:
+             ine.municipalities(3)
+ 
+ 
++class TestListaQueNoCabe:
++    """Los ~8.100 municipios son la lista más larga que publica el INE, y es
++    justo la que a veces no le cabe: contesta 200 con el cuerpo vacío. El
++    colector reintenta paginado antes de rendirse.
++
++    Sin esto la carga muere con un `JSONDecodeError` pelado y el almacén se
++    queda sin nivel municipal, que es la avería que deja los informes vacíos
++    sin dar un solo error.
++    """
++
++    @staticmethod
++    def municipio(n: int) -> dict:
++        return {"Codigo": f"{28000 + n:05d}", "Nombre": f"Pueblo {n}"}
++
++    def cliente_paginado(self, total: int, *, entero: object):
++        """Falla o se vacía de una vez; responde bien con `?page=`."""
++        todos = [self.municipio(n) for n in range(total)]
++
++        class Paginado:
++            calls: ClassVar[list] = []
++
++            def get_json(self, path, params=None):
++                Paginado.calls.append((path, params))
++                if not params or "page" not in params:
++                    if isinstance(entero, Exception):
++                        raise entero
++                    return entero
++                inicio = (params["page"] - 1) * IneCollector.PAGE_SIZE
++                return todos[inicio : inicio + IneCollector.PAGE_SIZE]
++
++        return IneCollector(client=Paginado())
++
++    def test_un_cuerpo_vacio_no_hunde_la_carga(self):
++        """El modo de fallo real observado en producción."""
++        ine = self.cliente_paginado(
++            1200, entero=CollectorError("el cuerpo no es JSON", status=200)
++        )
++
++        assert len(ine.municipalities(19)) == 1200
++
++    def test_una_lista_vacia_tambien_dispara_el_paginado(self):
++        """200 con `[]` es el mismo problema con otra cara."""
++        ine = self.cliente_paginado(600, entero=[])
++
++        assert len(ine.municipalities(19)) == 600
++
++    def test_no_pagina_si_no_hace_falta(self):
++        """El camino barato sigue siendo el camino por defecto."""
++        ine = self.cliente_paginado(3, entero=[self.municipio(n) for n in range(3)])
++
++        ine.municipalities(19)
++
++        assert all(p is None or "page" not in p for _, p in type(ine._client).calls)
++
++    def test_si_el_ine_ignora_page_no_se_queda_en_bucle(self):
++        """Devolver siempre la misma página es indistinguible de paginar bien
++        salvo por esto: la segunda no aporta nada nuevo."""
++        pagina = [self.municipio(n) for n in range(IneCollector.PAGE_SIZE)]
++
++        class Terco:
++            paginas = 0
++
++            def get_json(self, path, params=None):
++                if not params or "page" not in params:
++                    return []
++                Terco.paginas += 1
++                return pagina
++
++        ine = IneCollector(client=Terco())
++        municipios = ine.municipalities(19)
++
++        assert len(municipios) == IneCollector.PAGE_SIZE
++        assert Terco.paginas == 2, "debe parar en cuanto una página no aporta nada"
++
++    def test_si_fallan_los_dos_caminos_el_error_dice_los_dos(self):
++        class Muerto:
++            def get_json(self, path, params=None):
++                raise CollectorError("el cuerpo no es JSON")
++
++        with pytest.raises(CollectorError) as exc:
++            IneCollector(client=Muerto()).municipalities(19)
++
++        mensaje = str(exc.value)
++        assert "Entero:" in mensaje and "Paginado:" in mensaje
++        assert "curl" in mensaje, "el error debe traer cómo reproducirlo a mano"
++
++
+ class TestDeteccionDeNivel:
+     def test_ignora_el_total_nacional_de_la_primera_fila(self):
+         """Las tablas del INE suelen abrir con el total nacional; si se mirara
+-- 
+2.43.0
+
+
+From db4609729442fdc35630bc16d1eaf7dd5d168f99 Mon Sep 17 00:00:00 2001
+From: Aldo <oscarlh1997@gmail.com>
+Date: Sun, 6 Sep 2026 18:56:31 +0000
+Subject: [PATCH 2/2] =?UTF-8?q?Corrige=20el=20nombre=20de=20la=20operaci?=
+ =?UTF-8?q?=C3=B3n=20del=20INE:=20VALORES=5FVARIABLE,=20en=20singular?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Era la causa real de que `dim_geo` se quedara sin municipios. La ruta pedía
+`VALORES_VARIABLES` (plural) y esa operación no existe en Tempus3.
+
+Lo que la hizo cara de encontrar es cómo lo dice el INE: no contesta 404,
+contesta **200** con el texto plano «La operación indicada no existe
+(VALORES_VARIABLES)». Para el cliente HTTP eso es una respuesta correcta, así
+que el fallo sólo aparecía al leerla como JSON, en forma de «Expecting value:
+line 1 column 1 (char 0)» — que apunta a un cuerpo vacío, no a una ruta mal
+escrita, y manda a buscar el fallo justo donde no está.
+
+El nombre pasa a ser una constante de clase para que la prueba pueda fijarlo,
+y otra comprueba la ruta completa que se pide: el `FakeClient` sólo guardaba
+el ID final, así que ninguna prueba habría notado nunca un error en el nombre
+de la operación.
+
+Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01XLURZYZbsxa6TxNnJNL3KB
+---
+ .../src/powergis/adapters/collectors/ine.py   | 18 ++++++++++++---
+ engine/tests/test_http_client.py              | 20 +++++++++++++++--
+ engine/tests/test_ine_verify.py               | 22 +++++++++++++++++++
+ 3 files changed, 55 insertions(+), 5 deletions(-)
+
+diff --git a/engine/src/powergis/adapters/collectors/ine.py b/engine/src/powergis/adapters/collectors/ine.py
+index 90928b1..34fa40c 100644
+--- a/engine/src/powergis/adapters/collectors/ine.py
++++ b/engine/src/powergis/adapters/collectors/ine.py
+@@ -371,6 +371,18 @@ class IneCollector(BaseCollector):
+     #: silencio. El nombre sí es estable.
+     MUNICIPIO_VARIABLE_HINTS: tuple[str, ...] = ("municipio",)
+ 
++    #: Operación del INE que lista los valores de UNA variable. En singular.
++    #:
++    #: El plural (`VALORES_VARIABLES`) no existe, y la trampa está en cómo lo
++    #: dice el INE: contesta **200** con el texto plano «La operación indicada
++    #: no existe (…)» en vez de un 404. Para el cliente HTTP eso es una
++    #: respuesta correcta, así que el fallo sólo aparecía al intentar leerla
++    #: como JSON, en forma de `JSONDecodeError` sin contexto.
++    #:
++    #: El nombre vive aquí, y no incrustado en la ruta, para que la prueba
++    #: pueda fijarlo: es un error de una sola letra que no da error.
++    OP_VALORES: str = "VALORES_VARIABLE"
++
+     def municipality_variable_id(self) -> int:
+         """Localiza la variable 'Municipios' preguntándole al propio INE."""
+         payload = self._client.get_json("VARIABLES")
+@@ -401,7 +413,7 @@ class IneCollector(BaseCollector):
+         Derivarla es más fiable que arrastrar otro campo que puede venir vacío.
+         """
+         vid = variable_id if variable_id is not None else self.municipality_variable_id()
+-        ruta = f"VALORES_VARIABLES/{vid}"
++        ruta = f"{self.OP_VALORES}/{vid}"
+ 
+         # Primero de una vez. Es lo normal y lo más barato.
+         fallo_directo: Exception | None = None
+@@ -419,8 +431,8 @@ class IneCollector(BaseCollector):
+         # sale mal, el error dice las dos cosas que se intentaron.
+         if not valores:
+             log.warning(
+-                "VALORES_VARIABLES/%s no devolvió nada de una vez (%s); reintento paginado",
+-                vid, fallo_directo or "lista vacía",
++                "%s no devolvió nada de una vez (%s); reintento paginado",
++                ruta, fallo_directo or "lista vacía",
+             )
+             try:
+                 valores = self._paginar(ruta)
+diff --git a/engine/tests/test_http_client.py b/engine/tests/test_http_client.py
+index 69f5f88..1d53dde 100644
+--- a/engine/tests/test_http_client.py
++++ b/engine/tests/test_http_client.py
+@@ -31,11 +31,11 @@ def cliente(respuesta: httpx.Response) -> HttpClient:
+ class TestCuerpoQueNoEsJson:
+     def test_un_cuerpo_vacio_explica_que_estaba_vacio(self):
+         with pytest.raises(CollectorError) as exc:
+-            cliente(httpx.Response(200, text="")).get_json("VALORES_VARIABLES/19")
++            cliente(httpx.Response(200, text="")).get_json("VALORES_VARIABLE/19")
+ 
+         mensaje = str(exc.value)
+         assert "cuerpo vacío" in mensaje
+-        assert "VALORES_VARIABLES/19" in mensaje, "hay que saber qué se pidió"
++        assert "VALORES_VARIABLE/19" in mensaje, "hay que saber qué se pidió"
+         assert "0 bytes" in mensaje
+ 
+     def test_una_pagina_de_error_html_se_ve_en_el_mensaje(self):
+@@ -49,6 +49,22 @@ class TestCuerpoQueNoEsJson:
+         assert "text/html" in mensaje
+         assert "Servicio temporalmente" in mensaje
+ 
++    def test_el_ine_diciendo_que_la_operacion_no_existe(self):
++        """El caso que de verdad pasó.
++
++        La ruta llevaba `VALORES_VARIABLES` (plural) y esa operación no existe.
++        El INE no contesta 404: contesta 200 con esta frase en texto plano. Sin
++        este diagnóstico, lo único que se veía era «Expecting value: line 1
++        column 1 (char 0)» — que apunta a un cuerpo vacío, no a una ruta mal
++        escrita, y manda a buscar el fallo justo donde no está.
++        """
++        with pytest.raises(CollectorError) as exc:
++            cliente(
++                httpx.Response(200, text="La operación indicada no existe (VALORES_VARIABLES)")
++            ).get_json("VALORES_VARIABLES/19")
++
++        assert "La operación indicada no existe" in str(exc.value)
++
+     def test_el_contexto_queda_disponible_para_el_log(self):
+         """El mensaje es para el humano; el contexto, para el log estructurado."""
+         with pytest.raises(CollectorError) as exc:
+diff --git a/engine/tests/test_ine_verify.py b/engine/tests/test_ine_verify.py
+index af11fd2..f717d8d 100644
+--- a/engine/tests/test_ine_verify.py
++++ b/engine/tests/test_ine_verify.py
+@@ -29,10 +29,14 @@ class FakeClient:
+     def __init__(self, tables: dict[str, object]) -> None:
+         self.tables = tables
+         self.calls: list[str] = []
++        #: La ruta COMPLETA, no sólo el ID. El nombre de la operación es parte
++        #: del contrato con el INE y se equivocó una vez.
++        self.rutas: list[str] = []
+ 
+     def get_json(self, path: str, params: dict | None = None) -> object:
+         table_id = path.rsplit("/", 1)[-1]
+         self.calls.append(table_id)
++        self.rutas.append(path)
+         payload = self.tables.get(table_id)
+         if payload is None:
+             raise CollectorError("tabla inexistente", table=table_id)
+@@ -222,6 +226,24 @@ class TestPadronDeMunicipios:
+         with pytest.raises(CollectorError):
+             ine.municipalities(3)
+ 
++    def test_la_operacion_del_ine_es_en_singular(self):
++        """Un error de una sola letra que no daba error.
++
++        `VALORES_VARIABLES` no existe, pero el INE no contesta 404: contesta
++        **200** con el texto «La operación indicada no existe (…)». Para el
++        cliente HTTP eso es una respuesta buena, así que el fallo sólo salía al
++        leerla como JSON, sin decir qué se había pedido. Coste real: el almacén
++        se quedó sin nivel municipal.
++        """
++        assert IneCollector.OP_VALORES == "VALORES_VARIABLE"
++
++    def test_pide_exactamente_la_ruta_que_el_ine_publica(self, collector):
++        ine, cliente = collector({"VARIABLES": self.VARIABLES, "19": self.VALORES})
++
++        ine.municipalities(19)
++
++        assert cliente.rutas[-1] == "VALORES_VARIABLE/19"
++
+ 
+ class TestListaQueNoCabe:
+     """Los ~8.100 municipios son la lista más larga que publica el INE, y es
+-- 
+2.43.0
+

@@ -1,0 +1,92 @@
+From 4b30549fc146e81b3eebbbf45a5148d03eba533a Mon Sep 17 00:00:00 2001
+From: Aldo <oscarlh1997@gmail.com>
+Date: Sun, 6 Sep 2026 18:35:43 +0000
+Subject: [PATCH] =?UTF-8?q?Arregla=20el=20fallo=20de=20construcci=C3=B3n?=
+ =?UTF-8?q?=20con=20el=20constructor=20Bake?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+`api`, `worker-reports`, `worker-etl` y `beat` comparten el mismo `build:` y
+la misma etiqueta `powergis/engine:1.0.0` — son la misma imagen con cuatro
+`command` distintos.
+
+`docker compose up -d --build` con el constructor Bake, que Compose usa por
+defecto desde hace poco, los construye EN PARALELO. Los cuatro compiten por
+escribir esa etiqueta y tres fallan:
+
+    failed to solve: image "docker.io/powergis/engine:1.0.0": already exists
+
+Con el constructor clásico no ocurría, así que el fichero llevaba tiempo así
+sin dar la cara.
+
+`make up` ahora construye `api` explícitamente y levanta después. Produce la
+misma etiqueta que usan los otros tres, y `up -d` sin `--build` ya no vuelve
+a construir. De paso es más rápido: una construcción en vez de cuatro
+carreras por el mismo destino.
+
+Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01XLURZYZbsxa6TxNnJNL3KB
+---
+ Makefile           | 19 ++++++++++++++++++-
+ docker-compose.yml | 14 ++++++++++++++
+ 2 files changed, 32 insertions(+), 1 deletion(-)
+
+diff --git a/Makefile b/Makefile
+index f763813..c19d406 100644
+--- a/Makefile
++++ b/Makefile
+@@ -171,7 +171,24 @@ tier:  ## Qué TIER corresponde a esta máquina (mira CPU, RAM y disco)
+ 
+ .PHONY: up
+ up:  ## Levanta el stack
+-	$(COMPOSE) up -d --build
++	@# Se construye UNA vez y luego se levanta, en vez de `up -d --build`.
++	@#
++	@# `api`, `worker-reports`, `worker-etl` y `beat` comparten el mismo
++	@# `build:` y la misma etiqueta `powergis/engine:1.0.0` —son la misma
++	@# imagen desempeñando cuatro papeles—. El constructor Bake, que Compose
++	@# usa por defecto desde hace poco, los construye EN PARALELO, y los
++	@# cuatro compiten por escribir esa etiqueta:
++	@#
++	@#     failed to solve: image "docker.io/powergis/engine:1.0.0":
++	@#     already exists
++	@#
++	@# Gana uno y los otros tres fallan. Con el constructor clásico no
++	@# pasaba, así que el fichero llevaba tiempo así sin dar la cara.
++	@#
++	@# Construir `api` explícitamente produce la etiqueta que los otros tres
++	@# usan, y `up -d` sin `--build` ya no vuelve a construir nada.
++	$(COMPOSE) build api
++	$(COMPOSE) up -d
+ 	@echo "Motor en https://$${ENGINE_HOST:-localhost}   (TIER=$(TIER))"
+ 
+ .PHONY: down
+diff --git a/docker-compose.yml b/docker-compose.yml
+index faf0662..6949897 100644
+--- a/docker-compose.yml
++++ b/docker-compose.yml
+@@ -39,6 +39,20 @@
+ name: powergis
+ 
+ x-engine: &engine
++  # Una sola imagen para cuatro papeles: api, worker-reports, worker-etl y
++  # beat son el mismo código con distinto `command`.
++  #
++  # OJO al levantar: NO uses `docker compose up -d --build`. El constructor
++  # Bake, que Compose usa por defecto desde hace poco, construye los cuatro
++  # servicios EN PARALELO y los cuatro compiten por escribir esta misma
++  # etiqueta:
++  #
++  #     failed to solve: image "docker.io/powergis/engine:1.0.0":
++  #     already exists
++  #
++  # Gana uno y los otros tres fallan. `make up` lo evita construyendo `api`
++  # explícitamente y levantando después, que además es más rápido: una
++  # construcción en vez de cuatro carreras.
+   build:
+     context: ./engine
+     target: runtime
+-- 
+2.43.0
+

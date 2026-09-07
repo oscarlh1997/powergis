@@ -1,0 +1,114 @@
+From f1dd3a2e5f11d8e50652eb91f7fe053fb281bd97 Mon Sep 17 00:00:00 2001
+From: Aldo <oscarlh1997@gmail.com>
+Date: Sun, 6 Sep 2026 23:49:34 +0000
+Subject: [PATCH] `make probar` espera a la API y lee el dominio de .env
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Dos fallos que se leían como una avería del motor y no lo eran.
+
+**Los 27 «Connection refused».** `docker compose up -d` vuelve cuando el
+contenedor ha arrancado, no cuando uvicorn escucha; entre una cosa y otra hay
+unos segundos —dos workers importando la aplicación— y `make probar`, lanzado
+justo después de `make up`, cae entero en ese hueco. Que fallen los 27 casos a
+la vez sugiere que todo está roto cuando en realidad no ha empezado nada.
+Ahora hay un `esperar-api` que sondea /health hasta 60 s: convierte una
+carrera en una espera. La comprobación va a 127.0.0.1, la misma dirección que
+usa la sonda de salud del contenedor, en vez de `localhost`.
+
+**«Motor en https://localhost».** `ENGINE_HOST` se leía del entorno del
+shell, que en una sesión SSH recién abierta está vacío. El anuncio de `make
+up` mentía y la segunda pasada de `make probar` interrogaba a localhost en vez
+de al dominio. Se lee de `.env`, que es la fuente de verdad del despliegue, y
+sigue pudiendo forzarse: `make probar ENGINE_HOST=otro.es`.
+
+Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01XLURZYZbsxa6TxNnJNL3KB
+---
+ Makefile | 47 ++++++++++++++++++++++++++++++++++++++++++++---
+ 1 file changed, 44 insertions(+), 3 deletions(-)
+
+diff --git a/Makefile b/Makefile
+index ac73e61..73fe9ee 100644
+--- a/Makefile
++++ b/Makefile
+@@ -35,6 +35,20 @@ endif
+ 
+ ENGINE := $(COMPOSE) exec -T api
+ 
++# El dominio sale de `.env`, que es la fuente de verdad del despliegue.
++#
++# Antes se leía de la variable de entorno del shell, que en una sesión SSH
++# recién abierta está vacía: `make up` anunciaba «Motor en https://localhost» y
++# `make probar` interrogaba a localhost en vez de al dominio real. Lo peor no
++# era el fallo, sino que ambas cosas parecían haber funcionado.
++#
++# `?=` deja que se pueda forzar desde fuera:  make probar ENGINE_HOST=otro.es
++ENGINE_HOST ?= $(shell sed -n 's/^ENGINE_HOST=[[:space:]]*//p' .env 2>/dev/null \
++                 | tail -1 | tr -d '"'"'"'')
++ifeq ($(strip $(ENGINE_HOST)),)
++ENGINE_HOST := localhost
++endif
++
+ .PHONY: help
+ help:  ## Muestra esta ayuda
+ 	@grep -hE '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) \
+@@ -189,7 +203,7 @@ up:  ## Levanta el stack
+ 	@# usan, y `up -d` sin `--build` ya no vuelve a construir nada.
+ 	$(COMPOSE) build api
+ 	$(COMPOSE) up -d
+-	@echo "Motor en https://$${ENGINE_HOST:-localhost}   (TIER=$(TIER))"
++	@echo "Motor en https://$(ENGINE_HOST)   (TIER=$(TIER))"
+ 
+ .PHONY: down
+ down:  ## Para el stack (conserva volúmenes)
+@@ -214,16 +228,43 @@ probar:  ## Dispara TODOS los endpoints contra el motor de producción
+ 	@# Si la primera pasa y la segunda no, el motor está bien y el problema
+ 	@# es de infraestructura. Sin separarlas, un fallo de Traefik se lee como
+ 	@# un fallo del motor — que es exactamente lo que pasó con el certificado.
++	@$(MAKE) --no-print-directory esperar-api
+ 	@echo "── 1/2 · la aplicación, por dentro ─────────────────────────────"
+-	$(COMPOSE) exec -T api powergis endpoints http://localhost:8000
++	@# 127.0.0.1 y no `localhost`: es la misma dirección que usa la sonda de
++	@# salud del contenedor, y así se prueba exactamente lo que Docker da por
++	@# bueno. `localhost` además puede resolver a ::1 primero.
++	$(COMPOSE) exec -T api powergis endpoints http://127.0.0.1:8000
+ 	@echo ""
+ 	@echo "── 2/2 · el camino completo, por el dominio ────────────────────"
+ 	@# `/internal` se salta a propósito: Traefik sólo lo sirve a 127.0.0.1,
+ 	@# así que por el dominio DEBE dar 403. Probarlo aquí sería pedirle a la
+ 	@# suite que fallara.
+-	$(COMPOSE) exec -T api powergis endpoints https://$${ENGINE_HOST:-localhost} \
++	$(COMPOSE) exec -T api powergis endpoints https://$(ENGINE_HOST) \
+ 		--grupo salud,catalogo,geografia,informes,seguridad
+ 
++.PHONY: esperar-api
++esperar-api:  ## Espera a que la API acepte conexiones (hasta 60 s)
++	@# `docker compose up -d` vuelve cuando el CONTENEDOR ha arrancado, no
++	@# cuando uvicorn escucha. Entre una cosa y otra hay unos segundos —dos
++	@# workers importando la aplicación— y cualquier comprobación lanzada en
++	@# ese hueco falla con «Connection refused» en los 27 casos a la vez.
++	@#
++	@# Ese modo de fallo es especialmente malo porque se lee como «todo está
++	@# roto» cuando en realidad no ha empezado nada. Esperar aquí convierte
++	@# una carrera en una espera.
++	@printf 'Esperando a la API'
++	@for i in $$(seq 1 30); do \
++	   if $(COMPOSE) exec -T api python -c \
++	        "import urllib.request;urllib.request.urlopen('http://127.0.0.1:8000/health',timeout=3)" \
++	        >/dev/null 2>&1; then \
++	     echo " · responde"; exit 0; \
++	   fi; \
++	   printf '.'; sleep 2; \
++	 done; \
++	 echo " · NO responde tras 60 s"; \
++	 echo "   Mira qué dice:  $(COMPOSE) logs --tail=50 api"; \
++	 exit 1
++
+ .PHONY: shell
+ shell:  ## Shell dentro del contenedor de la API
+ 	$(COMPOSE) exec api /bin/bash
+-- 
+2.43.0
+

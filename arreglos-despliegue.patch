@@ -1,0 +1,157 @@
+From 4b30549fc146e81b3eebbbf45a5148d03eba533a Mon Sep 17 00:00:00 2001
+From: Aldo <oscarlh1997@gmail.com>
+Date: Sun, 6 Sep 2026 18:35:43 +0000
+Subject: [PATCH 1/2] =?UTF-8?q?Arregla=20el=20fallo=20de=20construcci?=
+ =?UTF-8?q?=C3=B3n=20con=20el=20constructor=20Bake?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+`api`, `worker-reports`, `worker-etl` y `beat` comparten el mismo `build:` y
+la misma etiqueta `powergis/engine:1.0.0` — son la misma imagen con cuatro
+`command` distintos.
+
+`docker compose up -d --build` con el constructor Bake, que Compose usa por
+defecto desde hace poco, los construye EN PARALELO. Los cuatro compiten por
+escribir esa etiqueta y tres fallan:
+
+    failed to solve: image "docker.io/powergis/engine:1.0.0": already exists
+
+Con el constructor clásico no ocurría, así que el fichero llevaba tiempo así
+sin dar la cara.
+
+`make up` ahora construye `api` explícitamente y levanta después. Produce la
+misma etiqueta que usan los otros tres, y `up -d` sin `--build` ya no vuelve
+a construir. De paso es más rápido: una construcción en vez de cuatro
+carreras por el mismo destino.
+
+Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01XLURZYZbsxa6TxNnJNL3KB
+---
+ Makefile           | 19 ++++++++++++++++++-
+ docker-compose.yml | 14 ++++++++++++++
+ 2 files changed, 32 insertions(+), 1 deletion(-)
+
+diff --git a/Makefile b/Makefile
+index f763813..c19d406 100644
+--- a/Makefile
++++ b/Makefile
+@@ -171,7 +171,24 @@ tier:  ## Qué TIER corresponde a esta máquina (mira CPU, RAM y disco)
+ 
+ .PHONY: up
+ up:  ## Levanta el stack
+-	$(COMPOSE) up -d --build
++	@# Se construye UNA vez y luego se levanta, en vez de `up -d --build`.
++	@#
++	@# `api`, `worker-reports`, `worker-etl` y `beat` comparten el mismo
++	@# `build:` y la misma etiqueta `powergis/engine:1.0.0` —son la misma
++	@# imagen desempeñando cuatro papeles—. El constructor Bake, que Compose
++	@# usa por defecto desde hace poco, los construye EN PARALELO, y los
++	@# cuatro compiten por escribir esa etiqueta:
++	@#
++	@#     failed to solve: image "docker.io/powergis/engine:1.0.0":
++	@#     already exists
++	@#
++	@# Gana uno y los otros tres fallan. Con el constructor clásico no
++	@# pasaba, así que el fichero llevaba tiempo así sin dar la cara.
++	@#
++	@# Construir `api` explícitamente produce la etiqueta que los otros tres
++	@# usan, y `up -d` sin `--build` ya no vuelve a construir nada.
++	$(COMPOSE) build api
++	$(COMPOSE) up -d
+ 	@echo "Motor en https://$${ENGINE_HOST:-localhost}   (TIER=$(TIER))"
+ 
+ .PHONY: down
+diff --git a/docker-compose.yml b/docker-compose.yml
+index faf0662..6949897 100644
+--- a/docker-compose.yml
++++ b/docker-compose.yml
+@@ -39,6 +39,20 @@
+ name: powergis
+ 
+ x-engine: &engine
++  # Una sola imagen para cuatro papeles: api, worker-reports, worker-etl y
++  # beat son el mismo código con distinto `command`.
++  #
++  # OJO al levantar: NO uses `docker compose up -d --build`. El constructor
++  # Bake, que Compose usa por defecto desde hace poco, construye los cuatro
++  # servicios EN PARALELO y los cuatro compiten por escribir esta misma
++  # etiqueta:
++  #
++  #     failed to solve: image "docker.io/powergis/engine:1.0.0":
++  #     already exists
++  #
++  # Gana uno y los otros tres fallan. `make up` lo evita construyendo `api`
++  # explícitamente y levantando después, que además es más rápido: una
++  # construcción en vez de cuatro carreras.
+   build:
+     context: ./engine
+     target: runtime
+-- 
+2.43.0
+
+
+From 308b47176a6dffb809ce5ddce8df7a187ac6a4b4 Mon Sep 17 00:00:00 2001
+From: Aldo <oscarlh1997@gmail.com>
+Date: Sun, 6 Sep 2026 18:40:55 +0000
+Subject: [PATCH 2/2] =?UTF-8?q?Sube=20Traefik=20a=20v3.6:=20Docker=2029=20?=
+ =?UTF-8?q?rechaza=20la=20API=20que=20ped=C3=ADa=20v3.2?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Docker 29 elevó la versión mínima de su API a la 1.44. Traefik anterior a
+3.6.1 la pide fija en 1.24, y el demonio la rechaza:
+
+    client version 1.24 is too old.
+    Minimum supported API version is 1.44
+
+El síntoma engaña: Traefik arranca y escucha en el 443, pero no puede leer el
+proveedor de Docker, así que no descubre ningún servicio, no crea routers, no
+pide certificado y sirve su autofirmado. Desde fuera parece un problema de
+Let's Encrypt o de DNS, y el log de ACME no dice nada porque ACME nunca llega
+a intentarse.
+
+Desde 3.6.1 Traefik negocia la versión con el demonio en vez de fijarla.
+
+Aparece ahora porque Ubuntu 26.04 trae Docker 29; con el Docker de 24.04 no
+se daba.
+
+Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01XLURZYZbsxa6TxNnJNL3KB
+---
+ docker-compose.yml | 18 +++++++++++++++++-
+ 1 file changed, 17 insertions(+), 1 deletion(-)
+
+diff --git a/docker-compose.yml b/docker-compose.yml
+index 6949897..c29d7bc 100644
+--- a/docker-compose.yml
++++ b/docker-compose.yml
+@@ -76,7 +76,23 @@ x-engine: &engine
+ services:
+ 
+   traefik:
+-    image: traefik:v3.2
++    # 3.6 o superior, no 3.2.
++    #
++    # Docker 29 elevó la versión mínima de su API a la 1.44, y las versiones
++    # de Traefik anteriores a la 3.6.1 piden la 1.24 con un valor fijo. El
++    # demonio las rechaza:
++    #
++    #     client version 1.24 is too old.
++    #     Minimum supported API version is 1.44
++    #
++    # El efecto es engañoso: Traefik arranca y escucha, pero no puede leer el
++    # proveedor de Docker, así que no descubre NINGÚN servicio, no crea
++    # routers, no pide certificado y sirve su autofirmado. Parece un problema
++    # de Let's Encrypt o de DNS y no lo es.
++    #
++    # Desde la 3.6.1 negocia la versión con el demonio en vez de fijarla. La
++    # etiqueta `v3.6` sigue recibiendo parches dentro de esa serie.
++    image: traefik:v3.6
+     command:
+       - --providers.docker=true
+       - --providers.docker.exposedbydefault=false
+-- 
+2.43.0
+

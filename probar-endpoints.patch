@@ -1,0 +1,137 @@
+From 48a102a5403eda08c09221400d370cf7169b6a5c Mon Sep 17 00:00:00 2001
+From: Aldo <oscarlh1997@gmail.com>
+Date: Sun, 6 Sep 2026 23:14:36 +0000
+Subject: [PATCH] =?UTF-8?q?Hace=20probables=20los=20endpoints=20en=20produ?=
+ =?UTF-8?q?cci=C3=B3n?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+En producción no hay Swagger —`docs_url=None if cfg.is_production`, y es lo
+correcto: publicar el editor interactivo en un dominio abierto regala el mapa
+de la API—. La forma de probar es `powergis endpoints`, que ya firma y dispara
+los 29 casos en orden de dependencia. Pero no funcionaba allí:
+
+  · el contexto de construcción es `./engine`, así que `scripts/` no entra en
+    la imagen y `fixtures.json` no aparecía por ningún lado. La herramienta
+    existía en el contenedor y fallaba al usarla, que es peor que no estar;
+  · `--grupo` aceptaba uno solo, y por el dominio público hay que excluir
+    `operacion`: Traefik sólo sirve `/internal` a 127.0.0.1, así que ahí un
+    403 es el comportamiento correcto. Sin poder excluirlo, la suite acababa
+    con un fallo esperado que hay que ignorar — y una suite así deja de
+    servir.
+
+Cambios: montaje de sólo lectura de `./scripts` (no lleva secretos), `--grupo`
+admite lista separada por comas y valida los nombres, y `make probar` hace las
+dos pasadas que hay que distinguir: la aplicación por dentro y el camino
+completo por el dominio. Si la primera pasa y la segunda no, el motor está
+bien y el problema es de infraestructura — que es justo lo que no supimos leer
+cuando falló el certificado.
+
+Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01XLURZYZbsxa6TxNnJNL3KB
+---
+ Makefile                   | 21 +++++++++++++++++++++
+ docker-compose.yml         | 10 ++++++++++
+ engine/src/powergis/cli.py | 25 +++++++++++++++++++++++--
+ 3 files changed, 54 insertions(+), 2 deletions(-)
+
+diff --git a/Makefile b/Makefile
+index c19d406..ac73e61 100644
+--- a/Makefile
++++ b/Makefile
+@@ -203,6 +203,27 @@ logs:  ## Sigue los logs de todos los servicios
+ ps:  ## Estado de los servicios
+ 	$(COMPOSE) ps
+ 
++.PHONY: probar
++probar:  ## Dispara TODOS los endpoints contra el motor de producción
++	@# Dos pasadas, y las dos hacen falta.
++	@#
++	@# La primera va a `localhost:8000` DENTRO del contenedor: prueba la
++	@# aplicación sola. La segunda sale a internet y vuelve por el dominio,
++	@# así que prueba además DNS, certificado, Traefik y el enrutado.
++	@#
++	@# Si la primera pasa y la segunda no, el motor está bien y el problema
++	@# es de infraestructura. Sin separarlas, un fallo de Traefik se lee como
++	@# un fallo del motor — que es exactamente lo que pasó con el certificado.
++	@echo "── 1/2 · la aplicación, por dentro ─────────────────────────────"
++	$(COMPOSE) exec -T api powergis endpoints http://localhost:8000
++	@echo ""
++	@echo "── 2/2 · el camino completo, por el dominio ────────────────────"
++	@# `/internal` se salta a propósito: Traefik sólo lo sirve a 127.0.0.1,
++	@# así que por el dominio DEBE dar 403. Probarlo aquí sería pedirle a la
++	@# suite que fallara.
++	$(COMPOSE) exec -T api powergis endpoints https://$${ENGINE_HOST:-localhost} \
++		--grupo salud,catalogo,geografia,informes,seguridad
++
+ .PHONY: shell
+ shell:  ## Shell dentro del contenedor de la API
+ 	$(COMPOSE) exec api /bin/bash
+diff --git a/docker-compose.yml b/docker-compose.yml
+index c29d7bc..e04022b 100644
+--- a/docker-compose.yml
++++ b/docker-compose.yml
+@@ -68,6 +68,16 @@ x-engine: &engine
+     redis:    { condition: service_started }
+   volumes:
+     - data:/data
++    # Sólo lectura, y sin secretos dentro: son los datos de prueba
++    # (`fixtures.json`, `cuerpo.json`) que usan `powergis endpoints` y
++    # `powergis firmar --cuerpo`.
++    #
++    # El contexto de construcción es `./engine`, así que `scripts/` NO entra en
++    # la imagen. Sin este montaje esas dos herramientas existen en producción
++    # pero no encuentran sus datos, que es la peor de las tres opciones:
++    # parecen disponibles y fallan al usarlas. Y son justo las que hacen falta
++    # aquí, porque en producción no hay Swagger con el que probar a mano.
++    - ./scripts:/scripts:ro
+   restart: unless-stopped
+   logging:
+     driver: json-file
+diff --git a/engine/src/powergis/cli.py b/engine/src/powergis/cli.py
+index 7d97a7e..096c13c 100644
+--- a/engine/src/powergis/cli.py
++++ b/engine/src/powergis/cli.py
+@@ -576,7 +576,11 @@ def smoke(base_url: str = "http://localhost:8000") -> None:
+ def endpoints(
+     base_url: str = "http://localhost:8000",
+     fixtures: str | None = typer.Option(None, help="Ruta a fixtures.json"),
+-    grupo: str | None = typer.Option(None, help="salud|catalogo|geografia|informes|operacion|seguridad"),
++    grupo: str | None = typer.Option(
++        None,
++        help="Grupos a probar, separados por comas: "
++             "salud,catalogo,geografia,informes,operacion,seguridad",
++    ),
+     con_red: bool = typer.Option(False, "--con-red", help="Exige también los casos que salen a internet"),
+     verbose: bool = typer.Option(False, "--verbose", help="Enseña un trozo de cada respuesta"),
+ ) -> None:
+@@ -691,7 +695,24 @@ def endpoints(
+         except Exception as exc:
+             return 0, str(exc).encode()[:400]
+ 
+-    grupos = [grupo] if grupo else [k for k in data if not k.startswith("_")]
++    todos = [k for k in data if not k.startswith("_")]
++    if grupo:
++        # Se admite una lista separada por comas. Hace falta para probar por el
++        # dominio público, donde `operacion` DEBE dar 403: Traefik sólo sirve
++        # `/internal` a 127.0.0.1. Sin poder excluirlo, la única forma de
++        # probar el camino completo sería aceptar un fallo esperado en la
++        # salida, y una suite con fallos que hay que ignorar deja de servir.
++        grupos = [g.strip() for g in grupo.split(",") if g.strip()]
++        desconocidos = [g for g in grupos if g not in todos]
++        if desconocidos:
++            typer.secho(
++                f"No existe el grupo {', '.join(desconocidos)}. "
++                f"Hay: {', '.join(todos)}",
++                fg=typer.colors.RED,
++            )
++            raise typer.Exit(1)
++    else:
++        grupos = todos
+ 
+     for nombre_grupo in grupos:
+         casos = data.get(nombre_grupo)
+-- 
+2.43.0
+
