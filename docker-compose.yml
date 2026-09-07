@@ -39,6 +39,20 @@
 name: powergis
 
 x-engine: &engine
+  # Una sola imagen para cuatro papeles: api, worker-reports, worker-etl y
+  # beat son el mismo código con distinto `command`.
+  #
+  # OJO al levantar: NO uses `docker compose up -d --build`. El constructor
+  # Bake, que Compose usa por defecto desde hace poco, construye los cuatro
+  # servicios EN PARALELO y los cuatro compiten por escribir esta misma
+  # etiqueta:
+  #
+  #     failed to solve: image "docker.io/powergis/engine:1.0.0":
+  #     already exists
+  #
+  # Gana uno y los otros tres fallan. `make up` lo evita construyendo `api`
+  # explícitamente y levantando después, que además es más rápido: una
+  # construcción en vez de cuatro carreras.
   build:
     context: ./engine
     target: runtime
@@ -72,7 +86,23 @@ x-engine: &engine
 services:
 
   traefik:
-    image: traefik:v3.2
+    # 3.6 o superior, no 3.2.
+    #
+    # Docker 29 elevó la versión mínima de su API a la 1.44, y las versiones
+    # de Traefik anteriores a la 3.6.1 piden la 1.24 con un valor fijo. El
+    # demonio las rechaza:
+    #
+    #     client version 1.24 is too old.
+    #     Minimum supported API version is 1.44
+    #
+    # El efecto es engañoso: Traefik arranca y escucha, pero no puede leer el
+    # proveedor de Docker, así que no descubre NINGÚN servicio, no crea
+    # routers, no pide certificado y sirve su autofirmado. Parece un problema
+    # de Let's Encrypt o de DNS y no lo es.
+    #
+    # Desde la 3.6.1 negocia la versión con el demonio en vez de fijarla. La
+    # etiqueta `v3.6` sigue recibiendo parches dentro de esa serie.
+    image: traefik:v3.6
     command:
       - --providers.docker=true
       - --providers.docker.exposedbydefault=false
