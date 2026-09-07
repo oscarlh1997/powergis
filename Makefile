@@ -35,6 +35,20 @@ endif
 
 ENGINE := $(COMPOSE) exec -T api
 
+# El dominio sale de `.env`, que es la fuente de verdad del despliegue.
+#
+# Antes se leía de la variable de entorno del shell, que en una sesión SSH
+# recién abierta está vacía: `make up` anunciaba «Motor en https://localhost» y
+# `make probar` interrogaba a localhost en vez de al dominio real. Lo peor no
+# era el fallo, sino que ambas cosas parecían haber funcionado.
+#
+# `?=` deja que se pueda forzar desde fuera:  make probar ENGINE_HOST=otro.es
+ENGINE_HOST ?= $(shell sed -n 's/^ENGINE_HOST=[[:space:]]*//p' .env 2>/dev/null \
+                 | tail -1 | tr -d '"'"'"'')
+ifeq ($(strip $(ENGINE_HOST)),)
+ENGINE_HOST := localhost
+endif
+
 .PHONY: help
 help:  ## Muestra esta ayuda
 	@grep -hE '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) \
@@ -171,8 +185,25 @@ tier:  ## Qué TIER corresponde a esta máquina (mira CPU, RAM y disco)
 
 .PHONY: up
 up:  ## Levanta el stack
-	$(COMPOSE) up -d --build
-	@echo "Motor en https://$${ENGINE_HOST:-localhost}   (TIER=$(TIER))"
+	@# Se construye UNA vez y luego se levanta, en vez de `up -d --build`.
+	@#
+	@# `api`, `worker-reports`, `worker-etl` y `beat` comparten el mismo
+	@# `build:` y la misma etiqueta `powergis/engine:1.0.0` —son la misma
+	@# imagen desempeñando cuatro papeles—. El constructor Bake, que Compose
+	@# usa por defecto desde hace poco, los construye EN PARALELO, y los
+	@# cuatro compiten por escribir esa etiqueta:
+	@#
+	@#     failed to solve: image "docker.io/powergis/engine:1.0.0":
+	@#     already exists
+	@#
+	@# Gana uno y los otros tres fallan. Con el constructor clásico no
+	@# pasaba, así que el fichero llevaba tiempo así sin dar la cara.
+	@#
+	@# Construir `api` explícitamente produce la etiqueta que los otros tres
+	@# usan, y `up -d` sin `--build` ya no vuelve a construir nada.
+	$(COMPOSE) build api
+	$(COMPOSE) up -d
+	@echo "Motor en https://$(ENGINE_HOST)   (TIER=$(TIER))"
 
 .PHONY: down
 down:  ## Para el stack (conserva volúmenes)
@@ -197,15 +228,42 @@ probar:  ## Dispara TODOS los endpoints contra el motor de producción
 	@# Si la primera pasa y la segunda no, el motor está bien y el problema
 	@# es de infraestructura. Sin separarlas, un fallo de Traefik se lee como
 	@# un fallo del motor — que es exactamente lo que pasó con el certificado.
+	@$(MAKE) --no-print-directory esperar-api
 	@echo "── 1/2 · la aplicación, por dentro ─────────────────────────────"
-	$(COMPOSE) exec -T api powergis endpoints http://localhost:8000
+	@# 127.0.0.1 y no `localhost`: es la misma dirección que usa la sonda de
+	@# salud del contenedor, y así se prueba exactamente lo que Docker da por
+	@# bueno. `localhost` además puede resolver a ::1 primero.
+	$(COMPOSE) exec -T api powergis endpoints http://127.0.0.1:8000
 	@echo ""
 	@echo "── 2/2 · el camino completo, por el dominio ────────────────────"
 	@# `/internal` se salta a propósito: Traefik sólo lo sirve a 127.0.0.1,
 	@# así que por el dominio DEBE dar 403. Probarlo aquí sería pedirle a la
 	@# suite que fallara.
-	$(COMPOSE) exec -T api powergis endpoints https://$${ENGINE_HOST:-localhost} \
+	$(COMPOSE) exec -T api powergis endpoints https://$(ENGINE_HOST) \
 		--grupo salud,catalogo,geografia,informes,seguridad
+
+.PHONY: esperar-api
+esperar-api:  ## Espera a que la API acepte conexiones (hasta 60 s)
+	@# `docker compose up -d` vuelve cuando el CONTENEDOR ha arrancado, no
+	@# cuando uvicorn escucha. Entre una cosa y otra hay unos segundos —dos
+	@# workers importando la aplicación— y cualquier comprobación lanzada en
+	@# ese hueco falla con «Connection refused» en los 27 casos a la vez.
+	@#
+	@# Ese modo de fallo es especialmente malo porque se lee como «todo está
+	@# roto» cuando en realidad no ha empezado nada. Esperar aquí convierte
+	@# una carrera en una espera.
+	@printf 'Esperando a la API'
+	@for i in $$(seq 1 30); do \
+	   if $(COMPOSE) exec -T api python -c \
+	        "import urllib.request;urllib.request.urlopen('http://127.0.0.1:8000/health',timeout=3)" \
+	        >/dev/null 2>&1; then \
+	     echo " · responde"; exit 0; \
+	   fi; \
+	   printf '.'; sleep 2; \
+	 done; \
+	 echo " · NO responde tras 60 s"; \
+	 echo "   Mira qué dice:  $(COMPOSE) logs --tail=50 api"; \
+	 exit 1
 
 .PHONY: shell
 shell:  ## Shell dentro del contenedor de la API
