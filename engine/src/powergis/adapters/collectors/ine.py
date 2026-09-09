@@ -84,12 +84,58 @@ class TableSpec:
         return os.getenv(self.env_key, self.table_id)
 
 
-# Semilla de tablas. Verificar los IDs con `powergis ine-discover <id>` antes
-# de una carga masiva: el INE los renumera al republicar una operación.
+# Semilla de tablas. Los IDs son el respaldo: cuando el spec declara
+# `operacion`, el motor pregunta al INE cuál es la tabla vigente y usa esa.
+# Comprobarlo con `powergis ine-tablas <operacion>` y `powergis ine-verify`.
+#
+# ---------------------------------------------------------------------------
+# POBLACIÓN MUNICIPAL — por qué la 29005 y no la que había
+#
+# Aquí ponía `2879`, y `2879` es **la tabla de La Rioja**. La operación 22 tiene
+# una tabla por provincia («Albacete: Población por municipios y sexo», «Rioja,
+# La: …»), así que la población, los hombres y las mujeres de toda España
+# salían de 174 municipios. No fallaba nada: las series son municipales, el
+# detector de nivel las aprueba, y el resto del país sencillamente no aparecía.
+#
+# La única municipal y nacional de esa operación es la 29005 —24.414 series—,
+# y sus nombres van sin código: «Ababuj. Total. Total habitantes. Personas.».
+#
+# `dem.pop.total` lleva `exclude` en vez de `match`: las tres series de cada
+# municipio contienen «Total habitantes», así que filtrar por «total» las
+# cogería las tres y escribiría tres hechos del mismo indicador para la misma
+# geografía. Lo que distingue al total es que NO dice ni hombres ni mujeres.
+# ---------------------------------------------------------------------------
 TABLES: tuple[TableSpec, ...] = (
-    TableSpec("2879", "dem.pop.total", "municipio"),
-    TableSpec("2879", "dem.sex.men", "municipio", match=("hombres",)),
-    TableSpec("2879", "dem.sex.women", "municipio", match=("mujeres",)),
+    TableSpec(
+        "29005", "dem.pop.total", "municipio",
+        exclude=("hombres", "mujeres"),
+        operacion=22, table_match=("cifras oficiales del padron por municipio",),
+    ),
+    TableSpec(
+        "29005", "dem.sex.men", "municipio", match=("hombres",),
+        operacion=22, table_match=("cifras oficiales del padron por municipio",),
+    ),
+    TableSpec(
+        "29005", "dem.sex.women", "municipio", match=("mujeres",),
+        operacion=22, table_match=("cifras oficiales del padron por municipio",),
+    ),
+    # -----------------------------------------------------------------------
+    # ESTRUCTURA POR EDADES — sin fuente municipal, y hay que decidir qué hacer
+    #
+    # `56934` es una tabla NACIONAL: sus series empiezan por «Total Nacional.
+    # Todas las edades…». Declararla como municipal hace que no case ni una
+    # geografía, así que estos cinco indicadores llevan desde el principio sin
+    # producir un solo hecho.
+    #
+    # Y no hay recambio: la Estadística Continua de Población (operación 450),
+    # que es la serie viva de población, NO publica ninguna tabla municipal
+    # —comprobado con `powergis ine-tablas 450 --contiene municipio`—.
+    #
+    # Se quedan como estaban, sin `operacion`, a la espera de una decisión que
+    # no es técnica: o se declaran provinciales y el informe municipal enseña
+    # el dato de su provincia diciéndolo, o salen del nivel municipal. Ponerles
+    # una operación ahora sería fingir que el problema está resuelto.
+    # -----------------------------------------------------------------------
     TableSpec("56934", "dem.age.0_15", "municipio", match=("0-15",)),
     TableSpec("56934", "dem.age.16_64", "municipio", match=("16-64",)),
     TableSpec("56934", "dem.age.65p", "municipio", match=("65",)),
@@ -102,7 +148,18 @@ TABLES: tuple[TableSpec, ...] = (
     TableSpec("61399", "dem.edu.none_pct", "municipio", match=("analfabet", "sin estudios")),
     TableSpec("61250", "dem.household.size", "municipio", match=("tamaño medio",)),
     TableSpec("61250", "dem.household.single_pct", "municipio", match=("unipersonal",)),
-    TableSpec("1470", "dem.birth.rate", "provincia", match=("natalidad",)),
+    # `1470` y `67223` se llaman las dos «Tasa Bruta de Natalidad por
+    # provincia» y tienen la misma fecha de modificación: sólo las distingue el
+    # identificador, y la republicada es la de número mayor. La resolución por
+    # operación se queda con esa sola.
+    #
+    # Hay versión municipal, pero con reservas: `30664` sólo trae 155 series
+    # —los municipios grandes—, así que a nivel municipal la mayoría del país
+    # saldría con hueco. Por eso sigue declarada provincial.
+    TableSpec(
+        "67223", "dem.birth.rate", "provincia", match=("fecundidad",),
+        operacion=33, table_match=("natalidad por provincia",),
+    ),
 )
 
 _AGE_TOKEN = re.compile(r"(\d{1,3})\s*(?:-|a)\s*(\d{1,3})|(\d{1,3})\s*(?:y más|o más|\+)")

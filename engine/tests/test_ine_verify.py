@@ -700,3 +700,78 @@ class TestSeriesSinCodigo:
         trampa = self.geo(11, "municipio", "99999", "Total")
         g = self.resolver("28079 Madrid. Total. Personas.", [real, trampa], "municipio")
         assert g is real
+
+
+class TestPoblacionMunicipalReal:
+    """El mapeo de la 29005, la única tabla municipal nacional del padrón.
+
+    Sus series van SIN código y las tres de cada municipio contienen «Total
+    habitantes»:
+
+        Ababuj. Total. Total habitantes. Personas.
+        Ababuj. Hombres. Total habitantes. Personas.
+        Ababuj. Mujeres. Total habitantes. Personas.
+
+    De ahí que `dem.pop.total` filtre por exclusión y no por coincidencia: un
+    `match=("total",)` cogería las tres y escribiría tres hechos del mismo
+    indicador para el mismo municipio. La población saldría al doble, y nada
+    lo delataría salvo mirar el número.
+    """
+
+    FILAS: ClassVar[list[dict]] = [
+        {"Nombre": "Ababuj. Total. Total habitantes. Personas.",
+         "Data": [{"Valor": 100.0, "Anyo": 2025}]},
+        {"Nombre": "Ababuj. Hombres. Total habitantes. Personas.",
+         "Data": [{"Valor": 55.0, "Anyo": 2025}]},
+        {"Nombre": "Ababuj. Mujeres. Total habitantes. Personas.",
+         "Data": [{"Valor": 45.0, "Anyo": 2025}]},
+    ]
+
+    @staticmethod
+    def ababuj():
+        from powergis.domain.enums import GeoLevel
+        from powergis.domain.models import Geo
+        return Geo(geo_id=1, level=GeoLevel.MUNICIPIO, ine_code="44001",
+                   name="Ababuj", parent_id=None)
+
+    def hechos(self, indicador):
+        from powergis.adapters.collectors.ine import TABLES
+        from powergis.domain.models import Segments
+
+        spec = next(s for s in TABLES if s.indicator == indicador)
+        ine = IneCollector(client=FakeClient({"29005": self.FILAS}))
+        geo = self.ababuj()
+        return ine._map(
+            spec, self.FILAS,
+            {geo.ine_code: geo}, IneCollector._indice_por_nombre([geo]),
+            Segments(), None,
+        )
+
+    def test_la_poblacion_total_es_un_solo_hecho(self):
+        hechos = self.hechos("dem.pop.total")
+        assert len(hechos) == 1
+        assert hechos[0].value == 100.0
+
+    def test_hombres_y_mujeres_salen_por_separado(self):
+        assert [h.value for h in self.hechos("dem.sex.men")] == [55.0]
+        assert [h.value for h in self.hechos("dem.sex.women")] == [45.0]
+
+    def test_el_total_no_suma_hombres_y_mujeres(self):
+        """La comprobación que delata el triple conteo: si `dem.pop.total`
+        cogiera las tres series, saldría 200 en vez de 100."""
+        assert sum(h.value or 0 for h in self.hechos("dem.pop.total")) == 100.0
+
+    def test_la_serie_sin_codigo_encuentra_su_municipio(self):
+        assert self.hechos("dem.pop.total")[0].geo_id == 1
+
+    def test_la_tabla_apuntada_es_la_nacional_no_la_de_una_provincia(self):
+        """`2879` era «Rioja, La: Población por municipios y sexo». Que este
+        número vuelva a cambiar a una tabla provincial no daría ningún error:
+        sólo faltaría el 98 % del país."""
+        from powergis.adapters.collectors.ine import TABLES
+
+        for indicador in ("dem.pop.total", "dem.sex.men", "dem.sex.women"):
+            spec = next(s for s in TABLES if s.indicator == indicador)
+            assert spec.table_id == "29005"
+            assert spec.operacion == 22
+            assert "padron por municipio" in " ".join(spec.table_match)
