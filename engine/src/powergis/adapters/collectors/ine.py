@@ -42,14 +42,43 @@ class TableSpec:
     table_id: str
     indicator: str
     level: str                       # nivel geográfico de las filas
-    match: tuple[str, ...] = ()      # tokens que deben aparecer en el nombre de la serie
+    match: tuple[str, ...] = ()      # tokens que deben aparecer en el nombre de la SERIE
     exclude: tuple[str, ...] = ()
     segment_from: str | None = None  # 'age' | 'sex' | 'nationality' | 'month'
     scale: float = 1.0
 
+    #: Operación del INE a la que pertenece la tabla, si se conoce.
+    #:
+    #: El ID de tabla es lo que el INE renumera al republicar; el de la
+    #: operación es estable. Declarándola, el motor puede preguntar cuál es la
+    #: edición vigente en vez de quedarse con la que se escribió aquí el día
+    #: que se montó el sistema.
+    operacion: int | None = None
+
+    #: Tokens que deben aparecer en el nombre de la TABLA. No confundir con
+    #: `match`, que filtra series DENTRO de una tabla.
+    #:
+    #: Hacen falta porque una operación no tiene una tabla por año: la 22 tiene
+    #: una por provincia («Albacete: Población por municipios y sexo»), la 353
+    #: tiene 540 llamadas todas igual, y la 10 seis llamadas «Demografía».
+    #: Quedarse sin más con «la más reciente de la operación» elegiría una
+    #: cualquiera — probablemente de otra provincia — y el informe saldría
+    #: lleno de datos que no son de donde dice.
+    table_match: tuple[str, ...] = ()
+
     @property
     def env_key(self) -> str:
         return f"INE_TABLE_{self.indicator.upper().replace('.', '_')}"
+
+    @property
+    def fijada_a_mano(self) -> bool:
+        """True si una variable de entorno fija el ID.
+
+        Cuando alguien la pone, manda: es la vía de escape para cuando la
+        resolución automática se equivoca, y una resolución que la ignorase
+        dejaría a esa persona sin forma de corregir nada.
+        """
+        return os.getenv(self.env_key) is not None
 
     def resolved_id(self) -> str:
         return os.getenv(self.env_key, self.table_id)
@@ -98,6 +127,10 @@ class IneCollector(BaseCollector):
         #: que reproduce el fallo. Un diagnóstico que no se puede repetir a
         #: mano obliga a adivinar.
         self._base_url = cfg.ine_base_url.rstrip("/")
+        #: Listado de tablas por operación. Una ingesta toca seis tablas de
+        #: tres operaciones; sin esto se pediría el listado entero una vez por
+        #: indicador.
+        self._tablas_cache: dict[int, list[dict[str, Any]]] = {}
         self._client = client or HttpClient(
             cfg.ine_base_url,
             timeout=cfg.ine_timeout,
@@ -137,13 +170,16 @@ class IneCollector(BaseCollector):
     # ------------------------------------------------------------------ #
 
     def _table(self, spec: TableSpec, nult: int = 1) -> list[dict[str, Any]]:
+        tabla, motivo = self.resolver_tabla(spec)
+        if tabla != spec.table_id:
+            log.info("%s → tabla %s (%s)", spec.indicator, tabla, motivo)
         payload = self._client.get_json(
-            f"DATOS_TABLA/{spec.resolved_id()}", {"nult": nult, "tip": "A", "det": 2}
+            f"DATOS_TABLA/{tabla}", {"nult": nult, "tip": "A", "det": 2}
         )
         if isinstance(payload, dict):
             payload = payload.get("Data") or payload.get("data") or []
         if not isinstance(payload, list):
-            raise CollectorError("Respuesta inesperada del INE", table=spec.resolved_id())
+            raise CollectorError("Respuesta inesperada del INE", table=tabla)
         return payload
 
     def _map(
@@ -275,6 +311,107 @@ class IneCollector(BaseCollector):
     # Verificación: los IDs de TABLES son una SEMILLA, no una certeza
     # ------------------------------------------------------------------ #
 
+    # ------------------------------------------------------------------ #
+    # Resolver la edición vigente en vez de arrastrar la que se escribió
+    # ------------------------------------------------------------------ #
+
+    def tablas_de_operacion(self, operacion: int) -> list[dict[str, Any]]:
+        """Todas las tablas de una operación. Se pide una vez por proceso."""
+        if operacion in self._tablas_cache:
+            return self._tablas_cache[operacion]
+        payload = self._client.get_json(f"TABLAS_OPERACION/{operacion}")
+        tablas = [t for t in payload if isinstance(t, dict)] if isinstance(payload, list) else []
+        self._tablas_cache[operacion] = tablas
+        return tablas
+
+    @staticmethod
+    def _recencia(tabla: dict[str, Any]) -> tuple[int, int]:
+        """Cómo de nueva es una tabla: (año del dato, última modificación).
+
+        Los campos no son los mismos en todas las operaciones — las de
+        población traen `Anyo_Periodo_fin`, las demográficas y de renta traen
+        `FechaRef_fin` — así que se prueban por orden y se usa el primero que
+        haya. `Ultima_Modificacion` sí está en todas, pero sólo desempata: una
+        tabla vieja puede haberse retocado ayer, y eso no la hace reciente.
+        """
+        ano = 0
+        for campo in ("Anyo_Periodo_fin", "Anyo_Periodo_ini"):
+            valor = tabla.get(campo)
+            if isinstance(valor, int) and 1900 < valor < 2200:
+                ano = max(ano, valor)
+        if not ano:
+            match = _YEAR.search(str(tabla.get("FechaRef_fin") or ""))
+            if match:
+                ano = int(match.group(0))
+
+        modificacion = tabla.get("Ultima_Modificacion")
+        marca = modificacion if isinstance(modificacion, int) else 0
+        return (ano, marca)
+
+    def resolver_tabla(self, spec: TableSpec) -> tuple[str, str]:
+        """Devuelve (id_de_tabla, explicación) para un spec.
+
+        El orden de preferencia no es arbitrario:
+
+          1. La variable de entorno, si está. Quien la pone manda.
+          2. La tabla más reciente de la operación cuyo nombre encaje.
+          3. El ID de la semilla.
+
+        Nunca lanza: si el INE no responde o nada encaja, se cae al ID de
+        siempre y lo dice. Una carga que se niega a empezar porque el
+        descubrimiento falló es peor que una carga con la tabla de ayer.
+        """
+        if spec.fijada_a_mano:
+            return spec.resolved_id(), f"fijada en {spec.env_key}"
+        if spec.operacion is None:
+            return spec.table_id, "sin operación declarada"
+
+        try:
+            tablas = self.tablas_de_operacion(spec.operacion)
+        except Exception as exc:  # el descubrimiento nunca bloquea una carga
+            log.warning("No se pudo listar la operación %s: %s", spec.operacion, exc)
+            return spec.table_id, f"la operación {spec.operacion} no responde"
+
+        tokens = [_fold(t) for t in spec.table_match]
+        candidatas = [
+            t for t in tablas
+            if all(tok in _fold(str(t.get("Nombre") or "")) for tok in tokens)
+        ] if tokens else list(tablas)
+
+        if not candidatas:
+            return spec.table_id, f"ninguna tabla de {spec.operacion} contiene {list(spec.table_match)}"
+
+        elegida = max(candidatas, key=self._recencia)
+        ano = self._recencia(elegida)[0]
+        return (
+            str(elegida.get("Id") or spec.table_id),
+            f"la más reciente de {len(candidatas)} en la operación {spec.operacion}"
+            + (f", datos de {ano}" if ano else ""),
+        )
+
+    #: A partir de cuántos años de antigüedad una tabla se considera vieja.
+    #:
+    #: El INE publica con retraso —el Padrón de un año sale al siguiente—, así
+    #: que uno o dos años de diferencia son normales y no significan nada. Tres
+    #: ya no: o la operación dejó de publicarse, o la republicaron con otro
+    #: identificador y el nuestro se quedó apuntando a la edición vieja.
+    MAX_ANTIGUEDAD_ANOS: int = 3
+
+    @staticmethod
+    def _ultimo_ano(rows: Sequence[dict[str, Any]]) -> int | None:
+        """El año más reciente que aparece en los datos de una tabla."""
+        anos: list[int] = []
+        for row in rows:
+            for point in row.get("Data") or row.get("data") or []:
+                bruto = point.get("Anyo") or point.get("anyo") or point.get("Fecha")
+                if isinstance(bruto, int) and 1900 < bruto < 2200:
+                    anos.append(bruto)
+                    continue
+                match = _YEAR.search(str(bruto or ""))
+                if match:
+                    anos.append(int(match.group(0)))
+        return max(anos) if anos else None
+
     def verify(self, specs: Sequence[TableSpec] | None = None) -> dict[str, Any]:
         """Contrasta cada `TableSpec` con la API real del INE.
 
@@ -292,7 +429,7 @@ class IneCollector(BaseCollector):
         results: list[dict[str, Any]] = []
 
         for spec in specs:
-            table_id = spec.resolved_id()
+            table_id, motivo = self.resolver_tabla(spec)
             if table_id not in cache:
                 try:
                     cache[table_id] = self._table(spec, nult=1)
@@ -308,6 +445,7 @@ class IneCollector(BaseCollector):
                 "indicator": spec.indicator,
                 "table": table_id,
                 "overridden": table_id != spec.table_id,
+                "resolution": motivo,
                 "expected_level": spec.level,
             }
 
@@ -318,6 +456,13 @@ class IneCollector(BaseCollector):
 
             names = [str(r.get("Nombre") or r.get("nombre") or "") for r in rows]
             entry["series"] = len(names)
+
+            # El año de los datos, siempre. Una tabla puede responder, traer
+            # series de sobra, encajar con los filtros y ser la edición de
+            # 2019: pasa las cuatro comprobaciones y el informe sale con datos
+            # viejos sin que nada lo diga. Enseñar el año en cada línea es lo
+            # que convierte eso en algo que se ve de un vistazo.
+            entry["year"] = self._ultimo_ano(rows)
 
             if not names:
                 entry.update(status="EMPTY", detail="la tabla existe pero no devuelve series")
@@ -350,13 +495,33 @@ class IneCollector(BaseCollector):
                 results.append(entry)
                 continue
 
+            ano = entry["year"]
+            if ano is not None and date.today().year - ano > self.MAX_ANTIGUEDAD_ANOS:
+                entry.update(
+                    status="STALE",
+                    detail=(
+                        f"el dato más reciente es de {ano}. Busca la edición nueva "
+                        f"con `powergis ine-discover` y fíjala en {spec.env_key}"
+                    ),
+                )
+                results.append(entry)
+                continue
+
             entry.update(status="OK", detail="")
             results.append(entry)
 
-        broken = [r for r in results if r["status"] != "OK"]
+        # `STALE` se cuenta aparte de `broken`, y a propósito. Una tabla vieja
+        # responde y devuelve datos: no es un mapeo roto, es una decisión
+        # —seguir con esa edición o buscar la nueva— y quien la toma es una
+        # persona. Meterla en `broken` haría fallar el verificador por algo que
+        # a veces es correcto, y un verificador que falla cuando no debe acaba
+        # ignorándose entero.
+        broken = [r for r in results if r["status"] not in ("OK", "STALE")]
+        stale = [r for r in results if r["status"] == "STALE"]
         return {
             "checked": len(results),
-            "ok": len(results) - len(broken),
+            "ok": len(results) - len(broken) - len(stale),
+            "stale": len(stale),
             "broken": len(broken),
             "results": results,
         }

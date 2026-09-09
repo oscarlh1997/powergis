@@ -139,6 +139,52 @@ def ine_discover(table_id: str) -> None:
         typer.echo(f"  · {name}")
 
 
+@app.command("ine-tablas")
+def ine_tablas(
+    operacion: int = typer.Argument(..., help="Id de operación del INE, p.ej. 22 o 450"),
+    contiene: str = typer.Option("", "--contiene", "-c", help="Filtra por texto del nombre"),
+    limite: int = typer.Option(30, help="Cuántas enseñar"),
+) -> None:
+    """Tablas de una operación, de la más reciente a la más vieja.
+
+    Es la herramienta para elegir `table_match` sin adivinar. Una operación NO
+    tiene una tabla por año: la 22 tiene una por provincia («Albacete:
+    Población por municipios y sexo»), la 353 tiene 540 llamadas todas igual.
+    Quedarse con «la más reciente de la operación» sin filtrar por nombre
+    elegiría una cualquiera, y el informe saldría con datos de otra provincia
+    sin dar un solo error.
+
+        powergis ine-tablas 22 --contiene "población por municipios"
+        powergis ine-tablas 450
+
+    Los identificadores de operación salen de OPERACIONES_DISPONIBLES; los que
+    usa PowerGIS están anotados en `TABLES`.
+    """
+    from .adapters.collectors.ine import IneCollector, _fold
+
+    collector = IneCollector()
+    tablas = collector.tablas_de_operacion(operacion)
+    if contiene:
+        aguja = _fold(contiene)
+        tablas = [t for t in tablas if aguja in _fold(str(t.get("Nombre") or ""))]
+
+    if not tablas:
+        typer.secho(
+            f"Ninguna tabla de la operación {operacion}"
+            + (f" contiene «{contiene}»" if contiene else ""),
+            fg=typer.colors.YELLOW,
+        )
+        raise typer.Exit(1)
+
+    tablas.sort(key=IneCollector._recencia, reverse=True)
+    typer.secho(f"{len(tablas)} tablas · la primera es la que elegiría el motor", bold=True)
+    for tabla in tablas[:limite]:
+        ano = IneCollector._recencia(tabla)[0]
+        typer.echo(f"  {tabla.get('Id')!s:<8} {ano or '?':<6} {str(tabla.get('Nombre'))[:78]}")
+    if len(tablas) > limite:
+        typer.echo(f"  … y {len(tablas) - limite} más")
+
+
 @app.command("load-municipios")
 def load_municipios(
     dry_run: bool = typer.Option(False, help="Descarga y comprueba, pero no escribe"),
@@ -249,14 +295,21 @@ def ine_verify(json_out: bool = False) -> None:
         "LEVEL_MISMATCH": typer.colors.YELLOW,
         "EMPTY": typer.colors.RED,
         "UNREACHABLE": typer.colors.RED,
+        "STALE": typer.colors.YELLOW,
     }
 
     for row in report["results"]:
         status = row["status"]
         mark = "OK " if status == "OK" else "!! "
+        # El año va en TODAS las líneas, no sólo en las viejas. Una tabla que
+        # responde y mapea puede seguir siendo de hace cinco años, y eso no se
+        # ve por ningún otro sitio: el informe sale entero y con datos de otra
+        # década.
+        ano = row.get("year")
         typer.secho(
             f"{mark}{row['indicator']:<28} tabla {row['table']:<7}"
-            f" series={row.get('series', 0):<6} coinciden={row.get('matched', 0)}",
+            f" datos={ano or '?':<6} series={row.get('series', 0):<6}"
+            f" coinciden={row.get('matched', 0)}",
             fg=colours.get(status, typer.colors.WHITE),
         )
         if row["detail"]:
@@ -265,7 +318,7 @@ def ine_verify(json_out: bool = False) -> None:
             for name in row.get("sample", []):
                 typer.echo(f"       ej.: {name}")
         if row.get("overridden"):
-            typer.echo("     (ID sobreescrito por variable de entorno)")
+            typer.echo(f"     ({row.get('resolution', 'ID distinto al de la semilla')})")
 
     typer.echo("")
     if report["broken"]:
@@ -277,6 +330,18 @@ def ine_verify(json_out: bool = False) -> None:
             bold=True,
         )
         raise typer.Exit(1)
+
+    if report.get("stale"):
+        typer.secho(
+            f"{report['stale']} de {report['checked']} tablas traen datos con más de "
+            f"{IneCollector.MAX_ANTIGUEDAD_ANOS} años. Responden y mapean bien, así que "
+            "no es un fallo: es que el INE republicó la operación con otro ID y el "
+            "nuestro sigue apuntando a la edición vieja.\n"
+            "Busca la nueva con `powergis ine-discover <id>` y fíjala en la variable "
+            "INE_TABLE_<INDICADOR> del .env; no hace falta tocar código.",
+            fg=typer.colors.YELLOW,
+            bold=True,
+        )
 
     typer.secho(f"Las {report['checked']} tablas del INE responden y mapean.", fg=typer.colors.GREEN)
 
@@ -638,7 +703,7 @@ def endpoints(
             texto = texto.replace(clave, valor)
         return texto
 
-    ok, ko = 0, 0
+    ok, ko, pendientes = 0, 0, 0
     version_vista = 0   # última versión confirmada del informe principal
 
     def llamar(caso: dict) -> tuple[int, bytes]:
@@ -764,6 +829,23 @@ def endpoints(
                     f"  ok  {status}  {caso['metodo']:<5} {caso['nombre']}",
                     fg=typer.colors.GREEN,
                 )
+            elif status == caso.get("sin_datos"):
+                # El almacén recién montado está vacío, y hay endpoints cuya
+                # respuesta CORRECTA con el almacén vacío no es la del caso
+                # normal: el PlaceRank de un ámbito sin hechos no se calcula, y
+                # pedirlo devuelve 409. Eso no es un fallo del motor; es el
+                # motor negándose a inventar un ranking sin datos.
+                #
+                # Se marca aparte en vez de darlo por bueno o por malo. Contarlo
+                # como fallo enseña a ignorar una línea roja —y entonces la
+                # próxima roja de verdad tampoco se mira—; darlo por bueno
+                # escondería que falta la ingesta.
+                pendientes += 1
+                typer.secho(
+                    f"  ~~  {status}  {caso['metodo']:<5} {caso['nombre']}"
+                    "  (correcto con el almacén vacío; repite tras la ingesta)",
+                    fg=typer.colors.YELLOW,
+                )
             else:
                 ko += 1
                 typer.secho(
@@ -825,6 +907,12 @@ def endpoints(
                     )
 
     typer.echo("")
+    if pendientes:
+        typer.secho(
+            f"{pendientes} caso(s) esperan a que el almacén tenga datos. "
+            "Lánzalo otra vez después de `make ingest-ine`.",
+            fg=typer.colors.YELLOW,
+        )
     if ko:
         typer.secho(f"{ko} fallo(s), {ok} correcto(s).", fg=typer.colors.RED, bold=True)
         raise typer.Exit(1)

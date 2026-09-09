@@ -1,20 +1,23 @@
 """El verificador del INE.
 
 Estas pruebas no tocan la red. Lo que se comprueba aquí es que el verificador
-DETECTA los cuatro modos en que el mapeo del INE se rompe en silencio:
+DETECTA los cinco modos en que el mapeo del INE se rompe en silencio:
 
   1. el INE renumera la tabla al republicar   → UNREACHABLE
   2. la tabla existe pero se vació            → EMPTY
   3. el nombre de las series cambia           → NO_MATCH
   4. la tabla pasa a ser provincial           → LEVEL_MISMATCH
+  5. la tabla sigue viva pero es la edición vieja → STALE
 
-Ninguno de los cuatro lanza una excepción en producción: los cuatro devuelven
-cero hechos y el informe sale con huecos que parecen secreto estadístico. Por
-eso el verificador tiene que ser el ruidoso.
+Ninguno de los cinco lanza una excepción en producción. Los cuatro primeros
+devuelven cero hechos y el informe sale con huecos que parecen secreto
+estadístico. El quinto es peor: el informe sale COMPLETO, con datos de hace
+años y sin un solo hueco que invite a sospechar.
 """
 
 from __future__ import annotations
 
+from datetime import date
 from typing import ClassVar
 
 import pytest
@@ -332,6 +335,91 @@ class TestListaQueNoCabe:
         assert "curl" in mensaje, "el error debe traer cómo reproducirlo a mano"
 
 
+class TestAntiguedad:
+    """El quinto modo de fallo, y el que se coló hasta producción.
+
+    Una tabla puede responder, traer series de sobra, encajar con los filtros y
+    tener el nivel correcto — y ser la edición de hace seis años. Pasa las
+    cuatro comprobaciones anteriores, el informe sale entero, y los números son
+    de otra década. Nada lo delataba: el verificador nunca miraba el año.
+    """
+
+    @staticmethod
+    def serie_de(ano: int) -> dict:
+        return {
+            "Nombre": "28079 Madrid. Total. Personas.",
+            "Data": [{"Valor": 1.0, "Anyo": ano}],
+        }
+
+    def test_una_tabla_reciente_pasa(self, collector):
+        actual = date.today().year - 1
+        ine, _ = collector({"2879": [self.serie_de(actual)]})
+
+        report = ine.verify([TableSpec("2879", "dem.pop.total", "municipio")])
+
+        assert report["results"][0]["status"] == "OK"
+        assert report["results"][0]["year"] == actual
+
+    def test_el_retraso_normal_del_ine_no_es_un_fallo(self, collector):
+        """El Padrón de un año se publica al siguiente; dos años de diferencia
+        son lo habitual y no significan nada."""
+        ine, _ = collector({"2879": [self.serie_de(date.today().year - 2)]})
+
+        report = ine.verify([TableSpec("2879", "dem.pop.total", "municipio")])
+
+        assert report["results"][0]["status"] == "OK"
+        assert report["stale"] == 0
+
+    def test_una_edicion_vieja_se_marca(self, collector):
+        ine, _ = collector({"2879": [self.serie_de(date.today().year - 7)]})
+
+        report = ine.verify([TableSpec("2879", "dem.pop.total", "municipio")])
+
+        assert report["results"][0]["status"] == "STALE"
+        assert report["stale"] == 1
+        assert str(date.today().year - 7) in report["results"][0]["detail"]
+
+    def test_vieja_no_es_rota(self, collector):
+        """`STALE` se cuenta aparte: la tabla responde y da datos, así que
+        seguir con esa edición o buscar la nueva es una decisión de una
+        persona. Si contara como rota, el verificador fallaría por algo que a
+        veces es correcto — y un verificador que falla cuando no debe se acaba
+        ignorando entero."""
+        ine, _ = collector({"2879": [self.serie_de(date.today().year - 7)]})
+
+        report = ine.verify([TableSpec("2879", "dem.pop.total", "municipio")])
+
+        assert report["broken"] == 0
+
+    def test_el_detalle_dice_cómo_arreglarlo(self, collector):
+        ine, _ = collector({"2879": [self.serie_de(2015)]})
+
+        detalle = ine.verify([TableSpec("2879", "dem.pop.total", "municipio")])["results"][0]["detail"]
+
+        assert "ine-discover" in detalle
+        assert "INE_TABLE_DEM_POP_TOTAL" in detalle
+
+    def test_una_tabla_sin_fechas_no_se_marca_por_las_dudas(self, collector):
+        """Sin año no se puede afirmar que esté vieja. Se informa con '?' y se
+        deja pasar: inventar una antigüedad sería peor que no darla."""
+        ine, _ = collector({"2879": [{"Nombre": "28079 Madrid. Total.", "Data": []}]})
+
+        report = ine.verify([TableSpec("2879", "dem.pop.total", "municipio")])
+
+        assert report["results"][0]["year"] is None
+        assert report["results"][0]["status"] == "OK"
+
+    def test_se_queda_con_el_año_mas_reciente_de_la_tabla(self):
+        filas = [
+            {"Data": [{"Anyo": 2019}, {"Anyo": 2024}]},
+            {"Data": [{"Anyo": 2021}]},
+        ]
+        assert IneCollector._ultimo_ano(filas) == 2024
+
+    def test_lee_el_año_aunque_venga_dentro_de_un_texto(self):
+        assert IneCollector._ultimo_ano([{"Data": [{"Fecha": "1 de enero de 2023"}]}]) == 2023
+
+
 class TestDeteccionDeNivel:
     def test_ignora_el_total_nacional_de_la_primera_fila(self):
         """Las tablas del INE suelen abrir con el total nacional; si se mirara
@@ -342,3 +430,130 @@ class TestDeteccionDeNivel:
 
     def test_sin_codigos_no_inventa_un_nivel(self):
         assert IneCollector._detect_level(["Total Nacional.", "Ambos sexos."]) is None
+
+
+class TestResolucionDeTabla:
+    """Elegir la edición vigente en vez de arrastrar la que se escribió.
+
+    El ID de tabla es lo que el INE renumera al republicar; el de la operación
+    es estable. Declarando la operación, el motor pregunta cuál es la tabla
+    vigente y deja de envejecer solo.
+
+    Las formas de aquí son las REALES, sacadas de `TABLAS_OPERACION`: las
+    operaciones de población (22, 450) traen `Anyo_Periodo_fin`, y las
+    demográficas y de renta (33, 353, 10) traen `FechaRef_fin`. Un resolutor
+    que sólo mirase uno de los dos funcionaría en la mitad del catálogo.
+    """
+
+    @staticmethod
+    def tabla(id_, nombre, *, fin=None, ini=None, ref=None, mod=0):
+        t = {"Id": id_, "Nombre": nombre, "Ultima_Modificacion": mod}
+        if fin is not None:
+            t["Anyo_Periodo_fin"] = fin
+        if ini is not None:
+            t["Anyo_Periodo_ini"] = ini
+        if ref is not None:
+            t["FechaRef_fin"] = ref
+        return t
+
+    def resolver(self, spec, tablas):
+        class Cliente:
+            def get_json(self, path, params=None):
+                assert path.startswith("TABLAS_OPERACION/")
+                return tablas
+        return IneCollector(client=Cliente()).resolver_tabla(spec)
+
+    def test_elige_la_de_datos_mas_recientes(self):
+        spec = TableSpec("2879", "dem.pop.total", "municipio",
+                         operacion=22, table_match=("poblacion por municipios",))
+        tablas = [
+            self.tabla(2855, "Albacete: Población por municipios y sexo.", fin=2019),
+            self.tabla(2870, "Madrid: Población por municipios y sexo.", fin=2025),
+            self.tabla(2860, "Cuenca: Población por municipios y sexo.", fin=2022),
+        ]
+        elegida, motivo = self.resolver(spec, tablas)
+        assert elegida == "2870"
+        assert "2025" in motivo
+
+    def test_lee_tambien_las_operaciones_con_fecharef(self):
+        """La 33 y la 353 no traen `Anyo_Periodo_fin` sino `FechaRef_fin`."""
+        spec = TableSpec("1470", "dem.birth.rate", "provincia",
+                         operacion=33, table_match=("natalidad",))
+        tablas = [
+            self.tabla(1381, "Tasa Bruta de Natalidad.", ref="2018-12-31"),
+            self.tabla(1382, "Tasa Bruta de Natalidad.", ref="2024-12-31"),
+        ]
+        assert self.resolver(spec, tablas)[0] == "1382"
+
+    def test_el_nombre_filtra_antes_que_la_fecha(self):
+        """Lo que hace peligroso este resolutor: la 22 tiene una tabla POR
+        PROVINCIA. Sin filtrar por nombre elegiría la más reciente de
+        cualquiera, y el informe saldría con datos de otra provincia sin dar
+        un solo error."""
+        spec = TableSpec("2879", "dem.pop.total", "municipio",
+                         operacion=22, table_match=("madrid",))
+        tablas = [
+            self.tabla(2855, "Albacete: Población por municipios y sexo.", fin=2025),
+            self.tabla(2870, "Madrid: Población por municipios y sexo.", fin=2024),
+        ]
+        assert self.resolver(spec, tablas)[0] == "2870"
+
+    def test_la_ultima_modificacion_solo_desempata(self):
+        """Una tabla vieja retocada ayer no es reciente."""
+        spec = TableSpec("x", "dem.pop.total", "municipio", operacion=22)
+        tablas = [
+            self.tabla(1, "A", fin=2019, mod=9_999_999_999),
+            self.tabla(2, "B", fin=2025, mod=1),
+        ]
+        assert self.resolver(spec, tablas)[0] == "2"
+
+    def test_sin_operacion_declarada_no_cambia_nada(self):
+        """Los specs que no la declaran se comportan igual que siempre."""
+        spec = TableSpec("2879", "dem.pop.total", "municipio")
+        assert self.resolver(spec, [])[0] == "2879"
+
+    def test_si_el_ine_no_responde_se_sigue_con_la_semilla(self):
+        """Una carga que se niega a empezar porque el descubrimiento falló es
+        peor que una carga con la tabla de ayer."""
+        class Muerto:
+            def get_json(self, path, params=None):
+                raise CollectorError("el INE no responde")
+
+        spec = TableSpec("2879", "dem.pop.total", "municipio", operacion=22)
+        elegida, motivo = IneCollector(client=Muerto()).resolver_tabla(spec)
+        assert elegida == "2879"
+        assert "no responde" in motivo
+
+    def test_si_nada_encaja_se_sigue_con_la_semilla(self):
+        spec = TableSpec("2879", "dem.pop.total", "municipio",
+                         operacion=22, table_match=("algo que no existe",))
+        elegida, motivo = self.resolver(spec, [self.tabla(1, "Otra cosa", fin=2025)])
+        assert elegida == "2879"
+        assert "ninguna tabla" in motivo
+
+    def test_la_variable_de_entorno_manda_sobre_todo(self, monkeypatch):
+        """Es la vía de escape cuando la resolución se equivoca. Si el
+        descubrimiento la ignorase, quien la puso se quedaría sin forma de
+        corregir nada."""
+        monkeypatch.setenv("INE_TABLE_DEM_POP_TOTAL", "12345")
+        spec = TableSpec("2879", "dem.pop.total", "municipio",
+                         operacion=22, table_match=("poblacion",))
+        elegida, motivo = self.resolver(spec, [self.tabla(999, "Población", fin=2030)])
+        assert elegida == "12345"
+        assert "INE_TABLE_DEM_POP_TOTAL" in motivo
+
+    def test_el_listado_se_pide_una_vez_por_operacion(self):
+        llamadas = []
+
+        class Contador:
+            def get_json(self, path, params=None):
+                llamadas.append(path)
+                return [{"Id": 7, "Nombre": "Población por municipios", "Anyo_Periodo_fin": 2025}]
+
+        ine = IneCollector(client=Contador())
+        for _ in range(3):
+            ine.resolver_tabla(
+                TableSpec("2879", "dem.pop.total", "municipio",
+                          operacion=22, table_match=("poblacion",))
+            )
+        assert llamadas == ["TABLAS_OPERACION/22"]
