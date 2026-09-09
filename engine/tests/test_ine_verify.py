@@ -614,3 +614,89 @@ class TestResolucionDeTabla:
                           operacion=22, table_match=("poblacion",))
             )
         assert llamadas == ["TABLAS_OPERACION/22"]
+
+
+class TestSeriesSinCodigo:
+    """Casar series con geografías cuando el INE no pone el código.
+
+    Descubierto mirando cinco tablas reales: **no hay un formato, hay tres**, y
+    los tres están en tablas que el motor usa.
+
+        '28079 Madrid. Total. Personas.'    código delante
+        'Ababuj. Total. Total habitantes.'  sólo nombre, primer campo
+        'Fecundidad. Albacete.'             sólo nombre, SEGUNDO campo
+
+    El colector miraba únicamente el primer campo y sólo entendía el código.
+    Con eso, la tabla municipal nacional del padrón (24.414 series) y la de
+    natalidad provincial (53) no aportaban ni un dato — sin lanzar nada, sin
+    un error, sin nada que mirar.
+    """
+
+    @staticmethod
+    def geo(geo_id, level, code, name):
+        from powergis.domain.enums import GeoLevel
+        from powergis.domain.models import Geo
+        return Geo(geo_id=geo_id, level=GeoLevel(level), ine_code=code,
+                   name=name, parent_id=None)
+
+    def indice(self, *geos):
+        return IneCollector._indice_por_nombre(list(geos))
+
+    def resolver(self, serie, geos, level=None):
+        por_codigo = {g.ine_code: g for g in geos}
+        return IneCollector._geo_of(serie, por_codigo, self.indice(*geos), level)
+
+    def test_el_codigo_delante_sigue_funcionando(self):
+        madrid = self.geo(1, "municipio", "28079", "Madrid")
+        g = self.resolver("28079 Madrid. Total. Personas.", [madrid], "municipio")
+        assert g is madrid
+
+    def test_el_nombre_solo_en_el_primer_campo(self):
+        """Formato de la 29005, la tabla municipal nacional del padrón."""
+        ababuj = self.geo(2, "municipio", "44001", "Ababuj")
+        g = self.resolver("Ababuj. Total. Total habitantes. Personas.", [ababuj], "municipio")
+        assert g is ababuj
+
+    def test_el_nombre_en_el_segundo_campo(self):
+        """Formato de la 67223, natalidad provincial. Mirando sólo el primer
+        campo —'Fecundidad'— esta tabla no resolvía nada."""
+        albacete = self.geo(3, "provincia", "02", "Albacete")
+        g = self.resolver("Fecundidad. Albacete.", [albacete], "provincia")
+        assert g is albacete
+
+    def test_los_acentos_no_impiden_casar(self):
+        """'Alcalá de Guadaíra' aparece acentuado en el INE y puede no estarlo
+        igual en `dim_geo`."""
+        alcala = self.geo(4, "municipio", "41004", "Alcala de Guadaira")
+        g = self.resolver("Alcalá de Guadaíra. Fecundidad. Tasa.", [alcala], "municipio")
+        assert g is alcala
+
+    def test_un_nombre_repetido_no_se_asigna_a_ninguno(self):
+        """La regla de honestidad. Si dos municipios se llaman igual no hay
+        forma de saber cuál es, y elegir uno metería el dato de un pueblo en
+        la ficha de otro sin que nada lo delatara. Un hueco se ve; un dato
+        equivocado, no."""
+        uno = self.geo(5, "municipio", "09001", "Villanueva")
+        otro = self.geo(6, "municipio", "37001", "Villanueva")
+        assert self.resolver("Villanueva. Total. Personas.", [uno, otro], "municipio") is None
+
+    def test_el_nivel_evita_confundir_ceuta_municipio_con_ceuta_provincia(self):
+        """Ceuta es municipio, provincia y comunidad a la vez."""
+        muni = self.geo(7, "municipio", "51001", "Ceuta")
+        prov = self.geo(8, "provincia", "51", "Ceuta")
+        assert self.resolver("Ceuta. Total. Personas.", [muni, prov], "provincia") is prov
+        assert self.resolver("Ceuta. Total. Personas.", [muni, prov], "municipio") is muni
+
+    def test_una_serie_que_no_es_de_ninguna_geografia_no_inventa(self):
+        """'Total Nacional' de la 56934, que resultó ser una tabla NACIONAL
+        declarada como municipal en el motor."""
+        madrid = self.geo(9, "municipio", "28079", "Madrid")
+        serie = "Total Nacional. Todas las edades. Total. Población. Número."
+        assert self.resolver(serie, [madrid], "municipio") is None
+
+    def test_el_codigo_gana_al_nombre(self):
+        """Si viene el código, es inequívoco y manda."""
+        real = self.geo(10, "municipio", "28079", "Madrid")
+        trampa = self.geo(11, "municipio", "99999", "Total")
+        g = self.resolver("28079 Madrid. Total. Personas.", [real, trampa], "municipio")
+        assert g is real

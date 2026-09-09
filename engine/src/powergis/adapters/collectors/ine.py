@@ -153,6 +153,7 @@ class IneCollector(BaseCollector):
 
         by_code = {g.ine_code.zfill(5): g for g in geos}
         by_code.update({g.ine_code: g for g in geos})
+        by_name = self._indice_por_nombre(geos)
         facts: list[Fact] = []
 
         for spec in TABLES:
@@ -163,9 +164,52 @@ class IneCollector(BaseCollector):
             except CollectorError as exc:
                 log.warning("INE tabla %s (%s): %s", spec.resolved_id(), spec.indicator, exc.message)
                 continue
-            facts.extend(self._map(spec, rows, by_code, segments, period))
+            facts.extend(self._map(spec, rows, by_code, by_name, segments, period))
 
         return facts
+
+    @staticmethod
+    def _indice_por_nombre(geos: Sequence[Geo]) -> dict[tuple[str, str], Geo]:
+        """Índice (nivel, nombre normalizado) → geografía.
+
+        Hace falta porque **la mitad del catálogo del INE no pone el código en
+        el nombre de la serie**. La tabla municipal nacional del padrón dice
+        «Ababuj. Total. Total habitantes.», sin el 44001 por ningún lado, y la
+        de natalidad provincial dice «Fecundidad. Albacete.». Sin resolver por
+        nombre, esas tablas no aportan un solo dato.
+
+        Dos decisiones que no se ven en el tipo:
+
+        · **Se indexa por NIVEL además de por nombre.** Ceuta y Melilla son a
+          la vez municipio, provincia y comunidad; sin el nivel, una serie
+          provincial podría casar con el municipio.
+
+        · **Los nombres repetidos se DESCARTAN, no se resuelven a cualquiera.**
+          Si dos municipios se llaman igual, no hay forma de saber cuál es, y
+          elegir uno metería el dato de un pueblo en la ficha de otro sin que
+          nada lo delatara. Preferimos el hueco: un hueco se ve, un dato
+          equivocado no.
+        """
+        vistos: dict[tuple[str, str], Geo] = {}
+        ambiguos: set[tuple[str, str]] = set()
+
+        for geo in geos:
+            clave = (str(geo.level), _fold(geo.name))
+            if clave in vistos and vistos[clave].geo_id != geo.geo_id:
+                ambiguos.add(clave)
+                continue
+            vistos[clave] = geo
+
+        for clave in ambiguos:
+            vistos.pop(clave, None)
+
+        if ambiguos:
+            log.info(
+                "%d nombres repetidos entre geografías; esas series se dejarán sin "
+                "resolver en vez de asignarlas a la primera que coincida",
+                len(ambiguos),
+            )
+        return vistos
 
     # ------------------------------------------------------------------ #
 
@@ -187,10 +231,12 @@ class IneCollector(BaseCollector):
         spec: TableSpec,
         rows: Iterable[dict[str, Any]],
         by_code: dict[str, Geo],
+        by_name: dict[tuple[str, str], Geo],
         segments: Segments,
         period: date | None,
     ) -> list[Fact]:
         out: list[Fact] = []
+        sin_resolver = 0
         wanted_ages = {a.lower() for a in segments.age}
         wanted_sex = {s.upper() for s in segments.sex}
 
@@ -203,8 +249,9 @@ class IneCollector(BaseCollector):
             if spec.exclude and any(token in lower for token in spec.exclude):
                 continue
 
-            geo = self._geo_of(name, by_code)
+            geo = self._geo_of(name, by_code, by_name, spec.level)
             if geo is None:
+                sin_resolver += 1
                 continue
 
             segment: dict[str, str] = {}
@@ -231,6 +278,15 @@ class IneCollector(BaseCollector):
                         source_ref=f"INE:{spec.resolved_id()}",
                     )
                 )
+
+        # Que una tabla no case con ninguna geografía es el fallo más caro del
+        # colector: devuelve cero hechos, no lanza nada, y el informe sale con
+        # huecos que parecen secreto estadístico. Así al menos queda en el log.
+        if sin_resolver:
+            log.warning(
+                "INE %s (tabla %s): %d series sin geografía reconocible",
+                spec.indicator, spec.resolved_id(), sin_resolver,
+            )
         return out
 
     def _points(self, row: dict[str, Any]) -> list[tuple[float | None, date]]:
@@ -255,16 +311,55 @@ class IneCollector(BaseCollector):
         return date(int(match.group(0)), 1, 1) if match else date.today()
 
     @staticmethod
-    def _geo_of(name: str, by_code: dict[str, Geo]) -> Geo | None:
-        """El INE nombra las series como '28079 Madrid. Total. ...'."""
-        head = name.split(".")[0].strip()
-        token = head.split(" ")[0].strip()
-        if token.isdigit():
-            return by_code.get(token) or by_code.get(token.zfill(5)) or by_code.get(token.zfill(2))
-        lowered = head.lower()
-        for geo in by_code.values():
-            if geo.name.lower() == lowered:
-                return geo
+    def _geo_of(
+        name: str,
+        by_code: dict[str, Geo],
+        by_name: dict[tuple[str, str], Geo] | None = None,
+        level: str | None = None,
+    ) -> Geo | None:
+        """Localiza la geografía de una serie del INE.
+
+        No hay UN formato, hay tres, y los tres aparecen en tablas que
+        usamos:
+
+            '28079 Madrid. Total. Personas.'   ← código delante
+            'Ababuj. Total. Total habitantes.' ← sólo el nombre, y va primero
+            'Fecundidad. Albacete.'            ← sólo el nombre, y va segundo
+
+        Por eso se recorren TODOS los campos separados por puntos en vez de
+        mirar sólo el primero. Mirar sólo el primero es lo que dejaba las
+        tablas del tercer tipo sin un solo dato.
+
+        El nivel esperado del spec acota la búsqueda y evita el falso positivo
+        evidente: 'Ceuta' es municipio, provincia y comunidad a la vez.
+        """
+        campos = [parte.strip() for parte in name.split(".") if parte.strip()]
+
+        # Primero por código, que es inequívoco.
+        for campo in campos:
+            token = campo.split(" ")[0].strip()
+            if token.isdigit():
+                geo = (
+                    by_code.get(token)
+                    or by_code.get(token.zfill(5))
+                    or by_code.get(token.zfill(2))
+                )
+                if geo is not None:
+                    return geo
+
+        if not by_name:
+            return None
+
+        # Y sólo entonces por nombre, con el nivel como filtro. Se devuelve el
+        # PRIMER campo que resuelva: en 'Fecundidad. Albacete.' el primero no
+        # es una geografía y el segundo sí.
+        niveles = [level] if level else sorted({lvl for lvl, _ in by_name})
+        for campo in campos:
+            plegado = _fold(campo)
+            for lvl in niveles:
+                geo = by_name.get((str(lvl), plegado))
+                if geo is not None:
+                    return geo
         return None
 
     @staticmethod
