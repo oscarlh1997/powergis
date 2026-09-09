@@ -179,8 +179,8 @@ def ine_tablas(
     tablas.sort(key=IneCollector._recencia, reverse=True)
     typer.secho(f"{len(tablas)} tablas · la primera es la que elegiría el motor", bold=True)
     for tabla in tablas[:limite]:
-        ano = IneCollector._recencia(tabla)[0]
-        typer.echo(f"  {tabla.get('Id')!s:<8} {ano or '?':<6} {str(tabla.get('Nombre'))[:78]}")
+        fecha = IneCollector.etiqueta_fecha(tabla)
+        typer.echo(f"  {tabla.get('Id')!s:<8} {fecha:<10} {str(tabla.get('Nombre'))[:74]}")
     if len(tablas) > limite:
         typer.echo(f"  … y {len(tablas) - limite} más")
 

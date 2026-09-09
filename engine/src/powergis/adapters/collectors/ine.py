@@ -325,20 +325,39 @@ class IneCollector(BaseCollector):
         return tablas
 
     @staticmethod
-    def _recencia(tabla: dict[str, Any]) -> tuple[int, int]:
-        """Cómo de nueva es una tabla: (año del dato, última modificación).
+    def _recencia(tabla: dict[str, Any]) -> tuple[int, int, int]:
+        """Cómo de nueva es una tabla: (año del dato, modificación, id).
 
-        Los campos no son los mismos en todas las operaciones — las de
-        población traen `Anyo_Periodo_fin`, las demográficas y de renta traen
-        `FechaRef_fin` — así que se prueban por orden y se usa el primero que
-        haya. `Ultima_Modificacion` sí está en todas, pero sólo desempata: una
-        tabla vieja puede haberse retocado ayer, y eso no la hace reciente.
+        Tres cosas que hay que saber del formato real, porque ninguna es la
+        que uno esperaría:
+
+        · **Los años vienen como TEXTO.** `"Anyo_Periodo_fin": "2021"`, no
+          2021. Filtrarlos por `isinstance(int)` los descarta todos, y
+          entonces no hay ninguna fecha con la que ordenar.
+
+        · **`FechaRef_fin` suele ser la cadena `"null"`.** No `None`: el texto
+          literal. Está presente en las operaciones demográficas y de renta,
+          y no lleva ninguna fecha dentro.
+
+        · **`Anyo_Periodo_ini` NO sirve para esto.** Es cuándo EMPIEZA la
+          serie, no cuándo acaba. Ordenar por él pondría arriba la tabla que
+          arranca más tarde, que no tiene nada que ver con cuál trae el dato
+          más nuevo.
+
+        Así que el año sale sólo de `Anyo_Periodo_fin`, y cuando no está
+        —operaciones 33 y 353— manda `Ultima_Modificacion`, que es un
+        timestamp en milisegundos y el único indicio de frescura que queda.
+
+        El Id cierra el desempate. Es una heurística, no un dato: el INE los
+        asigna crecientes, así que entre dos tablas idénticas en nombre y
+        fecha la de número mayor suele ser la republicada. Se usa la última
+        porque sin ella el desempate sería el orden de llegada, que no
+        significa nada en absoluto.
         """
         ano = 0
-        for campo in ("Anyo_Periodo_fin", "Anyo_Periodo_ini"):
-            valor = tabla.get(campo)
-            if isinstance(valor, int) and 1900 < valor < 2200:
-                ano = max(ano, valor)
+        match = _YEAR.search(str(tabla.get("Anyo_Periodo_fin") or ""))
+        if match:
+            ano = int(match.group(0))
         if not ano:
             match = _YEAR.search(str(tabla.get("FechaRef_fin") or ""))
             if match:
@@ -346,7 +365,32 @@ class IneCollector(BaseCollector):
 
         modificacion = tabla.get("Ultima_Modificacion")
         marca = modificacion if isinstance(modificacion, int) else 0
-        return (ano, marca)
+
+        try:
+            identificador = int(tabla.get("Id") or 0)
+        except (TypeError, ValueError):
+            identificador = 0
+
+        return (ano, marca, identificador)
+
+    @staticmethod
+    def etiqueta_fecha(tabla: dict[str, Any]) -> str:
+        """Cómo se enseña la frescura de una tabla en pantalla.
+
+        Cuando hay año de fin del periodo, ese es el dato. Cuando no, se
+        enseña el año de la última modificación con una marca —«mod. 2025»—
+        para que no se confunda con el año de los datos, que es otra cosa.
+        """
+        match = _YEAR.search(str(tabla.get("Anyo_Periodo_fin") or ""))
+        if match:
+            return match.group(0)
+
+        modificacion = tabla.get("Ultima_Modificacion")
+        if isinstance(modificacion, int) and modificacion > 0:
+            from datetime import UTC, datetime
+
+            return f"mod. {datetime.fromtimestamp(modificacion / 1000, UTC).year}"
+        return "?"
 
     def resolver_tabla(self, spec: TableSpec) -> tuple[str, str]:
         """Devuelve (id_de_tabla, explicación) para un spec.
@@ -382,11 +426,10 @@ class IneCollector(BaseCollector):
             return spec.table_id, f"ninguna tabla de {spec.operacion} contiene {list(spec.table_match)}"
 
         elegida = max(candidatas, key=self._recencia)
-        ano = self._recencia(elegida)[0]
         return (
             str(elegida.get("Id") or spec.table_id),
             f"la más reciente de {len(candidatas)} en la operación {spec.operacion}"
-            + (f", datos de {ano}" if ano else ""),
+            f" ({self.etiqueta_fecha(elegida)})",
         )
 
     #: A partir de cuántos años de antigüedad una tabla se considera vieja.

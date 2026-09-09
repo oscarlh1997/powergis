@@ -447,11 +447,17 @@ class TestResolucionDeTabla:
 
     @staticmethod
     def tabla(id_, nombre, *, fin=None, ini=None, ref=None, mod=0):
+        """Un registro con la forma EXACTA de TABLAS_OPERACION.
+
+        Los años vienen como texto —`"2021"`, no 2021— y `FechaRef_fin` suele
+        ser la cadena `"null"`, no un nulo. Las dos cosas parecen detalles y
+        las dos rompieron el resolutor.
+        """
         t = {"Id": id_, "Nombre": nombre, "Ultima_Modificacion": mod}
         if fin is not None:
-            t["Anyo_Periodo_fin"] = fin
+            t["Anyo_Periodo_fin"] = str(fin)
         if ini is not None:
-            t["Anyo_Periodo_ini"] = ini
+            t["Anyo_Periodo_ini"] = str(ini)
         if ref is not None:
             t["FechaRef_fin"] = ref
         return t
@@ -476,7 +482,6 @@ class TestResolucionDeTabla:
         assert "2025" in motivo
 
     def test_lee_tambien_las_operaciones_con_fecharef(self):
-        """La 33 y la 353 no traen `Anyo_Periodo_fin` sino `FechaRef_fin`."""
         spec = TableSpec("1470", "dem.birth.rate", "provincia",
                          operacion=33, table_match=("natalidad",))
         tablas = [
@@ -484,6 +489,58 @@ class TestResolucionDeTabla:
             self.tabla(1382, "Tasa Bruta de Natalidad.", ref="2024-12-31"),
         ]
         assert self.resolver(spec, tablas)[0] == "1382"
+
+    def test_los_anos_llegan_como_texto(self):
+        """`"Anyo_Periodo_fin": "2021"`. Filtrarlos por tipo entero los
+        descartaba todos, y entonces no quedaba ninguna fecha con la que
+        ordenar: las listas salían en el orden en que venían."""
+        assert IneCollector._recencia({"Anyo_Periodo_fin": "2021"})[0] == 2021
+
+    def test_fecharef_suele_ser_la_cadena_null(self):
+        """No `None`: el texto literal. Está así en las operaciones 33 y 353."""
+        assert IneCollector._recencia({"FechaRef_fin": "null"})[0] == 0
+
+    def test_el_ano_de_inicio_no_cuenta_como_frescura(self):
+        """`Anyo_Periodo_ini` es cuándo EMPIEZA la serie. Usarlo pondría
+        arriba la tabla que arranca más tarde, que no dice nada sobre cuál
+        trae el dato más nuevo."""
+        vieja_larga = {"Anyo_Periodo_ini": "1975", "Anyo_Periodo_fin": "2025"}
+        nueva_corta = {"Anyo_Periodo_ini": "2015", "Anyo_Periodo_fin": "2019"}
+        assert IneCollector._recencia(vieja_larga) > IneCollector._recencia(nueva_corta)
+
+    def test_sin_ano_manda_la_ultima_modificacion(self):
+        """Es lo único que queda en las operaciones 33 y 353."""
+        antigua = {"FechaRef_fin": "null", "Ultima_Modificacion": 1_600_000_000_000}
+        reciente = {"FechaRef_fin": "null", "Ultima_Modificacion": 1_763_546_400_000}
+        assert IneCollector._recencia(reciente) > IneCollector._recencia(antigua)
+
+    def test_a_igualdad_de_todo_gana_el_id_mayor(self):
+        """Heurística de último recurso, no un dato: el INE asigna los
+        identificadores crecientes, así que entre dos tablas idénticas en
+        nombre y fecha la de número mayor suele ser la republicada. Sin esto
+        el desempate sería el orden de llegada, que no significa nada.
+
+        Es el caso real de `1470` frente a `67223`, las dos «Tasa Bruta de
+        Natalidad por provincia».
+        """
+        spec = TableSpec("1470", "dem.birth.rate", "provincia",
+                         operacion=33, table_match=("natalidad por provincia",))
+        mod = 1_763_546_400_000
+        tablas = [
+            self.tabla(1470, "Tasa Bruta de Natalidad por provincia", ref="null", mod=mod),
+            self.tabla(67223, "Tasa Bruta de Natalidad por provincia", ref="null", mod=mod),
+        ]
+        assert self.resolver(spec, tablas)[0] == "67223"
+
+    def test_la_etiqueta_distingue_el_dato_de_la_modificacion(self):
+        """«2021» es el año del dato; «mod. 2025» es cuándo se tocó la tabla.
+        Enseñarlos igual invitaría a leer una fecha de retoque como si fuera
+        la frescura del dato."""
+        assert IneCollector.etiqueta_fecha({"Anyo_Periodo_fin": "2021"}) == "2021"
+        assert IneCollector.etiqueta_fecha(
+            {"FechaRef_fin": "null", "Ultima_Modificacion": 1_763_546_400_000}
+        ).startswith("mod. 202")
+        assert IneCollector.etiqueta_fecha({}) == "?"
 
     def test_el_nombre_filtra_antes_que_la_fecha(self):
         """Lo que hace peligroso este resolutor: la 22 tiene una tabla POR
@@ -502,10 +559,10 @@ class TestResolucionDeTabla:
         """Una tabla vieja retocada ayer no es reciente."""
         spec = TableSpec("x", "dem.pop.total", "municipio", operacion=22)
         tablas = [
-            self.tabla(1, "A", fin=2019, mod=9_999_999_999),
-            self.tabla(2, "B", fin=2025, mod=1),
+            self.tabla(9999, "A", fin=2019, mod=9_999_999_999_999),
+            self.tabla(1, "B", fin=2025, mod=1),
         ]
-        assert self.resolver(spec, tablas)[0] == "2"
+        assert self.resolver(spec, tablas)[0] == "1"
 
     def test_sin_operacion_declarada_no_cambia_nada(self):
         """Los specs que no la declaran se comportan igual que siempre."""
