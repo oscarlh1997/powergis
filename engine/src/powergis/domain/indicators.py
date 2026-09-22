@@ -77,19 +77,43 @@ _DEMO = [
        section=Section.DEMOGRAFIA, direction=_HB, source="derivado", tier=Tier.BASICO,
        dimension=Dimension.MATCH, formula="dem.pop.segment / dem.pop.total * 100", decimals=1),
     _i("dem.age.mean", "edad", "Edad media", Unit.ANIOS, section=Section.DEMOGRAFIA,
-       source="INE:Padrón continuo", tier=Tier.BASICO, decimals=1),
+       source="INE:Atlas de renta", tier=Tier.BASICO, decimals=1),
     _i("dem.age.0_15", "edad", "Población 0-15", Unit.PERSONAS, section=Section.DEMOGRAFIA,
        source="INE:Padrón continuo", tier=Tier.BASICO, decimals=0),
     _i("dem.age.16_64", "edad", "Población 16-64", Unit.PERSONAS, section=Section.DEMOGRAFIA,
        source="INE:Padrón continuo", tier=Tier.BASICO, decimals=0),
     _i("dem.age.65p", "edad", "Población 65 o más", Unit.PERSONAS, section=Section.DEMOGRAFIA,
        source="INE:Padrón continuo", tier=Tier.BASICO, decimals=0),
+
+    # -- edad en porcentaje: los tramos que el INE publica por municipio -----
+    #
+    # Los tres de arriba van en PERSONAS y cortan en 15/16. La única fuente
+    # municipal con cobertura nacional —el Atlas de renta— da PORCENTAJES y
+    # corta en 18. No se reutilizan aquellos códigos: meter «% menor de 18»
+    # donde pone «Población 0-15» sería un dato correcto en el sitio
+    # equivocado —cambia la unidad y cambia el tramo— y nadie que leyera el
+    # informe podría notarlo.
+    _i("dem.age.u18_pct", "edad", "% menores de 18 años", Unit.PORCENTAJE,
+       section=Section.DEMOGRAFIA, source="INE:Atlas de renta", tier=Tier.BASICO,
+       decimals=1),
+    _i("dem.age.65p_pct", "edad", "% de 65 y más años", Unit.PORCENTAJE,
+       section=Section.DEMOGRAFIA, source="INE:Atlas de renta", tier=Tier.BASICO,
+       dimension=Dimension.DEMOGRAFICO, decimals=1),
+    _i("dem.age.18_64_pct", "edad", "% de 18 a 64 años", Unit.PORCENTAJE,
+       section=Section.DEMOGRAFIA, direction=_HB, source="derivado", tier=Tier.BASICO,
+       formula="100 - %<18 - %65+", decimals=1,
+       description="Población en edad de trabajar. Se obtiene por resta, que es "
+                   "exacta: los tres tramos suman el total."),
     _i("dem.dependency.total", "edad", "Tasa de dependencia total", Unit.PORCENTAJE,
        section=Section.DEMOGRAFIA, direction=_LB, source="derivado", tier=Tier.BASICO,
-       dimension=Dimension.DEMOGRAFICO, formula="(0-15 + 65+) / 16-64 * 100", decimals=1),
+       dimension=Dimension.DEMOGRAFICO, formula="(jóvenes + 65+) / edad activa * 100", decimals=1,
+       description="Con los tramos en personas (0-15, 16-64) si existen; si no, "
+                   "con los del Atlas (<18, 18-64). Es un cociente entre tramos, "
+                   "así que sale igual en personas que en porcentaje; nunca se "
+                   "mezclan los dos cortes en la misma cuenta."),
     _i("dem.ageing.index", "edad", "Índice de envejecimiento", Unit.INDICE,
        section=Section.DEMOGRAFIA, direction=_LB, source="derivado", tier=Tier.BASICO,
-       dimension=Dimension.DEMOGRAFICO, formula="65+ / 0-15 * 100", decimals=1),
+       dimension=Dimension.DEMOGRAFICO, formula="65+ / jóvenes * 100", decimals=1),
 
     # -- género -------------------------------------------------------------
     _i("dem.sex.women", "genero", "Mujeres", Unit.PERSONAS, section=Section.DEMOGRAFIA,
@@ -113,9 +137,9 @@ _DEMO = [
     _i("dem.children.mean", "hogares", "Número medio de hijos", Unit.RATIO,
        section=Section.DEMOGRAFIA, source="INE:Censo", tier=Tier.BASICO, decimals=2),
     _i("dem.household.size", "hogares", "Tamaño medio del hogar", Unit.RATIO,
-       section=Section.DEMOGRAFIA, source="INE:Censo", tier=Tier.BASICO, decimals=2),
+       section=Section.DEMOGRAFIA, source="INE:Atlas de renta", tier=Tier.BASICO, decimals=2),
     _i("dem.household.single_pct", "hogares", "% hogares unipersonales", Unit.PORCENTAJE,
-       section=Section.DEMOGRAFIA, source="INE:Censo", tier=Tier.BASICO, decimals=1),
+       section=Section.DEMOGRAFIA, source="INE:Atlas de renta", tier=Tier.BASICO, decimals=1),
     _i("dem.household.with_children_pct", "hogares", "% hogares con hijos", Unit.PORCENTAJE,
        section=Section.DEMOGRAFIA, source="INE:Censo", tier=Tier.BASICO, decimals=1),
     _i("dem.household.monoparental_pct", "hogares", "% hogares monoparentales", Unit.PORCENTAJE,
@@ -177,11 +201,27 @@ _ECO = [
 
     _i("eco.income.household.mean", "renta", "Renta bruta media por hogar", Unit.EUROS,
        section=Section.SOCIOECONOMICO, direction=_HB, source="INE:ADRH", min_level=SEC,
-       dimension=Dimension.ECONOMICO, decimals=0),
-    _i("eco.income.household.median", "renta", "Renta mediana por hogar", Unit.EUROS,
+       dimension=Dimension.ECONOMICO, decimals=0,
+       description="Bruta: antes de IRPF y cotizaciones. Es la que el formulario "
+                   "pregunta como renta anual."),
+    _i("eco.income.household.net", "renta", "Renta neta media por hogar", Unit.EUROS,
        section=Section.SOCIOECONOMICO, direction=_HB, source="INE:ADRH", min_level=SEC,
-       dimension=Dimension.ECONOMICO, decimals=0),
-    _i("eco.income.percapita", "renta", "Renta per cápita", Unit.EUROS,
+       decimals=0,
+       description="Bruta menos IRPF y cotizaciones, MEDIDA por el Atlas. Es la "
+                   "base de la renta disponible mensual cuando existe; sin ella, "
+                   "la disponible se modela con un tipo efectivo supuesto."),
+    # El código dice «household» por historia; el dato NO es por hogar. El
+    # Atlas publica la mediana por UNIDAD DE CONSUMO (renta equivalente: el
+    # primer adulto cuenta 1, cada adulto más 0,5, cada menor 0,3). Se deja el
+    # código para no romper referencias y se corrige lo que ve el cliente,
+    # que es la etiqueta.
+    _i("eco.income.household.median", "renta", "Renta mediana por unidad de consumo",
+       Unit.EUROS, section=Section.SOCIOECONOMICO, direction=_HB, source="INE:ADRH",
+       min_level=SEC, dimension=Dimension.ECONOMICO, decimals=0,
+       description="Mediana de la renta por unidad de consumo. Corrige el tamaño "
+                   "del hogar, así que compara bien zonas con hogares grandes y "
+                   "pequeños; no es una renta por hogar."),
+    _i("eco.income.percapita", "renta", "Renta neta media por persona", Unit.EUROS,
        section=Section.SOCIOECONOMICO, direction=_HB, source="INE:ADRH", min_level=SEC, decimals=0),
     _i("eco.income.under15k_pct", "renta", "% hogares con menos de 15.000 €", Unit.PORCENTAJE,
        section=Section.SOCIOECONOMICO, direction=_LB, source="INE:ADRH", min_level=SEC, decimals=1),

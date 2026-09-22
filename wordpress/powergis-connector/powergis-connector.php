@@ -3,7 +3,7 @@
  * Plugin Name:       PowerGIS Connector
  * Plugin URI:        https://powergis.es
  * Description:       Conecta WordPress con el motor de informes de PowerGIS: CPT de proyectos, endpoints firmados, Stripe Checkout y render del informe desde el payload JSON.
- * Version:           1.0.0
+ * Version:           1.0.2
  * Requires at least: 6.4
  * Requires PHP:      8.1
  * Author:            PowerGIS
@@ -22,7 +22,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'POWERGIS_VERSION', '1.0.0' );
+define( 'POWERGIS_VERSION', '1.0.2' );
 define( 'POWERGIS_FILE', __FILE__ );
 define( 'POWERGIS_PATH', plugin_dir_path( __FILE__ ) );
 define( 'POWERGIS_URL', plugin_dir_url( __FILE__ ) );

@@ -27,8 +27,47 @@ final class REST_Projects {
 
 	public const NAMESPACE = 'saas/v1';
 
+	/**
+	 * Prioridad 20 y no la de por defecto. A propósito.
+	 *
+	 * `saas/v1/projects/create`, `save-draft` y `callback` los registra también
+	 * el código anterior del tema (`rest-projects.php`), y en WordPress la
+	 * primera ruta registrada es la que ATIENDE: `register_route()` acumula los
+	 * manejadores y `dispatch()` se queda con el primero cuyo método encaje.
+	 *
+	 * Ese código se carga antes que este plugin, así que ganaba él, y las
+	 * llamadas del formulario acababan en la implementación vieja —con su
+	 * propio límite de proyectos, que devolvía «Actualiza a premium» sin que
+	 * nada del conector llegara a ejecutarse—. Desde fuera parecía un fallo del
+	 * conector; el conector ni se enteraba.
+	 *
+	 * Con prioridad 20 estas rutas se registran DESPUÉS, y con `override` a
+	 * true reemplazan a las anteriores en vez de ponerse en la cola. El código
+	 * viejo puede seguir cargado sin estorbar, igual que hace `cpt-project.php`
+	 * cuando detecta al conector.
+	 */
 	public static function hooks(): void {
-		add_action( 'rest_api_init', array( self::class, 'register_routes' ) );
+		add_action( 'rest_api_init', array( self::class, 'register_routes' ), 20 );
+		add_action( 'admin_notices', array( self::class, 'aviso_implementacion_antigua' ) );
+	}
+
+	/**
+	 * Avisa de que sigue cargada la implementación anterior.
+	 *
+	 * No rompe nada —el conector la reemplaza—, pero dos definiciones de la
+	 * misma ruta es justo la clase de cosa que dentro de seis meses cuesta una
+	 * tarde. Mejor decirlo mientras se recuerda por qué está.
+	 */
+	public static function aviso_implementacion_antigua(): void {
+		if ( ! function_exists( 'saas_rest_create_project' ) || ! current_user_can( 'manage_options' ) ) {
+			return;
+		}
+		echo '<div class="notice notice-info is-dismissible"><p><strong>PowerGIS:</strong> '
+			. esc_html__(
+				'sigue cargado el código antiguo de rutas (saas_rest_create_project). El conector lo reemplaza, así que no molesta, pero ya puedes retirar ese fragmento.',
+				'powergis'
+			)
+			. '</p></div>';
 	}
 
 	public static function register_routes(): void {
@@ -45,7 +84,8 @@ final class REST_Projects {
 				// shortcode de pruebas. `Form_Mapper` normaliza los dos y la
 				// validación fuerte la hace el motor con Pydantic, que es
 				// donde debe estar: una sola definición del contrato.
-			)
+			),
+			true   // reemplaza la ruta del código antiguo, no se pone detrás
 		);
 
 		// Municipios de una provincia, con su código INE de verdad.
@@ -79,9 +119,10 @@ final class REST_Projects {
 			array(
 				'methods'             => \WP_REST_Server::CREATABLE,
 				'callback'            => array( self::class, 'save_draft' ),
-				'permission_callback' => array( self::class, 'can_create' ),
+				'permission_callback' => array( self::class, 'can_draft' ),
 				'args'                => self::create_args( false ),
-			)
+			),
+			true   // igual que `create`: reemplaza la del código antiguo
 		);
 
 		register_rest_route(
@@ -221,6 +262,38 @@ final class REST_Projects {
 	 * @return true|\WP_Error
 	 */
 	public static function can_create( \WP_REST_Request $request ) {
+		$sesion = self::sesion_valida( $request );
+		if ( true !== $sesion ) {
+			return $sesion;
+		}
+		return self::check_rate_limit( get_current_user_id() );
+	}
+
+	/**
+	 * Permiso para autoguardar. Deliberadamente SIN límite de cadencia.
+	 *
+	 * El formulario guarda un borrador en cada paso del asistente, y esta ruta
+	 * compartía `can_create` con la creación de informes. Resultado: rellenar
+	 * el formulario una sola vez consumía la cuota de la hora, y al pulsar
+	 * «Realizar proyecto» el cliente recibía «Has alcanzado el límite de
+	 * informes por hora» sin haber pedido ni uno.
+	 *
+	 * Un borrador no es un informe: no llama al motor, no calcula nada y no
+	 * cuesta nada. Lo que hay que limitar es la creación, que sí dispara
+	 * trabajo al otro lado.
+	 *
+	 * @return true|\WP_Error
+	 */
+	public static function can_draft( \WP_REST_Request $request ) {
+		return self::sesion_valida( $request );
+	}
+
+	/**
+	 * Sesión iniciada y nonce válido. La parte común de los dos permisos.
+	 *
+	 * @return true|\WP_Error
+	 */
+	private static function sesion_valida( \WP_REST_Request $request ) {
 		if ( ! is_user_logged_in() ) {
 			return new \WP_Error( 'powergis_auth', __( 'Necesitas iniciar sesión', 'powergis' ), array( 'status' => 401 ) );
 		}
@@ -228,7 +301,7 @@ final class REST_Projects {
 		if ( ! $nonce || ! wp_verify_nonce( $nonce, 'wp_rest' ) ) {
 			return new \WP_Error( 'powergis_nonce', __( 'Nonce no válido', 'powergis' ), array( 'status' => 403 ) );
 		}
-		return self::check_rate_limit( get_current_user_id() );
+		return true;
 	}
 
 	/**
@@ -253,7 +326,12 @@ final class REST_Projects {
 	 * @return true|\WP_Error
 	 */
 	private static function check_rate_limit( int $user_id ) {
-		$key   = 'pg_rl_' . $user_id;
+		// Clave nueva a propósito. La anterior (`pg_rl_`) la incrementaba
+		// también el autoguardado, así que los contadores que hay ahora mismo
+		// en circulación están inflados con borradores. Empezar por otra clave
+		// los deja caducar solos en vez de obligar a nadie a esperar una hora
+		// por un límite que ya no significa lo que contaba.
+		$key   = 'pg_informes_' . $user_id;
 		$count = (int) get_transient( $key );
 		$limit = (int) apply_filters( 'powergis_reports_per_hour', 5 );
 		if ( $count >= $limit ) {
@@ -280,18 +358,27 @@ final class REST_Projects {
 
 		$title = (string) ( Form_Mapper::pick( $input, 'title' ) ?? __( 'Proyecto sin título', 'powergis' ) );
 
-		$post_id = wp_insert_post(
-			array(
-				'post_type'   => CPT::POST_TYPE,
-				'post_status' => 'draft',
-				'post_title'  => $title,
-				'post_author' => $user_id,
-			),
-			true
-		);
+		// El formulario autoguarda mientras se rellena y sólo al final llama
+		// aquí, mandando el `project_id` del borrador. Se PROMUEVE ese
+		// borrador en vez de crear otro: si no, cada envío deja huérfano el
+		// que el cliente estuvo rellenando y en el escritorio aparecen dos
+		// proyectos por cada informe, uno con datos y otro sin ellos.
+		$existente = self::draft_existente( $input, $user_id );
+		$post_id   = $existente
+			? wp_update_post( array( 'ID' => $existente, 'post_title' => $title ), true )
+			: wp_insert_post(
+				array(
+					'post_type'   => CPT::POST_TYPE,
+					'post_status' => 'draft',
+					'post_title'  => $title,
+					'post_author' => $user_id,
+				),
+				true
+			);
 		if ( is_wp_error( $post_id ) ) {
 			return $post_id;
 		}
+		$post_id = (int) $post_id;
 
 		$mapped = Form_Mapper::to_engine_payload( $input, ( new Geo_Resolver() )->as_callable() );
 
@@ -300,7 +387,13 @@ final class REST_Projects {
 		// devolvería un error de validación ilegible para el cliente, y
 		// dejaría el proyecto creado y roto.
 		if ( '' === (string) ( $mapped['scope']['ine_code'] ?? '' ) ) {
-			wp_delete_post( $post_id, true );
+			// Sólo se borra lo que se acaba de crear. Si veníamos de un
+			// borrador del cliente, borrarlo aquí destruiría lo que llevaba
+			// rellenado — y el formulario le dice justo lo contrario: «tu
+			// borrador está a salvo».
+			if ( ! $existente ) {
+				wp_delete_post( $post_id, true );
+			}
 			return new \WP_Error(
 				'powergis_scope_unresolved',
 				__( 'No hemos podido identificar la zona seleccionada. Vuelve a elegirla y, si sigue fallando, avísanos.', 'powergis' ),
@@ -365,23 +458,68 @@ final class REST_Projects {
 		);
 	}
 
+	/**
+	 * Localiza el borrador que el formulario dice estar editando.
+	 *
+	 * El formulario manda `project_id` en cada autoguardado —lo guarda de la
+	 * respuesta anterior— y espera que el borrador se ACTUALICE. Si no se
+	 * honra, cada paso del asistente deja un proyecto nuevo en la papelera.
+	 *
+	 * Se comprueba el dueño: un `project_id` es un entero adivinable, y sin
+	 * esta comprobación bastaría con probar números para sobrescribir el
+	 * borrador de otro cliente.
+	 *
+	 * @return int 0 si no hay uno válido y hay que crearlo.
+	 */
+	private static function draft_existente( array $input, int $user_id ): int {
+		$post_id = (int) ( Form_Mapper::pick( $input, 'project_id' ) ?? 0 );
+		if ( $post_id <= 0 ) {
+			return 0;
+		}
+		$post = get_post( $post_id );
+		if ( ! $post || CPT::POST_TYPE !== $post->post_type ) {
+			return 0;
+		}
+		if ( (int) $post->post_author !== $user_id ) {
+			return 0;
+		}
+		// Un proyecto ya lanzado al motor no es un borrador: reescribirlo
+		// dejaría el post diciendo una cosa y el informe calculado otra.
+		if ( get_post_meta( $post_id, CPT::META_UUID, true ) ) {
+			return 0;
+		}
+		return $post_id;
+	}
+
 	public static function save_draft( \WP_REST_Request $request ): \WP_REST_Response|\WP_Error {
-		$post_id = wp_insert_post(
-			array(
-				'post_type'   => CPT::POST_TYPE,
-				'post_status' => 'draft',
-				'post_title'  => (string) ( $request->get_param( 'title' ) ?: __( 'Borrador', 'powergis' ) ),
-				'post_author' => get_current_user_id(),
-			),
-			true
+		$user_id = get_current_user_id();
+		$input   = self::sanitize_input(
+			array_merge( (array) $request->get_body_params(), (array) $request->get_json_params() )
 		);
+
+		// `pick` y no `get_param('title')`: el formulario llama al campo
+		// `project_name`, no `title`. Sin el alias todos los borradores se
+		// titulaban «Borrador» y eran indistinguibles en el escritorio.
+		$title = (string) ( Form_Mapper::pick( $input, 'title' ) ?: __( 'Borrador', 'powergis' ) );
+
+		$post_id = self::draft_existente( $input, $user_id );
+		$post_id = $post_id
+			? wp_update_post( array( 'ID' => $post_id, 'post_title' => $title ), true )
+			: wp_insert_post(
+				array(
+					'post_type'   => CPT::POST_TYPE,
+					'post_status' => 'draft',
+					'post_title'  => $title,
+					'post_author' => $user_id,
+				),
+				true
+			);
+
 		if ( is_wp_error( $post_id ) ) {
 			return $post_id;
 		}
-		$input  = self::sanitize_input(
-			array_merge( (array) $request->get_body_params(), (array) $request->get_json_params() )
-		);
-		$mapped = Form_Mapper::to_engine_payload( $input, ( new Geo_Resolver() )->as_callable() );
+		$post_id = (int) $post_id;
+		$mapped  = Form_Mapper::to_engine_payload( $input, ( new Geo_Resolver() )->as_callable() );
 		update_post_meta( $post_id, CPT::META_SCOPE, wp_json_encode( $mapped['scope'] ) );
 		update_post_meta( $post_id, CPT::META_SEGMENTS, wp_json_encode( $mapped['segments'] ) );
 		update_post_meta( $post_id, CPT::META_BUSINESS, wp_json_encode( $mapped['business'] ) );
@@ -389,7 +527,18 @@ final class REST_Projects {
 		update_post_meta( $post_id, CPT::META_RAW, wp_json_encode( $input ) );
 		update_post_meta( $post_id, CPT::META_STATUS, 'draft' );
 
-		return new \WP_REST_Response( array( 'post_id' => $post_id, 'status' => 'draft' ), 201 );
+		// `project_id` es el nombre que lee el formulario:
+		//
+		//     if (res && res.project_id) state.projectId = res.project_id;
+		//
+		// Devolviendo sólo `post_id`, esa línea nunca se cumplía, el
+		// formulario no aprendía el identificador y lo volvía a mandar vacío
+		// en el autoguardado siguiente. De ahí un proyecto por paso del
+		// asistente. `post_id` se mantiene porque ya hay código que lo usa.
+		return new \WP_REST_Response(
+			array( 'project_id' => $post_id, 'post_id' => $post_id, 'status' => 'draft' ),
+			201
+		);
 	}
 
 	public static function status( \WP_REST_Request $request ): \WP_REST_Response {

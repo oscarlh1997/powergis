@@ -7,6 +7,7 @@ están separadas.
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime
@@ -16,6 +17,8 @@ from ..domain.enums import GeoLevel
 from ..domain.errors import CollectorError, CollectorUnavailable, GeoNotFound
 from ..domain.models import Fact, Geo
 from ..domain.ports import Collector, UnitOfWork
+
+log = logging.getLogger(__name__)
 
 
 @dataclass(slots=True)
@@ -75,7 +78,13 @@ class IngestData:
             report.finished_at = datetime.now(UTC)
             return report
 
-        geos = self._target_geos(level, parent_code)
+        # Un colector de tablas NACIONALES recibe siempre el nivel entero,
+        # aunque la carga la pida un informe de una sola provincia. La tabla
+        # se descarga entera igual, y con sólo las geografías del ámbito el
+        # índice de nombres no ve los homónimos de fuera: el Castejón de
+        # Cuenca parecía único cargando Navarra y se quedaba el dato del otro.
+        todas = getattr(collector, "TODAS_LAS_GEOS", False)
+        geos = self._target_geos(level, None if todas else parent_code)
         if not geos:
             report.errors.append("No hay geografías para ese ámbito")
             report.finished_at = datetime.now(UTC)
@@ -83,7 +92,13 @@ class IngestData:
 
         from ..domain.models import Segments
 
-        for chunk in _chunks(geos, self._batch_size):
+        # Las tablas nacionales se leen de una vez y con todas las geografías
+        # delante: ver `BaseCollector.TODAS_LAS_GEOS`. La escritura sigue
+        # troceada, en `upsert_many`.
+        lotes = [list(geos)] if getattr(collector, "TODAS_LAS_GEOS", False) else _chunks(
+            geos, self._batch_size
+        )
+        for chunk in lotes:
             try:
                 facts = collector.collect(codes, chunk, Segments(), period)
             except CollectorUnavailable as exc:
@@ -92,6 +107,9 @@ class IngestData:
             except CollectorError as exc:
                 report.errors.append(f"{collector_name}: {exc.message}")
                 continue
+            report.errors.extend(
+                f"{collector_name}: {fallo}" for fallo in getattr(collector, "fallos", [])
+            )
 
             written = self._persist(facts)
             report.written += written
@@ -168,7 +186,7 @@ class ComputeDerived:
         self._uow_factory = uow_factory
 
     def __call__(self, level: GeoLevel, parent_code: str | None = None) -> int:
-        from ..domain import stats
+        from ..domain import derivados, stats
 
         with self._uow_factory() as uow:
             root = (
@@ -182,10 +200,14 @@ class ComputeDerived:
             geo_ids = [g.geo_id for g in geos]
             base_codes = [
                 "dem.pop.total", "dem.age.0_15", "dem.age.16_64", "dem.age.65p",
+                "dem.age.u18_pct", "dem.age.65p_pct",
                 "dem.sex.women", "dem.sex.men", "dem.pop.segment",
             ]
             facts = uow.facts.fetch(geo_ids, base_codes, [{}])
             index = {(f.geo_id, f.indicator): f.value for f in facts}
+            periodos = {
+                (f.geo_id, f.indicator): f.period for f in facts if f.value is not None
+            }
             period = max((f.period for f in facts), default=date.today())
 
             derived: list[Fact] = []
@@ -196,11 +218,14 @@ class ComputeDerived:
                 def v(code: str, current: int = geo_id) -> float | None:
                     return index.get((current, code))
 
+                # La misma función que el colector de derivados: si la fórmula
+                # viviera en dos sitios, acabaría dando dos resultados.
+                dependencia, envejecimiento, activo = stats.razones_de_edad(v)
+
                 pairs = {
-                    "dem.dependency.total": stats.dependency_ratio(
-                        v("dem.age.0_15"), v("dem.age.16_64"), v("dem.age.65p")
-                    ),
-                    "dem.ageing.index": stats.ageing_index(v("dem.age.65p"), v("dem.age.0_15")),
+                    "dem.age.18_64_pct": activo,
+                    "dem.dependency.total": dependencia,
+                    "dem.ageing.index": envejecimiento,
                     "dem.femininity.index": stats.femininity_index(
                         v("dem.sex.women"), v("dem.sex.men")
                     ),
@@ -215,9 +240,15 @@ class ComputeDerived:
                 for code, value in pairs.items():
                     if value is None or code not in catalog_mod.BY_CODE:
                         continue
+                    # Con la fecha de SUS datos: ver `domain.derivados`.
+                    fechas = [
+                        p for c in derivados.ENTRADAS.get(code, ())
+                        if (p := periodos.get((geo_id, c))) is not None
+                    ]
+                    cuando = max(fechas) if fechas else period
                     derived.append(
                         Fact(
-                            geo_id=geo_id, indicator=code, period=period,
+                            geo_id=geo_id, indicator=code, period=cuando,
                             value=value, segment={}, source_ref="derivado",
                             ingested_at=datetime.now(UTC),
                         )
@@ -226,6 +257,91 @@ class ComputeDerived:
             written = uow.facts.upsert_many(derived)
             uow.commit()
             return written
+
+
+# --------------------------------------------------------------------------- #
+# Agregación a provincia, comunidad y país
+# --------------------------------------------------------------------------- #
+
+
+class AggregateUp:
+    """Escribe en provincias, comunidades y país lo que se sabe por municipio.
+
+    Las reglas —qué se suma, qué se promedia y con qué peso, qué no se toca—
+    viven en `domain.agregacion`. Aquí sólo se lee y se escribe.
+
+    Nunca pisa un dato propio del nivel: si una provincia tiene su población
+    de una fuente provincial, esa manda y el agregado no se escribe.
+    """
+
+    NIVELES = (GeoLevel.PROVINCIA, GeoLevel.CCAA, GeoLevel.PAIS)
+
+    def __init__(self, uow_factory: Callable[[], UnitOfWork]) -> None:
+        self._uow_factory = uow_factory
+
+    def __call__(self) -> dict[str, int]:
+        from ..domain import agregacion
+
+        escritos: dict[str, int] = {}
+        with self._uow_factory() as uow:
+            root = uow.geos.get(GeoLevel.PAIS, "ES")
+            if root is None:
+                raise GeoNotFound("Falta la geografía raíz; ejecuta `powergis seed`")
+
+            municipios = uow.geos.descendants(root.geo_id, GeoLevel.MUNICIPIO)
+            codigos = agregacion.codigos_necesarios()
+            hechos = uow.facts.fetch([g.geo_id for g in municipios], codigos, [{}])
+            por_municipio: dict[int, dict[str, tuple[float | None, date]]] = {}
+            for f in hechos:
+                por_municipio.setdefault(f.geo_id, {})[f.indicator] = (f.value, f.period)
+            sin_nada = sum(
+                1 for g in municipios
+                if not any(v is not None for v, _ in por_municipio.get(g.geo_id, {}).values())
+            )
+            if sin_nada:
+                log.warning(
+                    "Agregación: %d de %d municipios sin ningún dato; no cuentan en las "
+                    "sumas (fusionados o desaparecidos, o series sin resolver: revisa "
+                    "los avisos de la carga)", sin_nada, len(municipios),
+                )
+
+            for nivel in self.NIVELES:
+                padres = [root] if nivel == GeoLevel.PAIS else uow.geos.descendants(
+                    root.geo_id, nivel
+                )
+                if not padres:
+                    continue
+                existentes = uow.facts.fetch(
+                    [p.geo_id for p in padres], list(agregacion.REGLAS), [{}]
+                )
+                propios = {
+                    (f.geo_id, f.indicator) for f in existentes
+                    if f.value is not None
+                    and not (f.source_ref or "").startswith(agregacion.PREFIJO_FUENTE)
+                    and f.source_ref != "DEMO-SINTÉTICO"
+                }
+
+                nuevos: list[Fact] = []
+                for padre in padres:
+                    hijos = municipios if nivel == GeoLevel.PAIS else uow.geos.descendants(
+                        padre.geo_id, GeoLevel.MUNICIPIO
+                    )
+                    valores = agregacion.agregar(
+                        [por_municipio.get(h.geo_id, {}) for h in hijos]
+                    )
+                    for codigo, (valor, periodo, fuente) in valores.items():
+                        if (padre.geo_id, codigo) in propios:
+                            continue
+                        if codigo not in catalog_mod.BY_CODE:
+                            continue
+                        nuevos.append(Fact(
+                            geo_id=padre.geo_id, indicator=codigo, period=periodo,
+                            value=valor, segment={}, source_ref=fuente,
+                            ingested_at=datetime.now(UTC),
+                        ))
+                escritos[str(nivel)] = uow.facts.upsert_many(nuevos)
+            uow.commit()
+        return escritos
 
 
 def _first_match(uow: UnitOfWork, code: str) -> Geo | None:

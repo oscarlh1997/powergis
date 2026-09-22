@@ -34,6 +34,17 @@ COMPOSE := docker compose -f docker-compose.yml -f docker-compose.$(TIER).yml
 endif
 
 ENGINE := $(COMPOSE) exec -T api
+# Las cargas del INE van en `worker-etl`, no en `api`. Una carga completa
+# tiene en memoria la 29005 y las 54 tablas del Atlas a la vez, y `api` tiene
+# un techo de 768 MB: el núcleo lo mataría a mitad sin más aviso que un
+# «Killed». `worker-etl` está dimensionado para esto (1,5 GB) y es la misma
+# imagen, con el mismo CLI. En cx23 no hay `worker-etl` (está apagado para
+# ahorrar memoria) y se usa `api`, que es lo único que hay.
+ifeq ($(TIER),cx23)
+ETL := $(ENGINE)
+else
+ETL := $(COMPOSE) exec -T worker-etl
+endif
 
 # El dominio sale de `.env`, que es la fuente de verdad del despliegue.
 #
@@ -305,18 +316,77 @@ almacen: bootstrap municipios  ## Cimientos completos: migraciones + catálogo +
 	@echo "Antes de cargar datos:  make ine-verify"
 
 .PHONY: ingest-ine
-ingest-ine:  ## Carga demografía del INE (tarda; va a la cola etl)
+ingest-ine:  ## Sólo el INE demográfico. Para todo en orden: make cargar-datos
+	$(ENGINE) powergis sync-catalog
 	@echo "Comprobando el mapeo del INE antes de cargar…"
-	@$(ENGINE) powergis ine-verify || { \
+	@$(ETL) powergis ine-verify || { \
 		echo ""; \
 		echo "ABORTADO: el mapeo del INE no cuadra. Cargar ahora llenaría el"; \
 		echo "almacén de huecos que parecen secreto estadístico."; \
 		exit 1; }
-	$(ENGINE) powergis ingest ine --level municipio
+	$(ETL) powergis ingest ine --level municipio
+	$(ETL) powergis ingest ine --level provincia
 
 .PHONY: derive
-derive:  ## Recalcula indicadores derivados
-	$(ENGINE) powergis derive --level provincia
+derive:  ## Recalcula derivados y agregados en todos los niveles
+	$(ETL) powergis derive --level municipio
+	$(ETL) powergis ingest derived --level municipio
+	$(ETL) powergis agregar
+	@for nivel in provincia ccaa pais; do \
+		$(ETL) powergis derive --level $$nivel || exit 1; \
+		$(ETL) powergis ingest derived --level $$nivel || exit 1; \
+	done
+
+.PHONY: cargar-datos
+# La hora a la que empieza la carga, fijada al arrancar make: al final se
+# borra lo calculado que no se haya reescrito desde entonces.
+cargar-datos: INICIO := $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
+cargar-datos:  ## Carga COMPLETA y en orden: catálogo → INE → renta → derivados → agregados → estado
+	@# El orden no es opcional, cada paso depende del anterior:
+	@#
+	@#  1. sync-catalog antes que nada. `fact_indicator.indicator` es clave
+	@#     ajena de `dim_indicator`: un indicador nuevo sin sincronizar hace
+	@#     que PostgreSQL rechace el lote entero en el que viene.
+	@#  2. purgar-demo: los datos sintéticos de `seed --demo` son de 2024 y
+	@#     ganarían a los reales del Atlas (2023) por ser «más recientes».
+	@#  3. ine-verify como barrera: si un mapeo está roto, no se carga.
+	@#  4. INE por municipio y por provincia (la natalidad sólo es provincial).
+	@#  5. El Atlas de renta.
+	@#  5b. limpiar-almacen: fuera los restos de mapeos que se demostraron
+	@#     malos. Va DESPUÉS de las cargas: `powergis ingest` sale con error
+	@#     si algo no cargó, y make se para antes de borrar nada.
+	@#  6. Derivados municipales: demográficos (derive) y económicos (ingest
+	@#     derived), que necesitan la renta ya cargada.
+	@#  7. agregar: provincias, comunidades y país a partir de los municipios.
+	@#     Sin esto los informes «nacional» y «ccaa» salían vacíos.
+	@#  8. Derivados de esos tres niveles, sobre lo agregado.
+	@#  9. Fuera lo calculado que no se ha reescrito en esta carga (otro
+	@#     periodo, datos de demostración, fórmulas viejas). Al final, no al
+	@#     principio: así los informes nunca se quedan sin derivados.
+	@# 10. almacen-estado: cuánto ha entrado de verdad.
+	$(ENGINE) powergis sync-catalog
+	$(ENGINE) powergis purgar-demo
+	@$(ETL) powergis ine-verify || { \
+		echo ""; echo "ABORTADO: el mapeo del INE no cuadra. No se carga nada."; exit 1; }
+	$(ETL) powergis ingest ine --level municipio
+	$(ETL) powergis ingest ine --level provincia
+	$(ETL) powergis ingest ine_adrh --level municipio
+	$(ETL) powergis limpiar-almacen
+	$(ETL) powergis derive --level municipio
+	$(ETL) powergis ingest derived --level municipio
+	$(ETL) powergis agregar
+	@for nivel in provincia ccaa pais; do \
+		$(ETL) powergis derive --level $$nivel || exit 1; \
+		$(ETL) powergis ingest derived --level $$nivel || exit 1; \
+	done
+	$(ETL) powergis limpiar-almacen --calculados-antes-de $(INICIO)
+	@echo ""
+	$(ENGINE) powergis almacen-estado
+	$(ENGINE) powergis almacen-estado --nivel provincia
+
+.PHONY: almacen-estado
+almacen-estado:  ## Cuántos municipios tienen dato en cada indicador, y de qué año
+	$(ENGINE) powergis almacen-estado
 
 .PHONY: coverage-report
 coverage-report:  ## Indicadores del catálogo sin colector
@@ -328,7 +398,7 @@ check-config:  ## Verifica que la configuración es apta para producción
 
 .PHONY: ine-verify
 ine-verify:  ## Comprueba contra la API del INE que los IDs de tabla existen
-	$(ENGINE) powergis ine-verify
+	$(ETL) powergis ine-verify
 
 # -- capacidad: cuándo pasar de KVM2 a KVM4 ---------------------------------
 

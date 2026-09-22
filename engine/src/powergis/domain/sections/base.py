@@ -236,13 +236,21 @@ def build_chart(
     x = [g.name for g in geos]
     series: list[dict[str, Any]] = []
     for code in codes:
+        datos = [ctx.value(g.geo_id, code, segment) for g in geos]
+        # Una serie sin un solo valor no se dibuja. Antes entraba igual y la
+        # leyenda nombraba indicadores que no estaban en el gráfico: el lector
+        # buscaba la barra y no la encontraba.
+        if all(v is None for v in datos):
+            continue
         ind = ctx.catalog.get(code)
-        series.append({
-            "name": ind.label if ind else code,
-            "code": code,
-            "data": [ctx.value(g.geo_id, code, segment) for g in geos],
-        })
-    unit = ctx.catalog[codes[0]].unit if codes and codes[0] in ctx.catalog else None
+        series.append({"name": ind.label if ind else code, "code": code, "data": datos})
+
+    # La unidad sale de la primera serie que SOBREVIVE, no de la primera
+    # declarada: si ésa se cayó, el eje se rotularía con una unidad que no es
+    # la de ninguna barra dibujada.
+    unit = next(
+        (ctx.catalog[s["code"]].unit for s in series if s["code"] in ctx.catalog), None
+    )
     return Chart(id=chart_id, title=title, type=chart_type, x=x, series=series,
                  unit=unit, stack=stack)
 

@@ -180,6 +180,17 @@ class BaseCollector(ABC):
     name: str = "base"
     PROVIDES: tuple[str, ...] = ()
 
+    #: True si el colector necesita TODAS las geografías del nivel en una sola
+    #: llamada, en vez de lotes.
+    #:
+    #: Los colectores de tablas nacionales del INE lo necesitan por dos
+    #: razones. Una, cada lote volvía a descargar las mismas tablas: con 8.131
+    #: municipios en lotes de 500, la 29005 se bajaba 17 veces y las 54 del
+    #: Atlas 918. Dos, y peor: el detector de nombres repetidos sólo veía los
+    #: 500 municipios del lote, así que dos pueblos homónimos en lotes
+    #: distintos parecían únicos y cada uno se quedaba con el dato del otro.
+    TODAS_LAS_GEOS: bool = False
+
     def provides(self) -> list[str]:
         return list(self.PROVIDES)
 

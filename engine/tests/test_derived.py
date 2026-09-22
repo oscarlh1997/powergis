@@ -237,8 +237,11 @@ class TestEconomicos:
         collector = DerivedCollector(
             facts_lookup=lambda g, c: self.RENTA.get(c), sector="generico"
         )
+        # `eco.saving.rate` sí es un modelo (ratio de consumo supuesto).
+        # `eco.gross_monthly` ya no lo es: la bruta anual entre doce es
+        # aritmética sobre un dato observado.
         hechos = collector.collect(
-            ["eco.gross_monthly"], [geo()], Segments(), PERIODO
+            ["eco.saving.rate"], [geo()], Segments(), PERIODO
         )
         assert hechos, "esperaba al menos un hecho modelado"
         # `source_ref` distingue lo modelado de lo derivado por aritmética
@@ -275,3 +278,43 @@ class TestEconomicos:
         )
         esperado = out["eco.sector_spend"] / (out["eco.consumer.frequency"] * 4.33)
         assert out["eco.consumer.ticket"] == pytest.approx(esperado)
+
+
+class TestTramosDeEdadEnPorcentaje:
+    """Dependencia y envejecimiento con los tramos del Atlas (<18, 65+, en %).
+
+    Son cocientes entre tramos, así que salen idénticos con porcentajes o con
+    personas: el total se cancela. Lo que no se puede es mezclar los dos
+    cortes en la misma cuenta, porque 0-15 y menor de 18 no son el mismo tramo.
+    """
+
+    PCT: ClassVar[dict[str, float]] = {"dem.age.u18_pct": 20.0, "dem.age.65p_pct": 25.0}
+
+    def test_el_tramo_activo_se_obtiene_por_resta(self):
+        assert coleccionar(self.PCT, ["dem.age.18_64_pct"])["dem.age.18_64_pct"] == pytest.approx(55.0)
+
+    def test_la_dependencia_sale_de_los_porcentajes(self):
+        out = coleccionar(self.PCT, ["dem.dependency.total"])
+        assert out["dem.dependency.total"] == pytest.approx(45 / 55 * 100)
+
+    def test_el_envejecimiento_sale_de_los_porcentajes(self):
+        assert coleccionar(self.PCT, ["dem.ageing.index"])["dem.ageing.index"] == pytest.approx(125.0)
+
+    def test_las_personas_mandan_cuando_estan(self):
+        datos = {**self.PCT, "dem.age.0_15": 150.0, "dem.age.16_64": 600.0, "dem.age.65p": 250.0}
+        out = coleccionar(datos, ["dem.dependency.total"])
+        assert out["dem.dependency.total"] == pytest.approx(400 / 600 * 100)
+
+    def test_no_se_mezclan_los_dos_cortes(self):
+        """Con las personas a medias se usan los porcentajes ENTEROS.
+        Combinar `0-15` con `%65+` daría un número sin sentido y
+        indistinguible de uno bueno."""
+        out = coleccionar({**self.PCT, "dem.age.0_15": 150.0}, ["dem.dependency.total"])
+        assert out["dem.dependency.total"] == pytest.approx(45 / 55 * 100)
+
+    def test_el_envejecimiento_no_depende_del_tramo_activo(self):
+        out = coleccionar({"dem.age.0_15": 125.0, "dem.age.65p": 250.0}, ["dem.ageing.index"])
+        assert out["dem.ageing.index"] == pytest.approx(200.0)
+
+    def test_sin_ninguno_no_inventa(self):
+        assert coleccionar({}, ["dem.dependency.total", "dem.age.18_64_pct"]) == {}

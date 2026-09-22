@@ -46,9 +46,28 @@ def build_registry(
         "aemet": AemetCollector(centroids=centroids),
         "catastro": CatastroCollector(),
         "osm": OsmCollector(session=session, sector=sector),
-        "derived": DerivedCollector(facts_lookup=facts_lookup, sector=sector),
+        "derived": DerivedCollector(
+            facts_lookup=facts_lookup,
+            sector=sector,
+            # Sin esto el colector de derivados no ve el almacén y no escribe
+            # nada: la renta disponible, el NSE y el gasto en el sector no
+            # llegaban a existir. Ver `DerivedCollector.__init__`.
+            facts_loader=_cargador_de_hechos(session) if session is not None else None,
+        ),
     }
     return registry
+
+
+def _cargador_de_hechos(session: Session):
+    """Lee del almacén el último periodo de cada (geo, indicador), sin segmento."""
+    from ..db.repositories import SqlFactRepository
+
+    repo = SqlFactRepository(session)
+
+    def cargar(geo_ids: list[int], codigos: list[str]):
+        return repo.fetch(geo_ids, codigos, [{}])
+
+    return cargar
 
 
 def available() -> list[str]:

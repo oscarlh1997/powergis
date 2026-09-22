@@ -90,7 +90,9 @@ FAMILY: dict[str, tuple[str, str]] = {
     "pareja_sin_hijos":   ("dem.civil.married_pct", "higher"),
     "nido_lleno":         ("dem.household.with_children_pct", "higher"),
     "nido_adolescentes":  ("dem.household.with_children_pct", "higher"),
-    "nido_vacio":         ("dem.age.65p", "higher"),
+    # En porcentaje: el de personas no tiene fuente municipal, y para
+    # comparar zonas de distinto tamaño es además el correcto.
+    "nido_vacio":         ("dem.age.65p_pct", "higher"),
     "monoparental":       ("dem.household.monoparental_pct", "higher"),
 }
 
@@ -125,7 +127,14 @@ DISPOSABLE_BRACKETS: dict[str, tuple[float | None, float | None]] = {
     ">2500":     (2_500, None),
 }
 
-# ticket promedio declarado → gasto mensual esperado en el sector (€)
+# ticket promedio declarado (€ por compra) → se compara con el ticket medio
+# estimado de la zona en el MISMO sector (`eco.consumer.ticket`).
+#
+# Antes se comparaba con `eco.sector_spend`, que es el gasto MENSUAL del hogar
+# en el sector: euros por compra contra euros al mes. Un restaurante con ticket
+# «bajo» (10–50 €) buscaba zonas donde los hogares gastasen 10–50 € AL MES en
+# restaurantes —que no existen: van de 150 a 450 €—, así que el criterio daba
+# cero en todas y hundía el Match% igual en todas partes.
 TICKET_BRACKETS: dict[str, tuple[float | None, float | None]] = {
     "micro":      (None, 10),
     "bajo":       (10, 50),
@@ -235,7 +244,7 @@ class TargetProfile:
         if bracket:
             lo, hi = bracket
             out.append(Criterion(
-                "eco.sector_spend", "range", 1.0, lo, hi, "Capacidad de gasto en el sector"
+                "eco.consumer.ticket", "range", 1.0, lo, hi, "Ticket medio en tu sector"
             ))
 
         for preference in self.climate:

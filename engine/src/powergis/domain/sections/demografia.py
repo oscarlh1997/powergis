@@ -68,7 +68,12 @@ class Demografia(SectionBuilder):
                 ctx,
                 "dem.piramide",
                 "Estructura de edad por zona",
-                ["dem.age.0_15", "dem.age.16_64", "dem.age.65p"],
+                # Primero los tramos en porcentaje, que son los que tienen
+                # fuente municipal; los de personas detrás, para cuando la
+                # tengan. `build_chart` descarta las series sin datos, así que
+                # declarar los dos juegos no ensucia el gráfico.
+                ["dem.age.u18_pct", "dem.age.18_64_pct", "dem.age.65p_pct",
+                 "dem.age.0_15", "dem.age.16_64", "dem.age.65p"],
                 chart_type="bar",
                 stack=True,
             ),
@@ -90,6 +95,9 @@ class Demografia(SectionBuilder):
                 "dem.pop.segment",
                 "dem.pop.segment_pct",
                 "dem.age.mean",
+                "dem.age.u18_pct",
+                "dem.age.18_64_pct",
+                "dem.age.65p_pct",
                 "dem.age.0_15",
                 "dem.age.16_64",
                 "dem.age.65p",
@@ -97,7 +105,8 @@ class Demografia(SectionBuilder):
                 "dem.dependency.total",
             ],
             highlight_by="dem.pop.segment",
-            footnote="Fuente: INE, Padrón continuo. Valores absolutos y relativos "
+            footnote="Fuente: INE — Padrón municipal (población y sexo) y Atlas de "
+                     "distribución de renta de los hogares (edad y hogares). Valores absolutos y relativos "
                      "sobre el segmento de edad seleccionado.",
         )
 

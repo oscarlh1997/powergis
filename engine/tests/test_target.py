@@ -146,7 +146,7 @@ class TestTramosQueSeSolapan:
         from powergis.domain.target import TargetProfile
 
         perfil = TargetProfile.from_mapping({"average_ticket": "medio_alto"})
-        gasto = [c for c in perfil.criteria() if c.indicator == "eco.sector_spend"]
+        gasto = [c for c in perfil.criteria() if c.indicator == "eco.consumer.ticket"]
 
         assert gasto, "un ticket declarado tiene que generar criterio"
         assert (gasto[0].minimum, gasto[0].maximum) == (201, 1_000)

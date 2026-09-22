@@ -16,7 +16,7 @@ import json
 import logging
 import sys
 import time
-from datetime import date
+from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any
 
@@ -27,6 +27,9 @@ from .logging_setup import setup_logging
 
 app = typer.Typer(help="PowerGIS · motor de informes de geomarketing", no_args_is_help=True)
 log = logging.getLogger("powergis.cli")
+
+#: Fuente de los hechos sintéticos de `seed --demo`. `purgar-demo` borra por ella.
+DEMO_REF = "DEMO-SINTÉTICO"
 
 SEED_DIR = Path(__file__).parent / "seed"
 
@@ -114,6 +117,11 @@ def ingest(
             date.fromisoformat(period) if period else None,
         )
     typer.echo(json.dumps(report.as_dict(), indent=2, ensure_ascii=False))
+    if report.errors:
+        # Sale con error para que `make cargar-datos` se pare aquí y no siga
+        # limpiando y recalculando sobre una carga a medias.
+        typer.secho(f"{len(report.errors)} fallos en la carga", fg=typer.colors.RED, bold=True)
+        raise typer.Exit(1)
 
 
 @app.command()
@@ -125,6 +133,145 @@ def derive(level: str = "municipio", parent: str | None = None) -> None:
 
     written = ComputeDerived(uow_factory)(GeoLevel(level), parent)
     typer.secho(f"{written} indicadores derivados escritos", fg=typer.colors.GREEN)
+
+
+@app.command()
+def agregar() -> None:
+    """Pasa a provincias, comunidades y país lo que se sabe por municipio.
+
+    Sin esto, los informes que comparan provincias o comunidades salían
+    vacíos: el INE publica casi todo por municipio. Las personas se SUMAN (y
+    es el dato oficial); porcentajes, medias y rentas se promedian ponderando
+    por personas u hogares, y se marcan como agregado. Medianas y Gini no se
+    agregan: no se puede.
+    """
+    from .adapters.db.session import uow_factory
+    from .application.ingest import AggregateUp
+
+    escritos = AggregateUp(uow_factory)()
+    for nivel, n in escritos.items():
+        typer.secho(f"{nivel:<10} {n} hechos agregados", fg=typer.colors.GREEN)
+
+
+@app.command("purgar-demo")
+def purgar_demo() -> None:
+    """Borra los hechos SINTÉTICOS de `seed --demo` del almacén.
+
+    Se cargan con periodo 2024 en provincias y comunidades. Al lado de datos
+    reales son veneno: el informe se queda con el periodo más reciente, y un
+    dato de demostración de 2024 gana a uno real del Atlas de 2023. Sólo
+    toca filas con fuente «DEMO-SINTÉTICO».
+    """
+    from sqlalchemy import text
+
+    from .adapters.db.session import uow_factory
+    from .domain.consumo import MODELADO
+
+    with uow_factory() as uow:
+        # Con los sintéticos se van también los derivados que se calcularon
+        # SOBRE ellos (`seed --demo` ejecuta los derivados provinciales): si
+        # se quedaran, un índice de dependencia de 2024 hecho con datos
+        # inventados seguiría ganando al real de 2023.
+        borrados = len(uow.session.execute(
+            text(
+                """
+                DELETE FROM fact_indicator
+                WHERE geo_id IN (SELECT DISTINCT geo_id FROM fact_indicator
+                                 WHERE source_ref = :f)
+                  AND source_ref IN (:f, 'derivado', :m)
+                RETURNING geo_id
+                """
+            ),
+            {"f": DEMO_REF, "m": MODELADO},
+        ).all())
+        uow.commit()
+    if borrados:
+        typer.secho(f"{borrados} hechos de demostración borrados", fg=typer.colors.YELLOW)
+    else:
+        typer.secho("No había datos de demostración", fg=typer.colors.GREEN)
+
+
+@app.command("limpiar-almacen")
+def limpiar_almacen(
+    calculados_antes_de: str | None = typer.Option(
+        None, "--calculados-antes-de",
+        help="Fecha-hora ISO (UTC). Borra SÓLO lo calculado que no se ha "
+             "recalculado desde entonces",
+    ),
+) -> None:
+    """Quita del almacén lo que ya no es verdad.
+
+    Sin opciones, lo que dejaron mapeos que se han demostrado malos:
+
+      · Filas del Atlas con el formato viejo (`INE:ADRH:…`), que guardaba la
+        renta neta como bruta y la mediana de otra tabla.
+      · Cualquier fila del INE de un indicador que hoy está PENDIENTE de
+        fuente: venía de una tabla equivocada.
+      · Hombres y mujeres guardados con segmento de sexo.
+      · Un Gini en escala 0–100 se pasa a tanto por uno.
+
+    Con `--calculados-antes-de`, lo CALCULADO —derivados, modelados y
+    agregados— que no se ha vuelto a escribir desde esa hora. Se usa al final
+    de `make cargar-datos`, con la hora a la que empezó: todo lo que sigue
+    siendo verdad se acaba de reescribir y lo que queda más viejo es de un
+    cálculo anterior (otro periodo, datos de demostración, una fórmula que
+    cambió). Así nunca hay un rato en que los informes se queden sin datos.
+    """
+    from sqlalchemy import text
+
+    from .adapters.collectors.ine import IneCollector
+    from .adapters.collectors.ine_adrh import AdrhCollector
+    from .adapters.db.session import uow_factory
+    from .domain.agregacion import PREFIJO_FUENTE
+    from .domain.consumo import MODELADO
+
+    pasos: dict[str, tuple[str, dict[str, Any]]]
+    if calculados_antes_de:
+        desde = datetime.fromisoformat(calculados_antes_de.replace("Z", "+00:00"))
+        if desde.tzinfo is None:
+            desde = desde.replace(tzinfo=UTC)
+        pasos = {
+            f"calculados sin recalcular desde {desde:%Y-%m-%d %H:%M} UTC": (
+                "DELETE FROM fact_indicator "
+                "WHERE (source_ref IN ('derivado', :m) OR source_ref LIKE :agr) "
+                "AND ingested_at < :desde RETURNING geo_id",
+                {"m": MODELADO, "agr": PREFIJO_FUENTE + "%", "desde": desde},
+            ),
+        }
+    else:
+        vigentes = {s.indicator for c in (IneCollector, AdrhCollector) for s in c.SPECS
+                    if not s.pendiente}
+        pendientes = sorted(
+            {s.indicator for c in (IneCollector, AdrhCollector) for s in c.SPECS} - vigentes
+        )
+        pasos = {
+            "Atlas con el mapeo viejo (INE:ADRH:…)": (
+                "DELETE FROM fact_indicator WHERE source_ref LIKE 'INE:ADRH:%' "
+                "RETURNING geo_id",
+                {},
+            ),
+            "indicadores pendientes de fuente": (
+                "DELETE FROM fact_indicator WHERE indicator = ANY(:p) "
+                "AND source_ref LIKE 'INE:%' RETURNING geo_id",
+                {"p": pendientes or ["-"]},
+            ),
+            "hombres/mujeres con segmento de sexo": (
+                "DELETE FROM fact_indicator WHERE indicator IN ('dem.sex.men', 'dem.sex.women') "
+                "AND segment_key <> '{}' RETURNING geo_id",
+                {},
+            ),
+            "Gini de 0–100 a tanto por uno": (
+                "UPDATE fact_indicator SET value = value / 100.0 "
+                "WHERE indicator = 'eco.gini' AND value > 1 RETURNING geo_id",
+                {},
+            ),
+        }
+    with uow_factory() as uow:
+        for etiqueta, (sql, params) in pasos.items():
+            n = len(uow.session.execute(text(sql), params).all())
+            typer.echo(f"  {n:>8}  {etiqueta}")
+        uow.commit()
+    typer.secho("Almacén limpio", fg=typer.colors.GREEN)
 
 
 @app.command("ine-discover")
@@ -183,6 +330,214 @@ def ine_tablas(
         typer.echo(f"  {tabla.get('Id')!s:<8} {fecha:<10} {str(tabla.get('Nombre'))[:74]}")
     if len(tablas) > limite:
         typer.echo(f"  … y {len(tablas) - limite} más")
+
+
+@app.command("ine-buscar")
+def ine_buscar(
+    texto: str = typer.Argument("", help="Parte del nombre de la tabla, sin acentos"),
+    desde_tabla: str | None = typer.Option(
+        None, "--desde-tabla",
+        help="Id de una tabla conocida: lista las tablas de SU operación",
+    ),
+    limite: int = typer.Option(12, help="Cuántas operaciones (o tablas) enseñar"),
+) -> None:
+    """Busca tablas del INE por nombre, o a partir de una tabla que ya conoces.
+
+    Encontrar la tabla buena es lo que más ha costado de este motor. Hay
+    operaciones —la del Padrón continuo por edad, por ejemplo— que NO salen en
+    OPERACIONES_DISPONIBLES, así que buscando por nombre no aparecen nunca.
+    Para esas está `--desde-tabla`: se le da una tabla que sí se conoce
+    (33956, la de una provincia) y averigua su operación con SERIES_TABLA.
+
+        powergis ine-buscar "grupos quinquenales"
+        powergis ine-buscar --desde-tabla 33956
+        powergis ine-buscar "municipios y edad" --desde-tabla 33956
+
+    Sin `--desde-tabla` recorre todas las operaciones: tarda un minuto largo.
+    Se usa para mapear un indicador, no en producción.
+    """
+    from .adapters.collectors.ine import IneCollector, _fold
+
+    collector = IneCollector()
+    aguja = _fold(texto)
+
+    if desde_tabla:
+        try:
+            series = collector._client.get_json(f"SERIES_TABLA/{desde_tabla}")
+        except Exception as exc:
+            typer.secho(f"No se pudo leer la tabla {desde_tabla}: {exc}", fg=typer.colors.RED)
+            raise typer.Exit(1) from exc
+        operaciones = {
+            int(s["FK_Operacion"]) for s in (series if isinstance(series, list) else [])
+            if isinstance(s, dict) and s.get("FK_Operacion") is not None
+        }
+        if not operaciones:
+            typer.secho(
+                f"La tabla {desde_tabla} no dice a qué operación pertenece "
+                "(o el INE no la conoce).", fg=typer.colors.YELLOW,
+            )
+            raise typer.Exit(1)
+        for op_id in sorted(operaciones):
+            tablas = collector.tablas_de_operacion(op_id)
+            if aguja:
+                tablas = [t for t in tablas if aguja in _fold(str(t.get("Nombre") or ""))]
+            tablas.sort(key=IneCollector._recencia, reverse=True)
+            typer.secho(
+                f"operación {op_id} · {len(tablas)} tablas"
+                + (f" con «{texto}»" if texto else ""),
+                bold=True, fg=typer.colors.GREEN,
+            )
+            for tabla in tablas[: max(limite, 1) * 5]:
+                typer.echo(
+                    f"    {tabla.get('Id')!s:<8} {IneCollector.etiqueta_fecha(tabla):<10}"
+                    f" {str(tabla.get('Nombre'))[:70]}"
+                )
+            typer.echo(f"\n  Para ver sus series:  powergis ine-tablas {op_id} -c \"texto\"")
+        return
+
+    if not aguja:
+        typer.secho("Dame un texto a buscar o --desde-tabla <id>", fg=typer.colors.YELLOW)
+        raise typer.Exit(2)
+
+    try:
+        todas = collector._client.get_json("OPERACIONES_DISPONIBLES")
+    except Exception as exc:
+        typer.secho(f"No se pudo listar las operaciones: {exc}", fg=typer.colors.RED)
+        raise typer.Exit(1) from exc
+
+    ops = [o for o in (todas if isinstance(todas, list) else []) if isinstance(o, dict)]
+    typer.echo(f"Buscando «{texto}» en {len(ops)} operaciones…\n")
+
+    encontrados = 0
+    for op in ops:
+        id_op = op.get("Id")
+        if id_op is None:
+            continue
+        try:
+            tablas = collector.tablas_de_operacion(int(id_op))
+        except Exception as exc:
+            # Una operación caída no puede parar la búsqueda: son un centenar.
+            log.debug("operación %s no responde: %s", id_op, exc)
+            continue
+
+        hits = [t for t in tablas if aguja in _fold(str(t.get("Nombre") or ""))]
+        if not hits:
+            continue
+
+        encontrados += 1
+        hits.sort(key=IneCollector._recencia, reverse=True)
+        typer.secho(f"operación {id_op} · {op.get('Nombre')}", bold=True, fg=typer.colors.GREEN)
+        typer.echo(f"  {len(hits)} tablas. Las tres más recientes:")
+        for tabla in hits[:3]:
+            typer.echo(
+                f"    {tabla.get('Id')!s:<8} {IneCollector.etiqueta_fecha(tabla):<10}"
+                f" {str(tabla.get('Nombre'))[:66]}"
+            )
+        typer.echo("")
+        if encontrados >= limite:
+            typer.echo("… hay más; afina el texto o sube --limite")
+            break
+
+    if not encontrados:
+        typer.secho(
+            f"Ninguna tabla de las operaciones listadas contiene «{texto}». "
+            "Si conoces una tabla parecida, prueba con --desde-tabla.",
+            fg=typer.colors.YELLOW,
+        )
+        raise typer.Exit(1)
+
+
+@app.command("almacen-estado")
+def almacen_estado(
+    nivel: str = typer.Option("municipio", help="municipio | provincia | ccaa"),
+    todos: bool = typer.Option(False, "--todos", help="Incluye los indicadores sin ningún dato"),
+) -> None:
+    """Cuánto dato hay DE VERDAD en el almacén, indicador por indicador.
+
+    Responde a la pregunta que ninguna otra herramienta respondía: no qué
+    tablas existen ni qué colectores hay, sino cuántas geografías del nivel
+    tienen un valor cargado, cuántas un hueco por secreto estadístico, y de qué
+    año es el dato más reciente.
+
+        powergis almacen-estado
+        powergis almacen-estado --nivel provincia
+
+    Un indicador con colector, tabla verificada y 0 % aquí es un fallo de
+    carga, no de mapeo: es la señal para mirar los avisos de la ingesta.
+    """
+    from sqlalchemy import text
+
+    from .adapters.db.session import uow_factory
+    from .domain import indicators as catalog_mod
+
+    with uow_factory() as uow:
+        total = uow.session.execute(
+            text("SELECT count(*) FROM dim_geo WHERE level = :n"), {"n": nivel}
+        ).scalar_one()
+        filas = uow.session.execute(
+            text(
+                """
+                WITH ultimo AS (
+                    -- Lo mismo que lee el informe: el periodo más reciente
+                    -- de cada geografía. Contar todos los periodos daba por
+                    -- «con dato» un municipio cuyo último valor es un hueco.
+                    SELECT DISTINCT ON (f.geo_id, f.indicator)
+                           f.geo_id, f.indicator, f.value, f.period
+                    FROM fact_indicator f
+                    JOIN dim_geo g ON g.geo_id = f.geo_id
+                    WHERE g.level = :n AND f.segment_key = '{}'
+                      AND f.source_ref IS DISTINCT FROM :demo
+                    ORDER BY f.geo_id, f.indicator, f.period DESC
+                )
+                SELECT indicator,
+                       count(*) FILTER (WHERE value IS NOT NULL) AS con_dato,
+                       count(*) FILTER (WHERE value IS NULL)     AS secreto,
+                       max(period)                               AS ultimo
+                FROM ultimo
+                GROUP BY indicator
+                """
+            ),
+            {"n": nivel, "demo": DEMO_REF},
+        ).all()
+        demo = uow.session.execute(
+            text("SELECT count(*) FROM fact_indicator WHERE source_ref = :f"), {"f": DEMO_REF}
+        ).scalar_one()
+
+    if not total:
+        typer.secho(f"No hay geografías de nivel «{nivel}» en dim_geo.", fg=typer.colors.RED)
+        raise typer.Exit(1)
+    if demo:
+        typer.secho(
+            f"¡OJO! Hay {demo} hechos de DEMOSTRACIÓN en el almacén, mezclados con los "
+            "reales. Bórralos:  powergis purgar-demo\n",
+            fg=typer.colors.RED, bold=True,
+        )
+
+    por_codigo = {r.indicator: r for r in filas}
+    typer.secho(f"{total} geografías de nivel {nivel}\n", bold=True)
+    typer.echo(f"{'indicador':<34}{'con dato':>10}{'%':>6}{'secreto':>9}  último")
+
+    con_algo = 0
+    for ind in catalog_mod.CATALOG:
+        r = por_codigo.get(ind.code)
+        if r is None and not todos:
+            continue
+        con = r.con_dato if r else 0
+        pct = 100 * con / total
+        con_algo += 1 if con else 0
+        color = (typer.colors.GREEN if pct >= 90 else
+                 typer.colors.YELLOW if pct >= 25 else typer.colors.RED)
+        typer.secho(
+            f"{ind.code:<34}{con:>10}{pct:>5.0f}%{(r.secreto if r else 0):>9}  "
+            f"{r.ultimo.year if r and r.ultimo else '—'}",
+            fg=color,
+        )
+
+    sin = len(catalog_mod.CATALOG) - con_algo
+    typer.echo(
+        f"\n{con_algo} indicadores con dato en {nivel}; {sin} del catálogo sin ninguno"
+        + ("" if todos else " (--todos para verlos)")
+    )
 
 
 @app.command("load-municipios")
@@ -273,17 +628,27 @@ def load_municipios(
 
 @app.command("ine-verify")
 def ine_verify(json_out: bool = False) -> None:
-    """Comprueba que los IDs de tabla y los filtros del INE siguen valiendo.
+    """Comprueba contra el INE que cada indicador sale de la tabla correcta.
 
-    Ejecútalo en el VPS antes de la primera carga y después de cada aviso de
-    republicación del INE. Sale con código 1 si algo está roto, así que sirve
-    para bloquear un despliegue:
+    Revisa las dos fuentes del INE —tablas demográficas y Atlas de renta—. Antes
+    sólo miraba la primera, y la renta llevaba tiempo leyendo la tabla de una
+    sola provincia sin que nada lo dijera.
+
+    Sale con código 1 si algo está roto, así que bloquea una carga:
 
         powergis ine-verify || echo "no cargues hasta arreglar esto"
+
+    Los indicadores PENDIENTES (sin fuente buena todavía) se enseñan aparte y no
+    bloquean: se sabe que no tienen dato y no se cargan.
     """
     from .adapters.collectors.ine import IneCollector
+    from .adapters.collectors.ine_adrh import AdrhCollector
 
-    report = IneCollector().verify()
+    partes = [IneCollector().verify(), AdrhCollector().verify()]
+    report: dict[str, Any] = {
+        k: sum(p[k] for p in partes) for k in ("checked", "ok", "stale", "pending", "broken")
+    }
+    report["results"] = [r for p in partes for r in p["results"]]
 
     if json_out:
         typer.echo(json.dumps(report, indent=2, ensure_ascii=False))
@@ -291,24 +656,26 @@ def ine_verify(json_out: bool = False) -> None:
 
     colours = {
         "OK": typer.colors.GREEN,
+        "PENDING": typer.colors.BLUE,
+        "STALE": typer.colors.YELLOW,
         "NO_MATCH": typer.colors.YELLOW,
         "LEVEL_MISMATCH": typer.colors.YELLOW,
         "EMPTY": typer.colors.RED,
         "UNREACHABLE": typer.colors.RED,
-        "STALE": typer.colors.YELLOW,
     }
+    marcas = {"OK": "OK ", "PENDING": "·· "}
 
-    for row in report["results"]:
+    activos = [r for r in report["results"] if r["status"] != "PENDING"]
+    pendientes = [r for r in report["results"] if r["status"] == "PENDING"]
+
+    for row in activos:
         status = row["status"]
-        mark = "OK " if status == "OK" else "!! "
-        # El año va en TODAS las líneas, no sólo en las viejas. Una tabla que
-        # responde y mapea puede seguir siendo de hace cinco años, y eso no se
-        # ve por ningún otro sitio: el informe sale entero y con datos de otra
-        # década.
+        # El año va en TODAS las líneas: una tabla que responde y mapea puede
+        # ser de hace cinco años, y eso no se ve por ningún otro sitio.
         ano = row.get("year")
         typer.secho(
-            f"{mark}{row['indicator']:<28} tabla {row['table']:<7}"
-            f" datos={ano or '?':<6} series={row.get('series', 0):<6}"
+            f"{marcas.get(status, '!! ')}{row['indicator']:<30} {row['table']!s:<10}"
+            f" datos={ano or '?':<5} series={row.get('series', 0):<6}"
             f" coinciden={row.get('matched', 0)}",
             fg=colours.get(status, typer.colors.WHITE),
         )
@@ -317,33 +684,37 @@ def ine_verify(json_out: bool = False) -> None:
         if status != "OK":
             for name in row.get("sample", []):
                 typer.echo(f"       ej.: {name}")
-        if row.get("overridden"):
-            typer.echo(f"     ({row.get('resolution', 'ID distinto al de la semilla')})")
+        if row.get("overridden") and row.get("resolution"):
+            typer.echo(f"     ({row['resolution']})")
+
+    if pendientes:
+        typer.secho("\nSin fuente todavía (no se cargan, no bloquean):", bold=True)
+        for row in pendientes:
+            typer.secho(f"·· {row['indicator']:<30} {row['detail']}", fg=typer.colors.BLUE)
 
     typer.echo("")
     if report["broken"]:
         typer.secho(
             f"{report['broken']} de {report['checked']} comprobaciones fallan. "
-            "Corrige el ID con la variable de entorno correspondiente "
-            "(INE_TABLE_<INDICADOR>) o ajusta el filtro `match` antes de cargar.",
-            fg=typer.colors.RED,
-            bold=True,
+            "Corrige el ID con la variable de entorno (INE_TABLE_… o ADRH_TABLE_…) "
+            "o ajusta el filtro antes de cargar.",
+            fg=typer.colors.RED, bold=True,
         )
         raise typer.Exit(1)
 
-    if report.get("stale"):
+    if report["stale"]:
         typer.secho(
-            f"{report['stale']} de {report['checked']} tablas traen datos con más de "
-            f"{IneCollector.MAX_ANTIGUEDAD_ANOS} años. Responden y mapean bien, así que "
-            "no es un fallo: es que el INE republicó la operación con otro ID y el "
-            "nuestro sigue apuntando a la edición vieja.\n"
-            "Busca la nueva con `powergis ine-discover <id>` y fíjala en la variable "
-            "INE_TABLE_<INDICADOR> del .env; no hace falta tocar código.",
-            fg=typer.colors.YELLOW,
-            bold=True,
+            f"{report['stale']} tablas traen datos con más de "
+            f"{IneCollector.MAX_ANTIGUEDAD_ANOS} años. Responden y mapean, así que no "
+            "es un fallo: el INE republicó la operación y esa tabla es la edición vieja.",
+            fg=typer.colors.YELLOW, bold=True,
         )
 
-    typer.secho(f"Las {report['checked']} tablas del INE responden y mapean.", fg=typer.colors.GREEN)
+    typer.secho(
+        f"{report['ok']} indicadores con fuente verificada · "
+        f"{report['pending']} pendientes de fuente.",
+        fg=typer.colors.GREEN,
+    )
 
 
 @app.command()
@@ -1053,19 +1424,19 @@ def load_demo_facts() -> int:
                     continue
                 facts.append(Fact(
                     geo_id=geo.geo_id, indicator=code, period=period,
-                    value=float(value), segment={}, source_ref="DEMO-SINTÉTICO",
+                    value=float(value), segment={}, source_ref=DEMO_REF,
                 ))
             # Segmento de edad, para que la tabla avanzada tenga contenido.
             for age in ("18-35", "36-55", "65+"):
                 facts.append(Fact(
                     geo_id=geo.geo_id, indicator="dem.pop.segment", period=period,
                     value=population * random.uniform(0.12, 0.30),
-                    segment={"age": age}, source_ref="DEMO-SINTÉTICO",
+                    segment={"age": age}, source_ref=DEMO_REF,
                 ))
             facts.append(Fact(
                 geo_id=geo.geo_id, indicator="dem.pop.segment", period=period,
                 value=population * random.uniform(0.20, 0.45),
-                segment={}, source_ref="DEMO-SINTÉTICO",
+                segment={}, source_ref=DEMO_REF,
             ))
 
         written = uow.facts.upsert_many(facts)

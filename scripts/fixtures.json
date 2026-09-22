@@ -6,7 +6,8 @@
     "{uuid3}": "tercero, para el municipal",
     "{owner}": "wp_user_id, distinto en cada tanda: si se repitiera, el límite de informes gratuitos (3/hora) haría fallar la segunda ejecución",
     "esperar": "marca los casos asíncronos: tras un 202, el lanzador sondea hasta que el informe está en ese nivel antes de seguir",
-    "requiere_proyecto": "el caso necesita el proyecto principal creado en el grupo `informes`; se salta si esa tanda no corrió"
+    "requiere_proyecto": "el caso necesita el proyecto principal creado en el grupo `informes`; se salta si esa tanda no corrió",
+    "sin_datos": "código que el endpoint devuelve CORRECTAMENTE cuando el almacén todavía no tiene hechos; se marca en amarillo en vez de contarse como fallo, para que ninguna línea roja haya que ignorarla"
   },
   "salud": [
     {
@@ -238,7 +239,8 @@
         "ambiental": 0.2,
         "match": 0.1
       },
-      "nota": "No toca la base de datos: recalcula sobre el snapshot. Devuelve el ranking COMPLETO, que es producto de pago, y por eso va firmado."
+      "nota": "No toca la base de datos: recalcula sobre el snapshot. Devuelve el ranking COMPLETO, que es producto de pago, y por eso va firmado. Con el almacén vacío no hay indicadores utilizables, así que el PlaceRank no llega a calcularse y esto responde 409 — correcto: el motor se niega a inventar un ranking sin datos. Pasa a 200 tras la ingesta.",
+      "sin_datos": 409
     },
     {
       "nombre": "capas del mapa",

@@ -1,151 +1,139 @@
-"""Atlas de Distribución de Renta de los Hogares (ADRH) del INE.
+"""Atlas de Distribución de Renta de los Hogares (ADRH) del INE — operación 353.
 
-Es la fuente REAL de los datos económicos del informe — no Overpass, que da
-POIs, no renta. Publica renta media, mediana, per cápita, distribución por
-tramos y Gini a nivel de municipio, distrito y **sección censal**.
+La fuente REAL de los datos económicos del informe. Publica renta, Gini y
+distribución a nivel de municipio, distrito y sección censal.
 
-Tres avisos que están implementados, no solo documentados:
+Avisos que están implementados, no sólo documentados:
 
-1. Es **estadística experimental** con ~2 años de desfase. El periodo del dato
-   se guarda tal cual; el informe muestra el año.
-2. Hay **secreto estadístico** en unidades pequeñas: el ADRH no publica. Aquí
-   se emite un `Fact` con `value=None`, nunca un cero. La UI lo muestra como
-   «no disponible».
-3. Los IDs de tabla cambian al republicar. Se sobreescriben por entorno.
+1. **Estadística experimental** con unos dos años de desfase. El periodo del
+   dato se guarda tal cual y el informe enseña el año.
+2. **Secreto estadístico** en unidades pequeñas: el Atlas no publica. Se
+   guarda `None`, nunca un cero.
+3. **Una tabla por provincia**: se leen todas (`varias_tablas`).
+
+QUÉ SE CORRIGIÓ
+---------------
+Era un colector aparte con su propio `_geo_of` y su propio filtro, y tenía los
+mismos fallos que ya se habían arreglado en `IneCollector`: apuntaba a `30824`,
+que es la tabla de UNA provincia; sólo miraba el primer campo del nombre; y
+asignaba un nombre de municipio repetido al primero que coincidiera. Ninguno
+salía en `ine-verify`, que sólo miraba las tablas de `ine`. Ahora hereda.
+
+Y dos mapeos estaban cruzados:
+
+- La mediana se pedía a `30832`, que pertenece a «Indicadores demográficos» y
+  no tiene una sola serie de renta.
+- `eco.income.household.mean` —«Renta BRUTA media por hogar» en el catálogo—
+  recibía la renta NETA. El modelo de renta disponible la trataba como bruta y
+  le restaba impuestos otra vez. Ahora cada una va a su código, y la neta se
+  usa directamente como renta disponible, observada en vez de estimada.
 """
 
 from __future__ import annotations
 
 import logging
-import os
-from collections.abc import Sequence
-from dataclasses import dataclass
+from collections.abc import Iterable
+from dataclasses import replace
 from datetime import date
 from typing import Any
 
-from ...config import get_settings
-from ...domain.errors import CollectorError
 from ...domain.models import Fact, Geo, Segments
-from .base import BaseCollector, HttpClient
+from .ine import IneCollector, TableSpec
 
 log = logging.getLogger(__name__)
 
+#: Valores con los que el INE marca «no publicado por secreto estadístico».
 SECRETO_MARKERS = {"..", ".", "", "-", "n/a"}
 
+_ATLAS: dict[str, Any] = {"operacion": 353, "varias_tablas": True, "env_prefix": "ADRH_TABLE_"}
+#: Familia de tablas con las seis series de renta (nombres comprobados):
+#: renta neta media por persona / por hogar, media y mediana de la renta por
+#: unidad de consumo, renta bruta media por persona / por hogar.
+_RENTA = ("indicadores de renta media y mediana",)
 
-@dataclass(frozen=True, slots=True)
-class AdrhSpec:
-    table_id: str
-    indicator: str
-    match: tuple[str, ...]
-    level: str = "municipio"
-    scale: float = 1.0
+SPECS: tuple[TableSpec, ...] = (
+    TableSpec("30824", "eco.income.household.mean", "municipio",
+              match=("renta bruta media por hogar",), table_match=_RENTA, **_ATLAS),
+    TableSpec("30824", "eco.income.household.net", "municipio",
+              match=("renta neta media por hogar",), table_match=_RENTA, **_ATLAS),
+    TableSpec("30824", "eco.income.percapita", "municipio",
+              match=("renta neta media por persona",), table_match=_RENTA, **_ATLAS),
+    TableSpec("30824", "eco.income.household.median", "municipio",
+              match=("mediana de la renta por unidad de consumo",),
+              table_match=_RENTA, **_ATLAS),
 
-    @property
-    def env_key(self) -> str:
-        return f"ADRH_TABLE_{self.indicator.upper().replace('.', '_')}"
+    # «Índice de Gini y Distribución de la renta P80/P20». Si el INE cambia el
+    # nombre de la familia, `ine-verify` lo dirá: ninguna tabla encajará.
+    TableSpec("37677", "eco.gini", "municipio", match=("gini",),
+              table_match=("gini",), **_ATLAS),
 
-    def resolved_id(self) -> str:
-        return os.getenv(self.env_key, self.table_id)
-
-
-SPECS: tuple[AdrhSpec, ...] = (
-    AdrhSpec("30824", "eco.income.household.mean", ("renta neta media por hogar",)),
-    AdrhSpec("30824", "eco.income.percapita", ("renta neta media por persona",)),
-    AdrhSpec("30832", "eco.income.household.median", ("mediana",)),
-    AdrhSpec("37677", "eco.gini", ("gini",)),
-    AdrhSpec("37677", "eco.nse.risk_pct", ("riesgo de pobreza",)),
-    AdrhSpec("30833", "eco.income.under15k_pct", ("menos de 15",)),
-    AdrhSpec("30833", "eco.income.over30k_pct", ("más de 30",)),
-    AdrhSpec("30833", "eco.income.over60k_pct", ("más de 60",)),
+    # -----------------------------------------------------------------------
+    # PENDIENTES — sin `operacion`, o sea fallando en `ine-verify` a la vista.
+    #
+    # Viven en las familias de «umbrales fijos» y «umbrales relativos», que
+    # desglosan cada municipio por sexo y tramos de edad. Sin ver los nombres
+    # exactos de sus series, un filtro puesto a ojo cogería los desgloses junto
+    # al total y escribiría varios valores para el mismo municipio. Se
+    # completan en cuanto se vean con `powergis ine-tablas 353 --contiene umbrales`.
+    # -----------------------------------------------------------------------
+    TableSpec("37677", "eco.nse.risk_pct", "municipio", match=("riesgo de pobreza",),
+              env_prefix="ADRH_TABLE_", pendiente="familia de umbrales relativos; hay que ver sus series"),
+    TableSpec("30833", "eco.income.under15k_pct", "municipio", match=("menos de 15",),
+              env_prefix="ADRH_TABLE_", pendiente="familia de umbrales fijos; hay que ver sus series"),
+    TableSpec("30833", "eco.income.over30k_pct", "municipio", match=("mas de 30",),
+              env_prefix="ADRH_TABLE_", pendiente="familia de umbrales fijos; hay que ver sus series"),
+    TableSpec("30833", "eco.income.over60k_pct", "municipio", match=("mas de 60",),
+              env_prefix="ADRH_TABLE_", pendiente="familia de umbrales fijos; hay que ver sus series"),
 )
 
 
-class AdrhCollector(BaseCollector):
+class AdrhCollector(IneCollector):
+    """Igual que `IneCollector`, con el recuento del secreto estadístico."""
+
     name = "ine_adrh"
-    PROVIDES = tuple({s.indicator for s in SPECS})
+    SPECS = SPECS
 
-    def __init__(self, client: HttpClient | None = None) -> None:
-        cfg = get_settings()
-        self._client = client or HttpClient(
-            cfg.ine_base_url, timeout=cfg.ine_timeout,
-            max_retries=cfg.ine_max_retries, rps=cfg.ine_rps,
-        )
-
-    def collect(
+    def _map(
         self,
-        indicators: Sequence[str],
-        geos: Sequence[Geo],
+        spec: TableSpec,
+        rows: Iterable[dict[str, Any]],
+        by_code: dict[str, Geo],
+        by_name: dict[tuple[str, str], Geo],
         segments: Segments,
-        period: date | None = None,
+        period: date | None,
     ) -> list[Fact]:
-        wanted = set(indicators) & set(self.PROVIDES)
-        if not wanted or not geos:
-            return []
+        filas = list(rows)
+        facts = super()._map(spec, filas, by_code, by_name, segments, period)
+        if spec.indicator == "eco.gini":
+            facts = [_gini_en_tanto_por_uno(f) for f in facts]
 
-        index = {g.ine_code: g for g in geos}
-        index.update({g.ine_code.zfill(5): g for g in geos})
-        facts: list[Fact] = []
-        suppressed = 0
-
-        for spec in SPECS:
-            if spec.indicator not in wanted:
-                continue
-            try:
-                rows = self._client.get_json(
-                    f"DATOS_TABLA/{spec.resolved_id()}", {"nult": 1, "tip": "A", "det": 2}
-                )
-            except CollectorError as exc:
-                log.warning("ADRH %s: %s", spec.indicator, exc.message)
-                continue
-
-            for row in rows if isinstance(rows, list) else []:
-                name = str(row.get("Nombre", ""))
-                if not any(token in name.lower() for token in spec.match):
-                    continue
-                geo = self._geo_of(name, index)
-                if geo is None:
-                    continue
-                for point in row.get("Data", []):
-                    raw = point.get("Valor")
-                    value = self.to_float(raw)
-                    if value is None and str(raw).strip().lower() in SECRETO_MARKERS:
-                        suppressed += 1
-                    facts.append(
-                        self.fact(
-                            geo, spec.indicator,
-                            None if value is None else value * spec.scale,
-                            period or self._period(point),
-                            None,
-                            source_ref=f"INE:ADRH:{spec.resolved_id()}",
-                        )
-                    )
-
-        if suppressed:
+        # El hueco ya se guarda como NULL; aquí se cuenta cuántos hay. En un
+        # ámbito de pueblos pequeños pueden ser la mayoría, y entonces el
+        # indicador no es que salga bajo: es que no está.
+        callados = sum(
+            1
+            for fila in filas
+            for punto in (fila.get("Data") or fila.get("data") or [])
+            if punto.get("Secreto") is True
+            or str(punto.get("Valor", "")).strip().lower() in SECRETO_MARKERS
+        )
+        if callados:
             log.info(
-                "ADRH: %s valores no publicados por secreto estadístico "
-                "(se guardan como NULL, no como 0)", suppressed,
+                "ADRH %s: %d valores no publicados por secreto estadístico "
+                "(NULL, nunca 0)", spec.indicator, callados,
             )
         return facts
 
-    @staticmethod
-    def _period(point: dict[str, Any]) -> date:
-        year = point.get("Anyo") or point.get("anyo")
-        try:
-            # El INE a veces no manda el año. El `except` ya lo cubría; la
-            # anotación no lo decía.
-            return date(int(year), 1, 1)  # type: ignore[arg-type]
-        except (TypeError, ValueError):
-            return date.today()
 
-    @staticmethod
-    def _geo_of(name: str, index: dict[str, Geo]) -> Geo | None:
-        head = name.split(".")[0].strip()
-        token = head.split(" ")[0].strip()
-        if token.isdigit():
-            return index.get(token) or index.get(token.zfill(5))
-        lowered = head.lower()
-        for geo in index.values():
-            if geo.name.lower() == lowered:
-                return geo
-        return None
+def _gini_en_tanto_por_uno(fact: Fact) -> Fact:
+    """El Atlas publica el Gini de 0 a 100 (31,5); el catálogo y los índices
+    de NSE y resiliencia lo usan de 0 a 1 (0,315).
+
+    Sin esto, `min(gini, 0.6)` daba siempre 0,6: todas las zonas parecían
+    igual de desiguales, el NSE salía multiplicado por 0,7 en todas partes y
+    el Gini dejaba de distinguir nada. Se convierte sólo si viene en la escala
+    grande, así que un cambio de formato del INE no lo rompe.
+    """
+    if fact.value is not None and fact.value > 1.0:
+        return replace(fact, value=fact.value / 100.0)
+    return fact

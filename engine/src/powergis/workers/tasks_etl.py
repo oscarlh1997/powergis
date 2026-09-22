@@ -10,21 +10,11 @@ from celery import shared_task
 from ..adapters.collectors.registry import build_registry
 from ..adapters.db.orm import IngestLogRow
 from ..adapters.db.session import uow_factory
-from ..application.ingest import ComputeDerived, IngestData
+from ..application.ingest import AggregateUp, ComputeDerived, IngestData
 from ..domain.enums import GeoLevel
 from ..domain.errors import CollectorUnavailable
 
 log = logging.getLogger(__name__)
-
-
-def _facts_lookup_factory(uow, geo_ids: list[int]):
-    """Cache en memoria de los hechos ya cargados, para los derivados."""
-    from ..domain import indicators as catalog_mod
-
-    codes = [i.code for i in catalog_mod.CATALOG]
-    facts = uow.facts.fetch(geo_ids, codes, [{}])
-    index = {(f.geo_id, f.indicator): f.value for f in facts}
-    return lambda geo_id, code: index.get((geo_id, code))
 
 
 @shared_task(
@@ -106,6 +96,19 @@ def compute_derived_task(level: str = "municipio", parent_code: str | None = Non
     written = ComputeDerived(uow_factory)(GeoLevel(level), parent_code)
     log.info("Derivados: %s hechos escritos", written)
     return {"written": written, "level": level}
+
+
+@shared_task(name="powergis.etl.aggregate_up")
+def aggregate_up_task() -> dict:
+    """Municipios → provincia, comunidad y país, y los derivados de esos niveles."""
+    escritos = AggregateUp(uow_factory)()
+    for nivel in (GeoLevel.PROVINCIA, GeoLevel.CCAA, GeoLevel.PAIS):
+        ComputeDerived(uow_factory)(nivel)
+        with uow_factory() as uow:
+            registry = build_registry(session=uow.session)
+            IngestData(uow_factory, registry).by_collector("derived", [], nivel)
+    log.info("Agregados: %s", escritos)
+    return escritos
 
 
 @shared_task(name="powergis.etl.load_geographies")

@@ -21,8 +21,16 @@ final class REST_Callback {
 
 	public const NAMESPACE = 'saas/v1';
 
+	/**
+	 * Prioridad 20, como en `REST_Projects` y por lo mismo: el código antiguo
+	 * del tema registra también `saas/v1/projects/callback`, y en WordPress
+	 * atiende la ruta que se registró primero. Si ganara la vieja, el motor
+	 * avisaría de que el informe está listo y el aviso lo recogería una
+	 * implementación que no sabe nada de este plugin — el proyecto se quedaría
+	 * «en preparación» para siempre con el informe ya calculado.
+	 */
 	public static function hooks(): void {
-		add_action( 'rest_api_init', array( self::class, 'register_routes' ) );
+		add_action( 'rest_api_init', array( self::class, 'register_routes' ), 20 );
 		add_action( 'powergis_poll_pending_reports', array( self::class, 'poll_pending' ) );
 
 		if ( ! wp_next_scheduled( 'powergis_poll_pending_reports' ) ) {
@@ -66,7 +74,8 @@ final class REST_Callback {
 					'tier'         => array( 'type' => 'string', 'required' => false, 'enum' => array( 'basico', 'avanzado' ) ),
 					'version'      => array( 'type' => 'integer', 'required' => false, 'minimum' => 0 ),
 				),
-			)
+			),
+			true   // reemplaza la ruta del código antiguo
 		);
 	}
 

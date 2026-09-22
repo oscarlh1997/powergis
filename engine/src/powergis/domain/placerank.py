@@ -106,7 +106,10 @@ BUILTIN_PROFILES: dict[str, SectorProfile] = {
             Dimension.MATCH: 0.20,
         },
         indicator_weights={
-            "dem.age.65p": 2.0,
+            # En porcentaje, no en personas: es el que tiene fuente municipal,
+            # y además compara zonas de distinto tamaño. Un recuento de
+            # mayores premia a la ciudad grande por ser grande.
+            "dem.age.65p_pct": 2.0,
             "dem.ageing.index": 1.8,
             "dem.pop.total": 1.5,
             "cmp.per_1000hab": 1.5,

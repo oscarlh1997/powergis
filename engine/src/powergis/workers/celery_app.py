@@ -52,10 +52,27 @@ app.conf.update(
             "args": ("ine",),
             "options": {"queue": "etl"},
         },
+        # La natalidad sólo se publica por provincia: sin esta entrada el
+        # refresco mensual pedía municipios y la natalidad no se actualizaba
+        # nunca.
+        "ine-provincial-mensual": {
+            "task": "powergis.etl.refresh_source",
+            "schedule": crontab(hour=3, minute=45, day_of_month="5"),
+            "args": ("ine", "provincia"),
+            "options": {"queue": "etl"},
+        },
         "adrh-mensual": {
             "task": "powergis.etl.refresh_source",
             "schedule": crontab(hour=4, minute=0, day_of_month="6"),
             "args": ("ine_adrh",),
+            "options": {"queue": "etl"},
+        },
+        # Renta disponible, NSE, gasto… salen de la renta del Atlas. Después
+        # del ADRH; la cola `etl` tiene concurrencia 1, así que va en orden.
+        "derivados-economicos-mensual": {
+            "task": "powergis.etl.refresh_source",
+            "schedule": crontab(hour=6, minute=30, day_of_month="6"),
+            "args": ("derived",),
             "options": {"queue": "etl"},
         },
         # OSM cambia a diario; semanal es el equilibrio razonable.
@@ -72,9 +89,23 @@ app.conf.update(
             "args": ("aemet",),
             "options": {"queue": "etl"},
         },
+        # Provincias, comunidades y país a partir de los municipios, cuando ya
+        # están la renta y sus derivados. Sin esto, los informes que comparan
+        # provincias o comunidades no tenían datos.
+        "agregar-mensual": {
+            "task": "powergis.etl.aggregate_up",
+            "schedule": crontab(hour=7, minute=0, day_of_month="6"),
+            "options": {"queue": "etl"},
+        },
         "derivados-diario": {
             "task": "powergis.etl.compute_derived",
             "schedule": crontab(hour=6, minute=0),
+            "options": {"queue": "etl"},
+        },
+        "derivados-provinciales-diario": {
+            "task": "powergis.etl.compute_derived",
+            "schedule": crontab(hour=6, minute=5),
+            "args": ("provincia",),
             "options": {"queue": "etl"},
         },
         "reintentar-fallidos": {

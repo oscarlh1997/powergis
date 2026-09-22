@@ -410,6 +410,41 @@ final class Form_Mapper {
 	}
 
 	/**
+	 * Campos sueltos que el formulario nombra a su manera.
+	 *
+	 * El resto del mapeo traduce estructuras anidadas; esto resuelve los
+	 * cuatro escalares que viven en la raíz del payload y que cada versión del
+	 * formulario llamó de forma distinta. El shortcode actual manda
+	 * `project_name` y `project_id`; el JetFormBuilder que hubo antes mandaba
+	 * `project_title`; y `powergis endpoints` manda los nombres del motor.
+	 *
+	 * Se busca por orden y se devuelve el primero no vacío, para que un campo
+	 * presente pero en blanco no tape al siguiente alias.
+	 *
+	 * @param array<string,mixed> $input
+	 * @return mixed|null
+	 */
+	public static function pick( array $input, string $campo ) {
+		$alias = self::ALIASES[ $campo ] ?? array( $campo );
+		foreach ( $alias as $clave ) {
+			$valor = $input[ $clave ] ?? null;
+			if ( null === $valor || '' === $valor || array() === $valor ) {
+				continue;
+			}
+			return $valor;
+		}
+		return null;
+	}
+
+	/** Nombres con los que puede llegar cada campo suelto, en orden. */
+	private const ALIASES = array(
+		'title'        => array( 'title', 'project_name', 'project_title', 'nombre_proyecto' ),
+		'project_id'   => array( 'project_id', 'post_id', 'id' ),
+		'project_type' => array( 'project_type', 'tipo_proyecto', 'tipo_estudio' ),
+		'tier'         => array( 'tier', 'report_tier', 'nivel_informe' ),
+	);
+
+	/**
 	 * Traduce una etiqueta del formulario a la clave que entiende el motor.
 	 * Si no reconoce nada devuelve null: mejor sin criterio que con uno
 	 * inventado.

@@ -8,7 +8,7 @@ informe en una mentira.
 from __future__ import annotations
 
 import math
-from collections.abc import Iterable, Sequence
+from collections.abc import Callable, Iterable, Sequence
 
 from .enums import BreakMethod, Direction
 
@@ -351,3 +351,41 @@ def yoy_change(current: Number, previous: Number) -> float | None:
     if current is None or previous in (None, 0):
         return None
     return (float(current) - float(previous)) / abs(float(previous)) * 100.0  # type: ignore[arg-type]
+
+
+def razones_de_edad(v: Callable[[str], float | None]) -> tuple[float | None, float | None, float | None]:
+    """Dependencia, envejecimiento y % en edad activa, con la fuente que haya.
+
+    Los tramos llegan en PERSONAS con corte 15/16 —que hoy ninguna fuente
+    municipal publica— o en PORCENTAJE con corte 18, que es lo que da el Atlas.
+    Las dos razones son cocientes entre tramos, así que salen idénticas con
+    unos u otros: el total se cancela. Lo que no se puede es MEZCLAR los dos
+    cortes en la misma cuenta, porque 0-15 y menor de 18 no son el mismo tramo.
+
+    La elección se hace por fórmula: el envejecimiento sólo necesita jóvenes y
+    mayores, y atarlo a que exista además el tramo activo lo dejaría sin
+    calcular con sus dos ingredientes delante.
+
+    Vive en el dominio porque la usan dos capas —el colector de derivados y
+    `ComputeDerived`— y la misma fórmula en dos sitios acaba dando dos
+    resultados.
+    """
+    jov_p, act_p, may_p = v("dem.age.0_15"), v("dem.age.16_64"), v("dem.age.65p")
+    jov_x, may_x = v("dem.age.u18_pct"), v("dem.age.65p_pct")
+    act_x = max(0.0, 100.0 - jov_x - may_x) if jov_x is not None and may_x is not None else None
+
+    if jov_p is not None and act_p is not None and may_p is not None:
+        dependencia = dependency_ratio(jov_p, act_p, may_p)
+    elif jov_x is not None and act_x is not None and may_x is not None:
+        dependencia = dependency_ratio(jov_x, act_x, may_x)
+    else:
+        dependencia = None
+
+    if jov_p is not None and may_p is not None:
+        envejecimiento = ageing_index(may_p, jov_p)
+    elif jov_x is not None and may_x is not None:
+        envejecimiento = ageing_index(may_x, jov_x)
+    else:
+        envejecimiento = None
+
+    return dependencia, envejecimiento, act_x

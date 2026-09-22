@@ -27,7 +27,14 @@ class RedisCache:
     def get(self, key: str) -> Any | None:
         try:
             raw = self._client.get(self._key(key))
-            return json.loads(raw) if raw else None
+            # El cliente síncrono devuelve `str` (decode_responses=True), pero
+            # los tipos de redis-py 5.x/6.x anotan `get` como síncrono O
+            # asíncrono a la vez. Se comprueba el tipo en vez de silenciar al
+            # verificador: si algún día llegara otra cosa, es un fallo de
+            # caché —se trata como «no está»—, no un JSON roto en el informe.
+            if not isinstance(raw, (str, bytes, bytearray)) or not raw:
+                return None
+            return json.loads(raw)
         except Exception as exc:
             log.debug("cache get falló: %s", exc)
             return None

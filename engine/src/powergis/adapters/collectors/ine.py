@@ -66,9 +66,30 @@ class TableSpec:
     #: lleno de datos que no son de donde dice.
     table_match: tuple[str, ...] = ()
 
+    #: Usar TODAS las tablas que encajen, no sólo la más reciente.
+    #:
+    #: El Atlas de renta publica una tabla por provincia, las 54 con el mismo
+    #: nombre. Quedarse con «la más reciente» daría los municipios de una
+    #: provincia y ninguno del resto — que es exactamente cómo la población de
+    #: España acabó saliendo de la tabla de La Rioja.
+    varias_tablas: bool = False
+
+    #: Prefijo de la variable de entorno que fija el ID a mano. Cada colector
+    #: tiene el suyo para que dos fuentes distintas no compartan interruptor.
+    env_prefix: str = "INE_TABLE_"
+
+    #: Motivo por el que este indicador todavía no tiene fuente buena.
+    #:
+    #: Un spec pendiente no se descarga ni se carga, pero `ine-verify` lo sigue
+    #: enseñando. Sin esta marca había dos opciones malas: borrarlo —y el
+    #: indicador desaparecía también de la lista de cosas por hacer— o dejarlo
+    #: fallando, y entonces `make ingest-ine`, que se niega a cargar si algo
+    #: falla, no cargaba nunca nada.
+    pendiente: str | None = None
+
     @property
     def env_key(self) -> str:
-        return f"INE_TABLE_{self.indicator.upper().replace('.', '_')}"
+        return f"{self.env_prefix}{self.indicator.upper().replace('.', '_')}"
 
     @property
     def fijada_a_mano(self) -> bool:
@@ -120,34 +141,75 @@ TABLES: tuple[TableSpec, ...] = (
         operacion=22, table_match=("cifras oficiales del padron por municipio",),
     ),
     # -----------------------------------------------------------------------
-    # ESTRUCTURA POR EDADES — sin fuente municipal, y hay que decidir qué hacer
+    # EDAD Y HOGARES — Atlas de distribución de renta de los hogares (op. 353)
     #
-    # `56934` es una tabla NACIONAL: sus series empiezan por «Total Nacional.
-    # Todas las edades…». Declararla como municipal hace que no case ni una
-    # geografía, así que estos cinco indicadores llevan desde el principio sin
-    # producir un solo hecho.
+    # La única fuente del INE con estos indicadores POR MUNICIPIO para todo el
+    # país. Una tabla por provincia, las 54 llamadas «Indicadores
+    # demográficos»; de ahí `varias_tablas`. Series comprobadas en la tabla
+    # de Albacete:
     #
-    # Y no hay recambio: la Estadística Continua de Población (operación 450),
-    # que es la serie viva de población, NO publica ninguna tabla municipal
-    # —comprobado con `powergis ine-tablas 450 --contiene municipio`—.
+    #     Abengibre. Edad media de la población. Dato base.
+    #     Abengibre. Porcentaje de población menor de 18 años. Dato base.
+    #     Abengibre. Porcentaje de población de 65 y más años. Dato base.
+    #     Abengibre. Tamaño medio del hogar. Dato base.
+    #     Abengibre. Porcentaje de hogares unipersonales. Dato base.
     #
-    # Se quedan como estaban, sin `operacion`, a la espera de una decisión que
-    # no es técnica: o se declaran provinciales y el informe municipal enseña
-    # el dato de su provincia diciéndolo, o salen del nivel municipal. Ponerles
-    # una operación ahora sería fingir que el problema está resuelto.
+    # Mezclan municipios con distritos y secciones censales. No hace falta
+    # filtrarlos: el índice por nombre sólo conoce municipios, así que las
+    # secciones no resuelven y se cuentan como series sin geografía.
+    #
+    # Los tramos son los del Atlas —menor de 18 y 65+, en PORCENTAJE—, que no
+    # son los de personas con corte 15/16 del catálogo. Son indicadores
+    # distintos y llevan códigos distintos.
     # -----------------------------------------------------------------------
-    TableSpec("56934", "dem.age.0_15", "municipio", match=("0-15",)),
-    TableSpec("56934", "dem.age.16_64", "municipio", match=("16-64",)),
-    TableSpec("56934", "dem.age.65p", "municipio", match=("65",)),
-    TableSpec("56934", "dem.age.mean", "municipio", match=("edad media",)),
-    TableSpec("56934", "dem.pop.segment", "municipio", segment_from="age"),
-    TableSpec("59524", "dem.nat.foreign_pct", "municipio", match=("extranjer",)),
-    TableSpec("61399", "dem.edu.university_pct", "municipio", match=("superior",)),
-    TableSpec("61399", "dem.edu.secondary_pct", "municipio", match=("segunda etapa",)),
-    TableSpec("61399", "dem.edu.primary_pct", "municipio", match=("primera etapa",)),
-    TableSpec("61399", "dem.edu.none_pct", "municipio", match=("analfabet", "sin estudios")),
-    TableSpec("61250", "dem.household.size", "municipio", match=("tamaño medio",)),
-    TableSpec("61250", "dem.household.single_pct", "municipio", match=("unipersonal",)),
+    TableSpec("30814", "dem.age.mean", "municipio", match=("edad media de la poblacion",),
+              operacion=353, table_match=("indicadores demograficos",), varias_tablas=True),
+    TableSpec("30814", "dem.age.u18_pct", "municipio", match=("menor de 18",),
+              operacion=353, table_match=("indicadores demograficos",), varias_tablas=True),
+    TableSpec("30814", "dem.age.65p_pct", "municipio", match=("65 y mas",),
+              operacion=353, table_match=("indicadores demograficos",), varias_tablas=True),
+    TableSpec("30814", "dem.household.size", "municipio", match=("tamano medio del hogar",),
+              operacion=353, table_match=("indicadores demograficos",), varias_tablas=True),
+    TableSpec("30814", "dem.household.single_pct", "municipio",
+              match=("hogares unipersonales",),
+              operacion=353, table_match=("indicadores demograficos",), varias_tablas=True),
+
+    # -----------------------------------------------------------------------
+    # SIN FUENTE VERIFICADA — se dejan declarados para que `ine-verify` los
+    # siga señalando. Un indicador que desaparece del mapeo desaparece
+    # también de la lista de pendientes.
+    #
+    #   · `56934` es NACIONAL («Total Nacional. Todas las edades…»). La fuente
+    #     buena para tramos de edad en personas y para el público objetivo es
+    #     «Población por sexo, municipios y edad (grupos quinquenales)», de la
+    #     Estadística del Padrón continuo: una tabla por provincia, en una
+    #     operación que no está en OPERACIONES_DISPONIBLES. Se localiza con
+    #     `powergis ine-buscar --desde-tabla 33956`.
+    #   · `59524` es una tabla de VIVIENDA, no de nacionalidad.
+    #   · `61399` no existe. La educación municipal completa sólo la publica el
+    #     Censo 2021; los Indicadores Urbanos (op. 10) la dan por niveles ISCED
+    #     pero sólo en ciudades grandes y mezclando ciudad y área urbana, y un
+    #     «Madrid» área metropolitana casaría con el municipio de Madrid.
+    # -----------------------------------------------------------------------
+    TableSpec("56934", "dem.age.0_15", "municipio", match=("0-15",),
+              pendiente="56934 es nacional; la fuente es el Padrón continuo por edad"),
+    TableSpec("56934", "dem.age.16_64", "municipio", match=("16-64",),
+              pendiente="56934 es nacional; la fuente es el Padrón continuo por edad"),
+    TableSpec("56934", "dem.age.65p", "municipio", match=("65",),
+              pendiente="56934 es nacional; mientras, dem.age.65p_pct del Atlas"),
+    TableSpec("56934", "dem.pop.segment", "municipio", segment_from="age",
+              pendiente="necesita la población por edad del Padrón continuo"),
+    TableSpec("59524", "dem.nat.foreign_pct", "municipio", match=("extranjer",),
+              pendiente="59524 es una tabla de vivienda; buscar en el Padrón continuo"),
+    TableSpec("61399", "dem.edu.university_pct", "municipio", match=("superior",),
+              pendiente="61399 no existe; la fuente completa es el Censo 2021"),
+    TableSpec("61399", "dem.edu.secondary_pct", "municipio", match=("segunda etapa",),
+              pendiente="61399 no existe; la fuente completa es el Censo 2021"),
+    TableSpec("61399", "dem.edu.primary_pct", "municipio", match=("primera etapa",),
+              pendiente="61399 no existe; la fuente completa es el Censo 2021"),
+    TableSpec("61399", "dem.edu.none_pct", "municipio", match=("analfabet", "sin estudios"),
+              pendiente="61399 no existe; la fuente completa es el Censo 2021"),
+
     # `1470` y `67223` se llaman las dos «Tasa Bruta de Natalidad por
     # provincia» y tienen la misma fecha de modificación: sólo las distingue el
     # identificador, y la republicada es la de número mayor. La resolución por
@@ -175,8 +237,23 @@ def _fold(text: str) -> str:
 
 
 class IneCollector(BaseCollector):
+    """Colector de tablas del INE.
+
+    `SPECS` es atributo de clase para que otras fuentes del mismo organismo
+    —el Atlas de renta— hereden TODO lo que hay aquí: edición vigente, varias
+    tablas por indicador, series sin código, nombres repetidos, acentos. Cada
+    una de esas cosas costó encontrar un fallo silencioso; tenerlas
+    duplicadas garantiza que el siguiente arreglo llegue sólo a la mitad.
+    """
+
     name = "ine"
+    TODAS_LAS_GEOS = True
+    SPECS: tuple[TableSpec, ...] = TABLES
     PROVIDES = tuple({spec.indicator for spec in TABLES})
+
+    def __init_subclass__(cls, **kw: Any) -> None:
+        super().__init_subclass__(**kw)
+        cls.PROVIDES = tuple({spec.indicator for spec in cls.SPECS})
 
     def __init__(self, client: HttpClient | None = None) -> None:
         cfg = get_settings()
@@ -188,6 +265,17 @@ class IneCollector(BaseCollector):
         #: tres operaciones; sin esto se pediría el listado entero una vez por
         #: indicador.
         self._tablas_cache: dict[int, list[dict[str, Any]]] = {}
+        #: Filas por tabla DURANTE UNA CARGA. Varios indicadores leen la misma
+        #: tabla —tres la 29005, cinco las 54 del Atlas— y sin esto cada uno
+        #: la volvía a descargar: 270 peticiones donde bastan 54, a la tasa
+        #: que el INE tolera y con cinco veces más papeletas para que alguna
+        #: falle a medias. Se vacía al empezar y al acabar `collect`, para
+        #: que un worker de larga vida no arrastre datos de la carga anterior.
+        self._filas_cache: dict[tuple[str, int], list[dict[str, Any]]] = {}
+        #: Lo que falló en la última carga. `IngestData` lo pasa al informe de
+        #: la carga y `powergis ingest` sale con error: sin esto un indicador
+        #: entero podía no cargarse y la orden terminaba «bien».
+        self.fallos: list[str] = []
         self._client = client or HttpClient(
             cfg.ine_base_url,
             timeout=cfg.ine_timeout,
@@ -205,25 +293,81 @@ class IneCollector(BaseCollector):
         period: date | None = None,
     ) -> list[Fact]:
         wanted = set(indicators) & set(self.PROVIDES)
+        self.fallos = []
         if not wanted or not geos:
             return []
+        self._filas_cache.clear()
 
         by_code = {g.ine_code.zfill(5): g for g in geos}
         by_code.update({g.ine_code: g for g in geos})
         by_name = self._indice_por_nombre(geos)
         facts: list[Fact] = []
 
-        for spec in TABLES:
+        niveles = {str(g.level) for g in geos}
+        for spec in self.SPECS:
             if spec.indicator not in wanted:
+                continue
+            # Un spec pendiente no tiene tabla buena: descargarla sería traer
+            # datos que no son lo que dice el indicador.
+            if spec.pendiente:
+                continue
+            # Cada spec sólo contra geografías de SU nivel. Cargando municipios
+            # no tiene sentido bajar la tabla provincial de natalidad, ni
+            # cargando provincias las 54 del Atlas.
+            if spec.level not in niveles:
                 continue
             try:
                 rows = self._table(spec)
             except CollectorError as exc:
                 log.warning("INE tabla %s (%s): %s", spec.resolved_id(), spec.indicator, exc.message)
+                self.fallos.append(f"{spec.indicator}: {exc.message}")
                 continue
             facts.extend(self._map(spec, rows, by_code, by_name, segments, period))
 
-        return facts
+        self._filas_cache.clear()
+        return self._sin_conflictos(facts)
+
+    @staticmethod
+    def _sin_conflictos(facts: list[Fact]) -> list[Fact]:
+        """Quita los hechos que aparecen dos veces con valores DISTINTOS.
+
+        Dos valores para el mismo municipio, indicador, periodo y segmento
+        quieren decir que dos series han casado con la misma geografía y no
+        hay forma de saber cuál es la buena. Quedarse con una sería elegir a
+        ciegas; se quitan las dos y se avisa. Además PostgreSQL rechaza el
+        lote entero si un `INSERT … ON CONFLICT` trae la misma clave dos veces,
+        así que un solo conflicto tumbaba mil hechos buenos.
+
+        Las repeticiones con el MISMO valor sí se funden en una: son la misma
+        cifra llegada por dos tablas, no una contradicción.
+        """
+        por_clave: dict[tuple[Any, ...], list[Fact]] = {}
+        for f in facts:
+            clave = (f.geo_id, f.indicator, f.period, f.segment_key())
+            por_clave.setdefault(clave, []).append(f)
+
+        limpios: list[Fact] = []
+        conflictos = 0
+        for grupo in por_clave.values():
+            if len({g.value for g in grupo}) == 1:
+                limpios.append(grupo[0])
+                continue
+            # De tablas DISTINTAS: la primera es la más reciente (las tablas se
+            # leen de la más nueva a la más vieja), y una edición nueva manda
+            # sobre la vieja. Dentro de la MISMA tabla sí es una contradicción:
+            # dos series para un sitio, y no hay forma de saber cuál es.
+            primera = grupo[0].source_ref
+            de_la_primera = {g.value for g in grupo if g.source_ref == primera}
+            if len({g.source_ref for g in grupo}) > 1 and len(de_la_primera) == 1:
+                limpios.append(grupo[0])
+            else:
+                conflictos += 1
+        if conflictos:
+            log.warning(
+                "INE: %d combinaciones geografía/indicador con valores contradictorios; "
+                "se descartan en vez de elegir uno a ciegas", conflictos,
+            )
+        return limpios
 
     @staticmethod
     def _indice_por_nombre(geos: Sequence[Geo]) -> dict[tuple[str, str], Geo]:
@@ -271,9 +415,46 @@ class IneCollector(BaseCollector):
     # ------------------------------------------------------------------ #
 
     def _table(self, spec: TableSpec, nult: int = 1) -> list[dict[str, Any]]:
-        tabla, motivo = self.resolver_tabla(spec)
-        if tabla != spec.table_id:
-            log.info("%s → tabla %s (%s)", spec.indicator, tabla, motivo)
+        """Las filas de un spec, vengan de una tabla o de cincuenta y cuatro.
+
+        Con `varias_tablas` se concatenan. Un fallo en una NO tumba las demás:
+        si el Atlas deja de responder para Soria, es preferible el almacén con
+        52 provincias y un hueco visible que ninguna provincia y una excepción.
+        """
+        tablas, motivo = self.resolver_tablas(spec)
+        if tablas != [spec.table_id]:
+            log.info("%s → %s (%s)", spec.indicator, ", ".join(tablas[:3]), motivo)
+
+        if len(tablas) == 1:
+            return self._one_table(tablas[0], nult)
+
+        filas: list[dict[str, Any]] = []
+        fallidas = 0
+        for tabla in tablas:
+            try:
+                filas.extend(self._one_table(tabla, nult))
+            except CollectorError as exc:
+                fallidas += 1
+                log.warning("INE tabla %s (%s): %s", tabla, spec.indicator, exc.message)
+        if fallidas:
+            log.warning(
+                "INE %s: %d de %d tablas no respondieron; el almacén quedará con huecos",
+                spec.indicator, fallidas, len(tablas),
+            )
+            self.fallos.append(
+                f"{spec.indicator}: {fallidas} de {len(tablas)} tablas no respondieron"
+            )
+        if not filas:
+            raise CollectorError(
+                f"Ninguna de las {len(tablas)} tablas de {spec.indicator} devolvió datos",
+                indicator=spec.indicator,
+            )
+        return filas
+
+    def _one_table(self, tabla: str, nult: int = 1) -> list[dict[str, Any]]:
+        clave = (tabla, nult)
+        if clave in self._filas_cache:
+            return self._filas_cache[clave]
         payload = self._client.get_json(
             f"DATOS_TABLA/{tabla}", {"nult": nult, "tip": "A", "det": 2}
         )
@@ -281,7 +462,85 @@ class IneCollector(BaseCollector):
             payload = payload.get("Data") or payload.get("data") or []
         if not isinstance(payload, list):
             raise CollectorError("Respuesta inesperada del INE", table=tabla)
-        return payload
+        filas = [self._esencial(f) for f in payload if isinstance(f, dict)]
+        for fila in filas:
+            fila["Tabla"] = tabla
+        self._filas_cache[clave] = filas
+        return filas
+
+    #: Marca de «esta serie es de otro nivel territorial»: provincia, comunidad,
+    #: total nacional, distrito o sección.
+    NO_MUNICIPIO = "-"
+
+    #: Variables territoriales que NO son municipio, por nombre exacto (plegado).
+    #: Por subcadena no: «nacional» casaría con «Nacionalidad».
+    _OTROS_NIVELES = frozenset({
+        "provincias", "comunidades y ciudades autonomas", "comunidades autonomas",
+        "total nacional", "totales territoriales", "islas",
+    })
+
+    @staticmethod
+    def _municipio_de_metadatos(fila: dict[str, Any]) -> str | None:
+        """Código INE del municipio de la serie, según sus metadatos.
+
+        `det=2` acompaña cada serie de los valores de sus variables. El de
+        «Municipios» (variable 19) trae el código de cinco cifras, que es lo
+        único que distingue a dos pueblos que se llaman igual: la 29005 y el
+        Atlas los nombran sin código ni provincia.
+
+        Devuelve:
+          · el código, si la serie es de un municipio;
+          · `NO_MUNICIPIO`, si es de otro nivel (provincia, distrito,
+            sección…): una fila provincial «Albacete.» no puede acabar en el
+            municipio de Albacete;
+          · None si no trae metadatos territoriales: entonces se resuelve por
+            el nombre, como siempre.
+        """
+        codigo: str | None = None
+        otro_nivel = False
+        for meta in fila.get("MetaData") or fila.get("metadata") or []:
+            if not isinstance(meta, dict):
+                continue
+            variable = meta.get("Variable") or {}
+            if not isinstance(variable, dict):
+                continue
+            nombre_var = _fold(str(variable.get("Nombre") or ""))
+            if nombre_var.startswith(("seccion", "distrito")):
+                return IneCollector.NO_MUNICIPIO
+            valor = str(meta.get("Codigo") or "").strip()
+            if variable.get("Id") == 19 or nombre_var.startswith("municipio"):
+                if valor.isdigit() and len(valor) == 5:
+                    codigo = valor
+            elif nombre_var in IneCollector._OTROS_NIVELES:
+                otro_nivel = True
+        if codigo:
+            return codigo
+        return IneCollector.NO_MUNICIPIO if otro_nivel else None
+
+    @staticmethod
+    def _esencial(fila: dict[str, Any]) -> dict[str, Any]:
+        """Sólo lo que el mapeo usa: el nombre de la serie y sus puntos.
+
+        Con `det=2` cada serie trae además sus metadatos completos —variables,
+        unidad, escala, periodicidad—, unas diez veces lo que pesa el dato. Con
+        TODOS los municipios en una sola llamada, las 54 tablas del Atlas
+        (municipios, distritos y secciones) se quedaban enteras en memoria a
+        la vez; recortadas caben de sobra en el worker.
+        """
+        puntos = fila.get("Data") or fila.get("data") or []
+        return {
+            "Nombre": fila.get("Nombre") or fila.get("nombre") or "",
+            "Municipio": IneCollector._municipio_de_metadatos(fila),
+            "Data": [
+                {
+                    "Valor": p.get("Valor", p.get("valor")),
+                    "Anyo": p.get("Anyo") or p.get("anyo"),
+                    "Fecha": p.get("Fecha") or p.get("fecha"),
+                    "Secreto": p.get("Secreto", p.get("secreto")),
+                }
+                for p in puntos if isinstance(p, dict)
+            ],
+        }
 
     def _map(
         self,
@@ -294,19 +553,37 @@ class IneCollector(BaseCollector):
     ) -> list[Fact]:
         out: list[Fact] = []
         sin_resolver = 0
+        de_otro_nivel = 0
+        casadas = 0
         wanted_ages = {a.lower() for a in segments.age}
         wanted_sex = {s.upper() for s in segments.sex}
 
         for row in rows:
             name = str(row.get("Nombre") or row.get("nombre") or "")
             lower = name.lower()
-
-            if spec.match and not any(token in lower for token in spec.match):
+            # Los filtros comparan SIN acentos por los dos lados: las series
+            # dicen «población», «tamaño» y «65 y más», y un token sin acento
+            # no casaría nunca. Se pliega en una variable aparte y `lower` se
+            # deja como está, porque el lector de tramos de edad busca
+            # literalmente «y más»; plegarlo le haría perder el último tramo.
+            plegado = _fold(name)
+            if spec.match and not any(_fold(t) in plegado for t in spec.match):
                 continue
-            if spec.exclude and any(token in lower for token in spec.exclude):
+            if spec.exclude and any(_fold(t) in plegado for t in spec.exclude):
                 continue
 
-            geo = self._geo_of(name, by_code, by_name, spec.level)
+            casadas += 1
+            meta = row.get("Municipio") if spec.level == "municipio" else None
+            if meta == self.NO_MUNICIPIO:
+                de_otro_nivel += 1      # provincia, distrito o sección
+                continue
+            # El código de los metadatos manda sobre el nombre. Si no está entre
+            # las geografías, la serie no es de aquí: NO se prueba por nombre,
+            # porque así es como el Castejón de Cuenca acababa en el de Navarra.
+            geo = (
+                self._por_codigo(str(meta), plegado, by_code) if meta
+                else self._geo_of(name, by_code, by_name, spec.level)
+            )
             if geo is None:
                 sin_resolver += 1
                 continue
@@ -319,9 +596,15 @@ class IneCollector(BaseCollector):
                 if wanted_ages and age.lower() not in wanted_ages:
                     continue
                 segment["age"] = age
-            if spec.segment_from == "sex" or "hombres" in lower or "mujeres" in lower:
-                sex = "M" if "hombres" in lower else ("F" if "mujeres" in lower else None)
-                if sex and (not wanted_sex or sex in wanted_sex):
+            # El sexo sólo se convierte en SEGMENTO cuando el indicador está
+            # declarado como segmentado. Antes bastaba con que la serie dijera
+            # «Hombres»: `dem.sex.men` —cuyo código ya dice que son hombres—
+            # se guardaba además con `{sex: M}`, y el cálculo de derivados,
+            # que lo busca sin segmento, no lo encontraba nunca. El índice de
+            # feminidad y el % de mujeres no se llegaron a calcular ni una vez.
+            if spec.segment_from in ("sex", "age") and ("hombres" in lower or "mujeres" in lower):
+                sex = "M" if "hombres" in lower else "F"
+                if not wanted_sex or sex in wanted_sex:
                     segment["sex"] = sex
 
             for value, point_period in self._points(row):
@@ -332,7 +615,9 @@ class IneCollector(BaseCollector):
                         None if value is None else value * spec.scale,
                         period or point_period,
                         segment or None,
-                        source_ref=f"INE:{spec.resolved_id()}",
+                        # La tabla de la que sale DE VERDAD, no la semilla: con
+                        # 54 tablas por indicador, «INE:30814» no decía nada.
+                        source_ref=f"INE:{row.get('Tabla') or spec.resolved_id()}",
                     )
                 )
 
@@ -344,13 +629,39 @@ class IneCollector(BaseCollector):
                 "INE %s (tabla %s): %d series sin geografía reconocible",
                 spec.indicator, spec.resolved_id(), sin_resolver,
             )
+        if de_otro_nivel:
+            log.info("INE %s: %d series de provincia, distrito o sección apartadas",
+                     spec.indicator, de_otro_nivel)
+        if casadas and not out:
+            self.fallos.append(
+                f"{spec.indicator}: {casadas} series encajan con el filtro y ninguna "
+                "resolvió a una geografía"
+            )
         return out
+
+    @staticmethod
+    def _por_codigo(codigo: str, plegado: str, by_code: dict[str, Geo]) -> Geo | None:
+        """El municipio del código, si la serie lleva además su nombre.
+
+        El código desempata entre homónimos; el nombre impide que una serie de
+        sección o distrito —que cita el código de su municipio y cuya variable
+        no se llame como esperamos— acabe guardada como el municipio entero.
+        """
+        geo = by_code.get(codigo)
+        if geo is None:
+            return None
+        campos = {parte.strip() for parte in plegado.split(".") if parte.strip()}
+        return geo if _fold(geo.name) in campos else None
 
     def _points(self, row: dict[str, Any]) -> list[tuple[float | None, date]]:
         data = row.get("Data") or row.get("data") or []
         out: list[tuple[float | None, date]] = []
         for point in data:
             value = self.to_float(point.get("Valor", point.get("valor")))
+            # Un dato bajo secreto estadístico es un HUECO. Si el INE lo marca
+            # así, da igual lo que ponga en `Valor`: no se guarda un cero.
+            if point.get("Secreto") is True or point.get("secreto") is True:
+                value = None
             year = point.get("Anyo") or point.get("anyo") or point.get("Fecha")
             out.append((value, self._period_of(year)))
         return out
@@ -544,6 +855,49 @@ class IneCollector(BaseCollector):
             return f"mod. {datetime.fromtimestamp(modificacion / 1000, UTC).year}"
         return "?"
 
+    def resolver_tablas(self, spec: TableSpec) -> tuple[list[str], str]:
+        """Todas las tablas que un spec necesita.
+
+        Con `varias_tablas`, el indicador se alimenta del conjunto que encaja
+        con `table_match`. Sin él se comporta como siempre: una sola tabla.
+        """
+        if spec.varias_tablas and spec.fijada_a_mano:
+            # Con varias tablas la variable de entorno lleva la LISTA, separada
+            # por comas y DE LA MÁS NUEVA A LA MÁS VIEJA: si dos tablas traen el
+            # mismo municipio, manda la primera. Una sola tabla sería una sola
+            # provincia.
+            ids = [t.strip() for t in spec.resolved_id().split(",") if t.strip()]
+            return ids, f"fijadas en {spec.env_key}"
+        if not spec.varias_tablas or spec.operacion is None:
+            unica, motivo = self.resolver_tabla(spec)
+            return [unica], motivo
+
+        # Aquí NO se cae a la tabla semilla si algo falla, al revés que con
+        # una tabla sola: la semilla es UNA provincia, y cargarla creyendo que
+        # es el país es exactamente el fallo de La Rioja. Mejor que la carga
+        # de este indicador falle y `ine-verify` lo diga.
+        try:
+            tablas = self.tablas_de_operacion(spec.operacion)
+        except Exception as exc:
+            raise CollectorError(
+                f"La operación {spec.operacion} no responde; sin su listado sólo se "
+                "cargaría una provincia", indicator=spec.indicator,
+            ) from exc
+
+        tokens = [_fold(t) for t in spec.table_match]
+        candidatas = [
+            t for t in tablas
+            if all(tok in _fold(str(t.get("Nombre") or "")) for tok in tokens)
+        ]
+        if not candidatas:
+            raise CollectorError(
+                f"Ninguna tabla de la operación {spec.operacion} contiene "
+                f"{list(spec.table_match)}", indicator=spec.indicator,
+            )
+        candidatas.sort(key=self._recencia, reverse=True)
+        ids = [str(t.get("Id")) for t in candidatas if t.get("Id") is not None]
+        return ids, f"las {len(ids)} tablas de la operación {spec.operacion}"
+
     def resolver_tabla(self, spec: TableSpec) -> tuple[str, str]:
         """Devuelve (id_de_tabla, explicación) para un spec.
 
@@ -619,27 +973,48 @@ class IneCollector(BaseCollector):
         Se descarga UNA vez por tabla distinta, no por spec: las 16 entradas
         de `TABLES` son 6 tablas.
         """
-        specs = specs or TABLES
-        cache: dict[str, list[dict[str, Any]] | None] = {}
+        specs = specs or self.SPECS
+        cache: dict[tuple[str, ...], list[dict[str, Any]] | None] = {}
         results: list[dict[str, Any]] = []
+        self._filas_cache.clear()
 
         for spec in specs:
-            table_id, motivo = self.resolver_tabla(spec)
-            if table_id not in cache:
+            if spec.pendiente:
+                results.append({
+                    "indicator": spec.indicator, "table": spec.table_id,
+                    "overridden": False, "resolution": "", "expected_level": spec.level,
+                    "status": "PENDING", "detail": spec.pendiente,
+                })
+                continue
+            try:
+                tablas, motivo = self.resolver_tablas(spec)
+            except CollectorError as exc:
+                results.append({
+                    "indicator": spec.indicator, "table": spec.table_id,
+                    "overridden": False, "resolution": exc.message,
+                    "expected_level": spec.level,
+                    "status": "UNREACHABLE", "detail": exc.message,
+                })
+                continue
+            clave = tuple(tablas)
+            if clave not in cache:
                 try:
-                    cache[table_id] = self._table(spec, nult=1)
+                    cache[clave] = self._table(spec, nult=1)
                 except CollectorError as exc:
-                    log.warning("INE tabla %s no responde: %s", table_id, exc.message)
-                    cache[table_id] = None
+                    log.warning("INE tabla %s no responde: %s", tablas[0], exc.message)
+                    cache[clave] = None
                 except Exception as exc:  # un verificador que se cae no verifica nada
-                    log.warning("INE tabla %s: %s", table_id, exc)
-                    cache[table_id] = None
+                    log.warning("INE tabla %s: %s", tablas[0], exc)
+                    cache[clave] = None
 
-            rows = cache[table_id]
+            rows = cache[clave]
             entry: dict[str, Any] = {
                 "indicator": spec.indicator,
-                "table": table_id,
-                "overridden": table_id != spec.table_id,
+                # Con varias tablas se enseña cuántas, no una cualquiera: ver
+                # «30814» cuando la carga usa 54 volvería a esconder el error
+                # de leer una provincia creyendo leer el país.
+                "table": tablas[0] if len(tablas) == 1 else f"{len(tablas)} tablas",
+                "overridden": tablas != [spec.table_id],
                 "resolution": motivo,
                 "expected_level": spec.level,
             }
@@ -667,20 +1042,27 @@ class IneCollector(BaseCollector):
             detected = self._detect_level(names)
             entry["detected_level"] = detected
 
-            if spec.match:
-                hits = [n for n in names if any(t in n.lower() for t in spec.match)]
-                entry["matched"] = len(hits)
-                entry["sample"] = hits[:3] if hits else names[:3]
-                if not hits:
-                    entry.update(
-                        status="NO_MATCH",
-                        detail=f"ninguna serie contiene {list(spec.match)}",
-                    )
-                    results.append(entry)
-                    continue
-            else:
-                entry["matched"] = len(names)
-                entry["sample"] = names[:3]
+            # El MISMO filtro que usará la carga, `exclude` incluido. Sin él,
+            # `dem.pop.total` salía con 24.414 coincidencias cuando va a usar
+            # 8.138: un verificador que cuenta otra cosa que la carga no
+            # verifica la carga.
+            hits = [
+                n for n in names
+                if (not spec.match or any(_fold(t) in _fold(n) for t in spec.match))
+                and not (spec.exclude and any(_fold(t) in _fold(n) for t in spec.exclude))
+            ]
+            entry["matched"] = len(hits)
+            entry["sample"] = hits[:3] if hits else names[:3]
+            if not hits:
+                entry.update(
+                    status="NO_MATCH",
+                    detail=(
+                        f"ninguna serie contiene {list(spec.match)}" if spec.match
+                        else f"todas las series quedan excluidas por {list(spec.exclude)}"
+                    ),
+                )
+                results.append(entry)
+                continue
 
             if detected and detected != spec.level:
                 entry.update(
@@ -711,12 +1093,17 @@ class IneCollector(BaseCollector):
         # persona. Meterla en `broken` haría fallar el verificador por algo que
         # a veces es correcto, y un verificador que falla cuando no debe acaba
         # ignorándose entero.
-        broken = [r for r in results if r["status"] not in ("OK", "STALE")]
+        # PENDING tampoco cuenta como roto: es un indicador que se sabe que no
+        # tiene fuente, declarado a propósito. Si contara, `make ingest-ine`
+        # no cargaría nunca nada.
+        broken = [r for r in results if r["status"] not in ("OK", "STALE", "PENDING")]
+        pendientes = [r for r in results if r["status"] == "PENDING"]
         stale = [r for r in results if r["status"] == "STALE"]
         return {
             "checked": len(results),
-            "ok": len(results) - len(broken) - len(stale),
+            "ok": len(results) - len(broken) - len(stale) - len(pendientes),
             "stale": len(stale),
+            "pending": len(pendientes),
             "broken": len(broken),
             "results": results,
         }

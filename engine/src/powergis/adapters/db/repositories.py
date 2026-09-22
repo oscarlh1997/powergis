@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Sequence
-from datetime import date, datetime
+from datetime import UTC, date, datetime
 from typing import Any
 from uuid import UUID
 
@@ -307,7 +307,11 @@ class SqlFactRepository:
                 "segment": f.segment or {},
                 "value": f.value,
                 "source_ref": f.source_ref,
-                "ingested_at": f.ingested_at or datetime.utcnow(),
+                # Con zona horaria. `utcnow()` es «ingenuo» y PostgreSQL lo
+                # interpreta en la zona de la sesión: con el servidor en hora
+                # de Madrid quedaba dos horas atrás, y `limpiar-almacen
+                # --calculados-antes-de` borraría lo que se acaba de escribir.
+                "ingested_at": f.ingested_at or datetime.now(UTC),
             }
             for f in facts
         ]

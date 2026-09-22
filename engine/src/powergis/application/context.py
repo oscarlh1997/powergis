@@ -10,6 +10,7 @@ import itertools
 from collections.abc import Sequence
 from dataclasses import dataclass
 
+from ..domain import consumo
 from ..domain import indicators as catalog_mod
 from ..domain.enums import GeoLevel, Section, Tier
 from ..domain.errors import GeoNotFound, ValidationError
@@ -119,7 +120,22 @@ def build_context(
 
     geo_ids = [g.geo_id for g in resolved.children] + [resolved.parent.geo_id]
     combos = segment_combinations(project.segments)
-    facts = uow.facts.fetch(geo_ids, [i.code for i in usable], combos)
+    codigos = [i.code for i in usable]
+    # Gasto, frecuencia y ticket dependen del sector del proyecto, y el
+    # almacén no lo conoce: se recalculan aquí desde la renta disponible de
+    # cada zona. Hace falta traerla aunque la sección no la pida.
+    por_sector = any(c in consumo.DEPENDEN_DEL_SECTOR for c in codigos)
+    pedir = codigos + (
+        ["eco.disposable.monthly"]
+        if por_sector and "eco.disposable.monthly" not in codigos else []
+    )
+    facts = uow.facts.fetch(geo_ids, pedir, combos)
+    if por_sector:
+        visibles = set(codigos)
+        facts = [
+            f for f in consumo.con_el_sector_del_proyecto(facts, project.business.sector)
+            if f.indicator in visibles
+        ]
 
     ctx = SectionContext(
         scope=project.scope,
