@@ -646,7 +646,8 @@ def ine_verify(json_out: bool = False) -> None:
 
     partes = [IneCollector().verify(), AdrhCollector().verify()]
     report: dict[str, Any] = {
-        k: sum(p[k] for p in partes) for k in ("checked", "ok", "stale", "pending", "broken")
+        k: sum(p.get(k, 0) for p in partes)
+        for k in ("checked", "ok", "stale", "pending", "provisional", "broken")
     }
     report["results"] = [r for p in partes for r in p["results"]]
 
@@ -662,8 +663,9 @@ def ine_verify(json_out: bool = False) -> None:
         "LEVEL_MISMATCH": typer.colors.YELLOW,
         "EMPTY": typer.colors.RED,
         "UNREACHABLE": typer.colors.RED,
+        "PROVISIONAL": typer.colors.MAGENTA,
     }
-    marcas = {"OK": "OK ", "PENDING": "·· "}
+    marcas = {"OK": "OK ", "PENDING": "·· ", "PROVISIONAL": "?? "}
 
     activos = [r for r in report["results"] if r["status"] != "PENDING"]
     pendientes = [r for r in report["results"] if r["status"] == "PENDING"]
@@ -708,6 +710,13 @@ def ine_verify(json_out: bool = False) -> None:
             f"{IneCollector.MAX_ANTIGUEDAD_ANOS} años. Responden y mapean, así que no "
             "es un fallo: el INE republicó la operación y esa tabla es la edición vieja.",
             fg=typer.colors.YELLOW, bold=True,
+        )
+
+    if report["provisional"]:
+        typer.secho(
+            f"{report['provisional']} mapeos provisionales no casan (??). No bloquean y "
+            "no se cargan: mira los «ej.:» y ajusta `match` en ine.py.",
+            fg=typer.colors.MAGENTA, bold=True,
         )
 
     typer.secho(

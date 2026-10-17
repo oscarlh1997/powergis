@@ -16,6 +16,7 @@ from ..domain.enums import GeoLevel, Section, Tier
 from ..domain.errors import GeoNotFound, ValidationError
 from ..domain.models import Geo, Indicator, Project, Scope, Segments
 from ..domain.ports import UnitOfWork
+from ..domain.sections import demografia
 from ..domain.sections.base import SectionContext
 
 
@@ -155,6 +156,14 @@ def build_context(
         if por_sector and "eco.disposable.monthly" not in codigos else []
     )
     facts = uow.facts.fetch(geo_ids, pedir, combos)
+    # El nivel educativo por tramo de edad se guarda segmentado por edad, y
+    # esos tramos no tienen nada que ver con el público objetivo del
+    # proyecto: se piden aparte, todos los posibles.
+    por_edad = [c for c in demografia.CODIGOS_EDUCACION_POR_EDAD if c in codigos]
+    if por_edad:
+        facts += uow.facts.fetch(
+            geo_ids, por_edad, [{"age": t} for t in demografia.TRAMOS_EDAD_EDUCACION]
+        )
     if por_sector:
         visibles = set(codigos)
         facts = [

@@ -371,6 +371,15 @@ cargar-datos:  ## Carga COMPLETA y en orden: catálogo → INE → renta → der
 	$(ETL) powergis ingest ine --level municipio
 	$(ETL) powergis ingest ine --level provincia
 	$(ETL) powergis ingest ine_adrh --level municipio
+	@# 5c. Plantilla del equipo de datos + compra online por comunidad. Va
+	@#     DESPUÉS del INE: sólo rellena huecos de lo oficial y para saberlo
+	@#     tiene que estar ya cargado.
+	@for nivel in pais ccaa provincia municipio; do \
+		$(ETL) powergis ingest plantilla --level $$nivel || exit 1; \
+	done
+	@# Las secciones censales sólo existen si se cargaron sus geografías.
+	@$(ETL) powergis ingest plantilla --level seccion || \
+		echo "AVISO: plantilla por sección censal no cargada (¿sin geografías de sección?). Revisa la salida."
 	$(ETL) powergis limpiar-almacen
 	$(ETL) powergis derive --level municipio
 	$(ETL) powergis ingest derived --level municipio
@@ -383,6 +392,22 @@ cargar-datos:  ## Carga COMPLETA y en orden: catálogo → INE → renta → der
 	@echo ""
 	$(ENGINE) powergis almacen-estado
 	$(ENGINE) powergis almacen-estado --nivel provincia
+
+.PHONY: cargar-plantilla
+PLANTILLA ?= plantilla-equipo-datos.xlsx
+cargar-plantilla:  ## Sube y carga la plantilla del equipo de datos: make cargar-plantilla PLANTILLA=fichero.xlsx
+	@test -f "$(PLANTILLA)" || { echo "No encuentro $(PLANTILLA)"; exit 1; }
+	$(COMPOSE) cp "$(PLANTILLA)" $(if $(filter cx23,$(TIER)),api,worker-etl):/data/plantilla-equipo-datos.xlsx
+	$(ENGINE) powergis sync-catalog
+	@for nivel in pais ccaa provincia municipio; do \
+		$(ETL) powergis ingest plantilla --level $$nivel || exit 1; \
+	done
+	@# Las secciones censales sólo existen si se cargaron sus geografías.
+	@$(ETL) powergis ingest plantilla --level seccion || \
+		echo "AVISO: plantilla por sección censal no cargada (¿sin geografías de sección?). Revisa la salida."
+	@for nivel in municipio provincia ccaa pais; do \
+		$(ETL) powergis derive --level $$nivel || exit 1; \
+	done
 
 .PHONY: almacen-estado
 almacen-estado:  ## Cuántos municipios tienen dato en cada indicador, y de qué año

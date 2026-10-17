@@ -18,6 +18,19 @@ from .base import (
     register,
 )
 
+#: Tramos de edad en que se puede guardar el nivel educativo (segmento
+#: {age}). El Censo anual agrupa de varias formas según el tamaño del
+#: municipio, y la plantilla del equipo de datos admite cualquiera: el gráfico
+#: enseña sólo los tramos que tienen dato.
+TRAMOS_EDAD_EDUCACION: tuple[str, ...] = (
+    "15-19", "15-24", "16-24", "20-24", "25-29", "25-34", "30-34", "35-39",
+    "35-44", "40-44", "45-49", "45-54", "50-54", "55-59", "55-64", "60-64",
+    "65-69", "65+", "70-74", "70+", "75+", "80+", "85+",
+)
+CODIGOS_EDUCACION_POR_EDAD: tuple[str, ...] = (
+    "dem.edu.primary_or_less_pct", "dem.edu.secondary_pct", "dem.edu.university_pct",
+)
+
 
 @register
 class Demografia(SectionBuilder):
@@ -215,18 +228,25 @@ class Demografia(SectionBuilder):
             ],
             charts=[
                 build_chart(
+                    ctx, "dem.estado_civil", "Población soltera y casada (16+) por zona",
+                    ["dem.civil.single_pct", "dem.civil.married_pct"], chart_type="bar",
+                ),
+                build_chart(
                     ctx, "dem.hogares", "Composición del hogar",
                     ["dem.household.single_pct", "dem.household.with_children_pct",
                      "dem.household.monoparental_pct"],
                     chart_type="bar", stack=True,
-                )
+                ),
             ],
             tables=[
                 build_table(
                     ctx, "dem.tabla_hogares",
                     f"Hogares por {self._children_label(ctx)}", codes,
                     highlight_by="dem.household.with_children_pct",
-                    footnote="Fuente: INE, Censos de Población y Viviendas.",
+                    footnote="Fuente: INE — Censo anual de población (estado civil, "
+                             "población de 16 y más años), Movimiento Natural de la "
+                             "Población (natalidad) y Atlas de renta (hogares). Hijos por "
+                             "hogar y huecos de municipios pequeños: equipo de datos.",
                 )
             ],
         )
@@ -237,6 +257,7 @@ class Demografia(SectionBuilder):
 
     def _formacion(self, ctx: SectionContext) -> Subsection | None:
         codes = [
+            "dem.edu.primary_or_less_pct",
             "dem.edu.none_pct",
             "dem.edu.primary_pct",
             "dem.edu.secondary_pct",
@@ -248,30 +269,64 @@ class Demografia(SectionBuilder):
             ctx.warnings.append("Nivel de formación no disponible en este ámbito.")
             return None
 
+        charts = [
+            build_chart(
+                ctx, "dem.formacion", "Nivel educativo por zona",
+                ["dem.edu.primary_or_less_pct", "dem.edu.primary_pct",
+                 "dem.edu.secondary_pct", "dem.edu.university_pct", "dem.edu.postgrad_pct"],
+                chart_type="bar", stack=True,
+            )
+        ]
+        por_edad = self._formacion_por_edad(ctx)
+        if por_edad is not None:
+            charts.append(por_edad)
+
         return Subsection(
             id="demografia.formacion",
             title="Nivel de formación académica",
             kpis=[
-                kpi_from(ctx, "dem.edu.none_pct"),
+                kpi_from(ctx, "dem.edu.primary_or_less_pct"),
                 kpi_from(ctx, "dem.edu.university_pct"),
                 kpi_from(ctx, "dem.edu.qualification_index"),
             ],
-            charts=[
-                build_chart(
-                    ctx, "dem.formacion", "Nivel educativo por zona",
-                    ["dem.edu.primary_pct", "dem.edu.secondary_pct",
-                     "dem.edu.university_pct", "dem.edu.postgrad_pct"],
-                    chart_type="bar", stack=True,
-                )
-            ],
+            charts=charts,
             tables=[
                 build_table(
                     ctx, "dem.tabla_formacion",
                     f"Formación por {self._children_label(ctx)}", codes,
                     highlight_by="dem.edu.qualification_index",
-                    footnote="Índice de cualificación ponderado: posgrado pesa 1,5 × universitario.",
+                    footnote="Fuente: INE — Censo anual de población, nivel de estudios de "
+                             "la población de 15 y más años (municipios de 500 o más "
+                             "habitantes). Índice de cualificación ponderado: posgrado "
+                             "pesa 1,5 × universitario.",
                 )
             ],
+        )
+
+    @staticmethod
+    def _formacion_por_edad(ctx: SectionContext) -> Chart | None:
+        """Nivel educativo por tramo de edad del ámbito completo."""
+        tramos = [
+            t for t in TRAMOS_EDAD_EDUCACION
+            if any(ctx.parent_value(c, {"age": t}) is not None
+                   for c in CODIGOS_EDUCACION_POR_EDAD)
+        ]
+        if not tramos:
+            return None
+        series = []
+        for code in CODIGOS_EDUCACION_POR_EDAD:
+            datos = [ctx.parent_value(code, {"age": t}) for t in tramos]
+            if all(v is None for v in datos):
+                continue
+            ind = ctx.catalog.get(code)
+            series.append({"name": ind.label if ind else code, "code": code, "data": datos})
+        return Chart(
+            id="dem.formacion_edad",
+            title=f"Nivel educativo por rango de edad — {ctx.parent.name}",
+            type="bar",
+            x=[f"{t} años" for t in tramos],
+            series=series,
+            unit=Unit.PORCENTAJE,
         )
 
     # ------------------------------------------------------------------ #
@@ -303,8 +358,10 @@ class Demografia(SectionBuilder):
                     f"Diversidad por {self._children_label(ctx)}", codes,
                     highlight_by="dem.nat.diversity_index",
                     footnote=(
-                        "Índice de diversidad: entropía de Shannon normalizada "
-                        "(0 = homogéneo, 1 = máxima diversidad)."
+                        "Fuente: INE — Censo anual de población (nacionalidad). "
+                        "Índice de diversidad: Simpson/Blau, 1 − Σ pᵢ² sobre grupos de "
+                        "nacionalidad (0 = homogéneo, cerca de 1 = muy diverso); índice "
+                        "propio calculado por el equipo de datos, no oficial del INE."
                     ),
                 )
             ],

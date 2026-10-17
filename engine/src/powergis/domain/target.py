@@ -74,13 +74,19 @@ def _norm(value: Any) -> str:
     return str(value or "").strip().lower().replace(" ", "_")
 
 
-# nivel de formación declarado → indicador que lo representa
+# nivel de formación declarado → indicador que lo representa.
+#
+# El Censo anual publica primaria e inferior como un solo nivel y no separa
+# el posgrado de la educación superior: «sin estudios» se mide con el % de
+# primaria o inferior, y «postgrado» con el de estudios superiores. Con los
+# códigos anteriores (`none_pct`, `postgrad_pct`) el criterio no tenía dato
+# en ninguna zona y se descartaba siempre.
 EDUCATION: dict[str, tuple[str, str]] = {
-    "sin_estudios":      ("dem.edu.none_pct", "higher"),
+    "sin_estudios":      ("dem.edu.primary_or_less_pct", "higher"),
     "secundaria":        ("dem.edu.secondary_pct", "higher"),
     "tecnico_superior":  ("dem.edu.secondary_pct", "higher"),
     "universitario":     ("dem.edu.university_pct", "higher"),
-    "postgrado":         ("dem.edu.postgrad_pct", "higher"),
+    "postgrado":         ("dem.edu.university_pct", "higher"),
 }
 
 # estructura familiar → indicador

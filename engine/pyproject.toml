@@ -26,6 +26,7 @@ dependencies = [
     "typer>=0.15",
     "xlsxwriter>=3.2",
     "python-pptx>=1.0",
+    "openpyxl>=3.1",
 ]
 
 [project.optional-dependencies]
@@ -49,7 +50,7 @@ powergis = "powergis.cli:main"
 packages = ["src/powergis"]
 
 [tool.hatch.build]
-include = ["src/powergis/seed/*.json"]
+include = ["src/powergis/seed/*.json", "src/powergis/seed/*.csv"]
 
 # --------------------------------------------------------------------------- #
 
@@ -126,5 +127,6 @@ check_untyped_defs = true
 plugins = ["pydantic.mypy"]
 
 [[tool.mypy.overrides]]
-module = ["geoalchemy2.*", "celery.*", "xlsxwriter.*", "pptx.*", "weasyprint.*", "sentry_sdk.*"]
+module = ["geoalchemy2.*", "celery.*", "xlsxwriter.*", "pptx.*", "weasyprint.*", "sentry_sdk.*",
+          "openpyxl.*"]
 ignore_missing_imports = true

@@ -19,6 +19,7 @@ from .derived import DerivedCollector
 from .ine import IneCollector
 from .ine_adrh import AdrhCollector
 from .osm import OsmCollector
+from .plantilla import PlantillaCollector
 
 log = logging.getLogger(__name__)
 
@@ -29,6 +30,7 @@ _FACTORIES: dict[str, Callable[..., BaseCollector]] = {
     "aemet": AemetCollector,
     "catastro": CatastroCollector,
     "derived": DerivedCollector,
+    "plantilla": PlantillaCollector,
 }
 
 
@@ -55,6 +57,15 @@ def build_registry(
             facts_loader=_cargador_de_hechos(session) if session is not None else None,
         ),
     }
+    # La plantilla del equipo de datos va LA ÚLTIMA: el planificador enruta
+    # cada indicador al primer colector que lo trae, así que lo que tiene API
+    # sigue saliendo de la API. De esos indicadores la plantilla sólo rellena
+    # huecos, y para saber cuáles son necesita la lista y el almacén.
+    oficiales = {c for col in registry.values() for c in col.provides()}
+    registry["plantilla"] = PlantillaCollector(
+        facts_loader=_cargador_de_hechos(session) if session is not None else None,
+        oficiales=oficiales,
+    )
     return registry
 
 
@@ -104,6 +115,7 @@ __all__ = [
     "HttpClient",
     "IneCollector",
     "OsmCollector",
+    "PlantillaCollector",
     "available",
     "build_registry",
     "coverage_report",

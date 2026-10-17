@@ -58,6 +58,15 @@ REGLAS: dict[str, Regla] = {
     "eco.income.household.mean": Regla(MEDIA, HOGARES),
     "eco.income.household.net": Regla(MEDIA, HOGARES),
     "eco.income.percapita": Regla(MEDIA, "dem.pop.total"),
+    # Censo anual. El denominador oficial es la población de 16+ (estado
+    # civil) o de 15+ (educación); se pondera con la total, que es la que hay
+    # por municipio. Por eso van marcados como media ponderada.
+    "dem.nat.foreign_pct": Regla(MEDIA, "dem.pop.total"),
+    "dem.civil.single_pct": Regla(MEDIA, "dem.pop.total"),
+    "dem.civil.married_pct": Regla(MEDIA, "dem.pop.total"),
+    "dem.edu.primary_or_less_pct": Regla(MEDIA, "dem.pop.total"),
+    "dem.edu.secondary_pct": Regla(MEDIA, "dem.pop.total"),
+    "dem.edu.university_pct": Regla(MEDIA, "dem.pop.total"),
 }
 
 Valor = tuple[float | None, date]

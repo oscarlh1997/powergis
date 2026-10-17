@@ -87,6 +87,23 @@ class TableSpec:
     #: falla, no cargaba nunca nada.
     pendiente: str | None = None
 
+    #: El valor es un PORCENTAJE que se calcula dentro de la tabla:
+    #: 100 × (series cuya única dimensión distinta de «total» encaja con
+    #: `match`) / (la serie con todas las dimensiones en «total»).
+    #:
+    #: Hace falta porque el Censo anual publica recuentos —solteros, personas
+    #: con educación superior, extranjeros— y el catálogo pide porcentajes.
+    #: El cociente se hace con numerador y denominador de la MISMA tabla,
+    #: mismo municipio y mismo periodo; si el denominador no es único, no se
+    #: calcula nada para ese municipio.
+    cociente: bool = False
+
+    #: Mapeo escrito sin haber podido ver los nombres de serie reales. Si en
+    #: la verificación no casa, se avisa pero NO bloquea `make cargar-datos`
+    #: (y no se carga nada de ese indicador). Cuando `ine-verify` lo dé por
+    #: bueno, se quita la marca.
+    provisional: str | None = None
+
     @property
     def env_key(self) -> str:
         return f"{self.env_prefix}{self.indicator.upper().replace('.', '_')}"
@@ -185,8 +202,10 @@ TABLES: tuple[TableSpec, ...] = (
     #     Estadística del Padrón continuo: una tabla por provincia, en una
     #     operación que no está en OPERACIONES_DISPONIBLES. Se localiza con
     #     `powergis ine-buscar --desde-tabla 33956`.
-    #   · `59524` es una tabla de VIVIENDA, no de nacionalidad.
-    #   · `61399` no existe. La educación municipal completa sólo la publica el
+    #   · `59524` es una tabla de VIVIENDA, no de nacionalidad. La extranjera
+    #     sale ahora del Censo anual (68535), más abajo.
+    #   · `61399` no existe (ahora: Censo anual, tabla 66620, más abajo). La
+    #     educación municipal completa sólo la publica el
     #     Censo 2021; los Indicadores Urbanos (op. 10) la dan por niveles ISCED
     #     pero sólo en ciudades grandes y mezclando ciudad y área urbana, y un
     #     «Madrid» área metropolitana casaría con el municipio de Madrid.
@@ -199,16 +218,53 @@ TABLES: tuple[TableSpec, ...] = (
               pendiente="56934 es nacional; mientras, dem.age.65p_pct del Atlas"),
     TableSpec("56934", "dem.pop.segment", "municipio", segment_from="age",
               pendiente="necesita la población por edad del Padrón continuo"),
-    TableSpec("59524", "dem.nat.foreign_pct", "municipio", match=("extranjer",),
-              pendiente="59524 es una tabla de vivienda; buscar en el Padrón continuo"),
-    TableSpec("61399", "dem.edu.university_pct", "municipio", match=("superior",),
-              pendiente="61399 no existe; la fuente completa es el Censo 2021"),
-    TableSpec("61399", "dem.edu.secondary_pct", "municipio", match=("segunda etapa",),
-              pendiente="61399 no existe; la fuente completa es el Censo 2021"),
     TableSpec("61399", "dem.edu.primary_pct", "municipio", match=("primera etapa",),
-              pendiente="61399 no existe; la fuente completa es el Censo 2021"),
+              pendiente="el Censo anual agrupa primaria e inferior: ver dem.edu.primary_or_less_pct"),
     TableSpec("61399", "dem.edu.none_pct", "municipio", match=("analfabet", "sin estudios"),
-              pendiente="61399 no existe; la fuente completa es el Censo 2021"),
+              pendiente="el Censo anual agrupa primaria e inferior: ver dem.edu.primary_or_less_pct"),
+
+    # -----------------------------------------------------------------------
+    # CENSO ANUAL DE POBLACIÓN — recuentos convertidos en porcentaje
+    #
+    # Fuentes del catálogo del equipo de datos (17/10/2026):
+    #   · 68535  población por sexo y nacionalidad española/extranjera,
+    #            municipios. Referencia 01/01/2025.
+    #   · 76306  población de 16 y más años por sexo, edad y estado civil,
+    #            municipios de 500 o más habitantes. Referencia 01/01/2024.
+    #   · 66620  población de 15 y más años por sexo, grupo de edad y nivel
+    #            de estudios agrupado, municipios de 500 o más. Ref. 01/01/2024.
+    #
+    # Todas en `cociente`: numerador y denominador salen de la misma tabla, y
+    # el denominador es la población de la propia tabla (16+ en estado civil,
+    # 15+ en educación), que es lo que recomienda la ficha del INE.
+    #
+    # `provisional`: los tokens están escritos con las categorías que publica
+    # el INE, pero sin haber podido descargar la tabla. `ine-verify` en el VPS
+    # dice si casan; si no, no bloquean el resto de la carga.
+    # -----------------------------------------------------------------------
+    TableSpec("68535", "dem.nat.foreign_pct", "municipio", match=("extranjer",),
+              cociente=True, provisional="verificar en el VPS con `powergis ine-verify`"),
+    TableSpec("76306", "dem.civil.single_pct", "municipio", match=("soltero",),
+              cociente=True, provisional="verificar en el VPS con `powergis ine-verify`"),
+    TableSpec("76306", "dem.civil.married_pct", "municipio", match=("casado",),
+              cociente=True, provisional="verificar en el VPS con `powergis ine-verify`"),
+    TableSpec("66620", "dem.edu.university_pct", "municipio", match=("superior",),
+              exclude=("no superior",),
+              cociente=True, provisional="verificar en el VPS con `powergis ine-verify`"),
+    TableSpec("66620", "dem.edu.secondary_pct", "municipio", match=("secundaria",),
+              exclude=("primaria",),
+              cociente=True, provisional="verificar en el VPS con `powergis ine-verify`"),
+    TableSpec("66620", "dem.edu.primary_or_less_pct", "municipio",
+              match=("primaria", "analfabet", "sin estudios"),
+              cociente=True, provisional="verificar en el VPS con `powergis ine-verify`"),
+    # Lo mismo POR TRAMO DE EDAD: el porcentaje de cada nivel dentro de cada
+    # grupo de edad. Se guarda como segmento {age: "25-34"}.
+    TableSpec("66620", "dem.edu.university_pct", "municipio", match=("superior",),
+              exclude=("no superior",), segment_from="age",
+              cociente=True, provisional="verificar en el VPS con `powergis ine-verify`"),
+    TableSpec("66620", "dem.edu.primary_or_less_pct", "municipio",
+              match=("primaria", "analfabet", "sin estudios"), segment_from="age",
+              cociente=True, provisional="verificar en el VPS con `powergis ine-verify`"),
 
     # `1470` y `67223` se llaman las dos «Tasa Bruta de Natalidad por
     # provincia» y tienen la misma fecha de modificación: sólo las distingue el
@@ -322,7 +378,10 @@ class IneCollector(BaseCollector):
                 log.warning("INE tabla %s (%s): %s", spec.resolved_id(), spec.indicator, exc.message)
                 self.fallos.append(f"{spec.indicator}: {exc.message}")
                 continue
-            facts.extend(self._map(spec, rows, by_code, by_name, segments, period))
+            if spec.cociente:
+                facts.extend(self._map_cociente(spec, rows, by_code, by_name, period))
+            else:
+                facts.extend(self._map(spec, rows, by_code, by_name, segments, period))
 
         self._filas_cache.clear()
         return self._sin_conflictos(facts)
@@ -518,6 +577,32 @@ class IneCollector(BaseCollector):
         return IneCollector.NO_MUNICIPIO if otro_nivel else None
 
     @staticmethod
+    def _dimensiones_de_metadatos(fila: dict[str, Any]) -> list[str] | None:
+        """Los valores de las variables NO territoriales de la serie.
+
+        «Total», «Hombres», «Soltero/a», «De 25 a 34 años»… Es lo que usa el
+        modo `cociente` para saber qué serie es el total y cuál el
+        numerador sin depender de cómo el INE ordene el nombre. None si la
+        serie no trae metadatos: entonces se usan los campos del nombre.
+        """
+        metas = fila.get("MetaData") or fila.get("metadata")
+        if not metas:
+            return None
+        valores: list[str] = []
+        for meta in metas:
+            if not isinstance(meta, dict):
+                continue
+            variable = meta.get("Variable") or {}
+            nombre_var = _fold(str(variable.get("Nombre") or "")) if isinstance(variable, dict) else ""
+            if (
+                nombre_var.startswith(("municipio", "seccion", "distrito"))
+                or nombre_var in IneCollector._OTROS_NIVELES
+            ):
+                continue
+            valores.append(str(meta.get("Nombre") or ""))
+        return valores
+
+    @staticmethod
     def _esencial(fila: dict[str, Any]) -> dict[str, Any]:
         """Sólo lo que el mapeo usa: el nombre de la serie y sus puntos.
 
@@ -531,6 +616,7 @@ class IneCollector(BaseCollector):
         return {
             "Nombre": fila.get("Nombre") or fila.get("nombre") or "",
             "Municipio": IneCollector._municipio_de_metadatos(fila),
+            "Dims": IneCollector._dimensiones_de_metadatos(fila),
             "Data": [
                 {
                     "Valor": p.get("Valor", p.get("valor")),
@@ -637,6 +723,143 @@ class IneCollector(BaseCollector):
                 f"{spec.indicator}: {casadas} series encajan con el filtro y ninguna "
                 "resolvió a una geografía"
             )
+        return out
+
+    #: Valores de una dimensión que equivalen a «sin desagregar».
+    _TOTALES = frozenset({
+        "ambos sexos", "todas las edades", "todos", "todas", "valor absoluto",
+        "dato base", "personas", "numero", "numero de personas", "absoluto",
+    })
+
+    @classmethod
+    def _es_total(cls, valor: str) -> bool:
+        plegado = _fold(valor)
+        return plegado.startswith("total") or plegado in cls._TOTALES
+
+    def _map_cociente(
+        self,
+        spec: TableSpec,
+        rows: Iterable[dict[str, Any]],
+        by_code: dict[str, Geo],
+        by_name: dict[tuple[str, str], Geo],
+        period: date | None,
+    ) -> list[Fact]:
+        """Porcentaje = 100 × numerador / denominador, dentro de la tabla.
+
+        Por geografía, periodo y (si lo hay) tramo de edad:
+          · denominador: la serie con TODAS las dimensiones en «total»;
+          · numerador: las series con UNA sola dimensión distinta de «total»
+            y que encaja con `match` (se suman si hay varias categorías,
+            p. ej. «primera etapa» y «segunda etapa» de secundaria).
+
+        Lo que no está claro no se calcula: dos denominadores distintos para
+        el mismo sitio, un hueco en cualquiera de las partes o un resultado
+        fuera de 0–100 dejan el hueco y se cuentan en el log.
+        """
+        grupos: dict[tuple[int, date, str], dict[str, Any]] = {}
+        casadas = 0
+        sin_resolver = 0
+
+        for row in rows:
+            name = str(row.get("Nombre") or "")
+            plegado = _fold(name)
+            meta = row.get("Municipio") if spec.level == "municipio" else None
+            if meta == self.NO_MUNICIPIO:
+                continue
+            geo = (
+                self._por_codigo(str(meta), plegado, by_code) if meta
+                else self._geo_of(name, by_code, by_name, spec.level)
+            )
+            if geo is None:
+                sin_resolver += 1
+                continue
+
+            dims = row.get("Dims")
+            if dims is None:
+                dims = [
+                    campo.strip() for campo in name.split(".")
+                    if campo.strip()
+                    and _fold(campo) != _fold(geo.name)
+                    and not campo.strip().split(" ")[0].isdigit()
+                ]
+            dims = list(dims)
+
+            edad = ""
+            if spec.segment_from == "age":
+                for i, valor in enumerate(dims):
+                    tramo = self._age_of(valor.lower())
+                    if tramo is not None:
+                        edad = tramo
+                        dims.pop(i)
+                        break
+                if not edad:
+                    continue
+
+            objetivo = [
+                d for d in dims
+                if any(_fold(t) in _fold(d) for t in spec.match)
+                and not (spec.exclude and any(_fold(t) in _fold(d) for t in spec.exclude))
+            ]
+            resto = [d for d in dims if d not in objetivo]
+            if not all(self._es_total(d) for d in resto):
+                continue
+            if objetivo and len(objetivo) != 1:
+                continue
+            if not objetivo and not all(self._es_total(d) for d in dims):
+                continue
+
+            for value, point_period in self._points(row):
+                cuando = period or point_period
+                g = grupos.setdefault(
+                    (geo.geo_id, cuando, edad),
+                    {"geo": geo, "num": {}, "den": [], "tabla": row.get("Tabla")},
+                )
+                if objetivo:
+                    casadas += 1
+                    g["num"][_fold(objetivo[0])] = value
+                else:
+                    g["den"].append(value)
+
+        out: list[Fact] = []
+        dudosos = 0
+        for (_, cuando, edad), g in grupos.items():
+            if not g["num"] or not g["den"]:
+                continue
+            if len(set(g["den"])) != 1:
+                dudosos += 1
+                continue
+            den = g["den"][0]
+            nums = list(g["num"].values())
+            if den is None or not den or any(n is None for n in nums):
+                valor = None
+            else:
+                valor = 100.0 * sum(nums) / den
+                if not 0.0 <= valor <= 100.0:
+                    dudosos += 1
+                    continue
+            out.append(
+                self.fact(
+                    g["geo"], spec.indicator, valor, cuando,
+                    {"age": edad} if edad else None,
+                    source_ref=f"INE:{g['tabla'] or spec.resolved_id()}",
+                )
+            )
+
+        if sin_resolver:
+            log.warning("INE %s (tabla %s): %d series sin geografía reconocible",
+                        spec.indicator, spec.resolved_id(), sin_resolver)
+        if dudosos:
+            log.warning("INE %s: %d cocientes descartados (denominador ambiguo o fuera de 0–100)",
+                        spec.indicator, dudosos)
+        if not out:
+            aviso = (
+                f"{spec.indicator}: el cociente no dio ningún dato "
+                f"({casadas} series de numerador reconocidas)"
+            )
+            if spec.provisional:
+                log.warning("%s · mapeo provisional, no bloquea", aviso)
+            else:
+                self.fallos.append(aviso)
         return out
 
     @staticmethod
@@ -1017,6 +1240,7 @@ class IneCollector(BaseCollector):
                 "overridden": tablas != [spec.table_id],
                 "resolution": motivo,
                 "expected_level": spec.level,
+                "provisional": spec.provisional,
             }
 
             if rows is None:
@@ -1096,14 +1320,25 @@ class IneCollector(BaseCollector):
         # PENDING tampoco cuenta como roto: es un indicador que se sabe que no
         # tiene fuente, declarado a propósito. Si contara, `make ingest-ine`
         # no cargaría nunca nada.
-        broken = [r for r in results if r["status"] not in ("OK", "STALE", "PENDING")]
+        # Un mapeo PROVISIONAL que no casa se enseña, pero no bloquea: se
+        # escribió sin poder ver la tabla, y no puede tumbar la carga de todo
+        # lo que sí está verificado. La carga tampoco escribe nada de él.
+        for r in results:
+            if r.get("provisional") and r["status"] not in ("OK", "STALE", "PENDING"):
+                r["detail"] = f"{r['status']}: {r['detail']} · {r['provisional']}"
+                r["status"] = "PROVISIONAL"
+        broken = [
+            r for r in results if r["status"] not in ("OK", "STALE", "PENDING", "PROVISIONAL")
+        ]
+        provisionales = [r for r in results if r["status"] == "PROVISIONAL"]
         pendientes = [r for r in results if r["status"] == "PENDING"]
         stale = [r for r in results if r["status"] == "STALE"]
         return {
             "checked": len(results),
-            "ok": len(results) - len(broken) - len(stale) - len(pendientes),
+            "ok": len(results) - len(broken) - len(stale) - len(pendientes) - len(provisionales),
             "stale": len(stale),
             "pending": len(pendientes),
+            "provisional": len(provisionales),
             "broken": len(broken),
             "results": results,
         }

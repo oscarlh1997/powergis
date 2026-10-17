@@ -29,6 +29,17 @@ DISCLAIMER = (
 )
 
 
+AFORO = "Medición real aportada por el equipo de datos (fuente en el anexo)."
+
+
+def _nota(code: str) -> str | None:
+    if code.endswith("index"):
+        return DISCLAIMER
+    if code in ("tra.pedestrian.aforo", "tra.vehicle.imd"):
+        return AFORO
+    return None
+
+
 @register
 class Trafico(SectionBuilder):
     section = Section.TRAFICO
@@ -39,7 +50,8 @@ class Trafico(SectionBuilder):
         return [self._peatonal(ctx), self._vehicular(ctx)]
 
     def _peatonal(self, ctx: SectionContext) -> Subsection | None:
-        codes = ["tra.pedestrian.index", "tra.transit.stops", "tra.accessibility.index"]
+        codes = ["tra.pedestrian.aforo", "tra.pedestrian.index", "tra.transit.stops",
+                 "tra.accessibility.index"]
         if not ctx.has_any(codes):
             ctx.warnings.append("Tráfico peatonal no disponible: falta el extracto de OSM.")
             return None
@@ -47,24 +59,29 @@ class Trafico(SectionBuilder):
         return Subsection(
             id="trafico.peatonal",
             title="Tráfico peatonal",
-            kpis=[kpi_from(ctx, c, note=DISCLAIMER if c.endswith("index") else None) for c in codes],
+            kpis=[kpi_from(ctx, c, note=_nota(c)) for c in codes],
             charts=[build_chart(ctx, "tra.peatonal", "Índice de tráfico peatonal",
-                                ["tra.pedestrian.index"], chart_type="bar")],
+                                ["tra.pedestrian.index"], chart_type="bar"),
+                    build_chart(ctx, "tra.peatonal_aforo", "Aforo peatonal medido",
+                                ["tra.pedestrian.aforo"], chart_type="bar")],
             tables=[build_table(ctx, "tra.tabla_peatonal", "Tráfico peatonal por zona", codes,
                                 highlight_by="tra.pedestrian.index", footnote=DISCLAIMER)],
         )
 
     def _vehicular(self, ctx: SectionContext) -> Subsection | None:
-        codes = ["tra.vehicle.index", "tra.road.primary_km", "tra.parking.capacity"]
+        codes = ["tra.vehicle.imd", "tra.vehicle.index", "tra.road.primary_km",
+                 "tra.parking.capacity"]
         if not ctx.has_any(codes):
             return None
 
         return Subsection(
             id="trafico.vehicular",
             title="Tráfico vehicular",
-            kpis=[kpi_from(ctx, c, note=DISCLAIMER if c.endswith("index") else None) for c in codes],
+            kpis=[kpi_from(ctx, c, note=_nota(c)) for c in codes],
             charts=[build_chart(ctx, "tra.vehicular", "Índice de tráfico vehicular",
-                                ["tra.vehicle.index"], chart_type="bar")],
+                                ["tra.vehicle.index"], chart_type="bar"),
+                    build_chart(ctx, "tra.vehicular_imd", "Intensidad media diaria medida",
+                                ["tra.vehicle.imd"], chart_type="bar")],
             tables=[build_table(ctx, "tra.tabla_vehicular", "Tráfico vehicular por zona", codes,
                                 highlight_by="tra.vehicle.index", footnote=DISCLAIMER)],
         )

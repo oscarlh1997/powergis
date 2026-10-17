@@ -158,7 +158,11 @@ class Socioeconomico(SectionBuilder):
             tables=[
                 build_table(ctx, "eco.tabla_consumo", "Perfil de consumo por zona", codes,
                             highlight_by="eco.consumer.ticket",
-                            footnote="Indicadores modelados a partir de renta disponible, "
-                                     "estructura de edad y penetración TIC (INE).")
+                            footnote="Ticket y frecuencia: modelados a partir de renta "
+                                     "disponible y estructura de edad. Compra online: INE, "
+                                     "Encuesta TIC-H (personas de 16 a 74 años que compraron "
+                                     "por Internet en los últimos 3 meses); se publica por "
+                                     "comunidad autónoma, así que provincias y municipios "
+                                     "llevan el dato de su comunidad.")
             ],
         )

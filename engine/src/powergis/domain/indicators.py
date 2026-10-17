@@ -22,6 +22,10 @@ _NE = Direction.NEUTRAL
 MUN = GeoLevel.MUNICIPIO
 SEC = GeoLevel.SECCION
 PRO = GeoLevel.PROVINCIA
+CCAA = GeoLevel.CCAA
+
+#: Fuente de lo que rellena a mano el equipo de datos (ver `collectors.plantilla`).
+EQUIPO = "Equipo de datos (plantilla)"
 
 
 def _i(
@@ -128,14 +132,21 @@ _DEMO = [
 
     # -- estado civil y hogares --------------------------------------------
     _i("dem.civil.single_pct", "hogares", "% solteros", Unit.PORCENTAJE,
-       section=Section.DEMOGRAFIA, source="INE:Censo", tier=Tier.BASICO, decimals=1),
-    _i("dem.civil.married_pct", "hogares", "% casados o en pareja", Unit.PORCENTAJE,
-       section=Section.DEMOGRAFIA, source="INE:Censo", tier=Tier.BASICO, decimals=1),
+       section=Section.DEMOGRAFIA, source="INE:Censo anual (estado civil)", tier=Tier.BASICO,
+       decimals=1, formula="solteros de 16+ / población de 16+ × 100",
+       description="Estado civil legal, no convivencia. Municipios de 500 o más "
+                   "habitantes; el resto, si lo aporta el equipo de datos."),
+    _i("dem.civil.married_pct", "hogares", "% casados", Unit.PORCENTAJE,
+       section=Section.DEMOGRAFIA, source="INE:Censo anual (estado civil)", tier=Tier.BASICO,
+       decimals=1, formula="casados de 16+ / población de 16+ × 100"),
     _i("dem.birth.rate", "hogares", "Tasa bruta de natalidad", Unit.INDICE,
        section=Section.DEMOGRAFIA, direction=_HB, source="INE:MNP", tier=Tier.BASICO,
        min_level=PRO, dimension=Dimension.DEMOGRAFICO, decimals=2),
-    _i("dem.children.mean", "hogares", "Número medio de hijos", Unit.RATIO,
-       section=Section.DEMOGRAFIA, source="INE:Censo", tier=Tier.BASICO, decimals=2),
+    _i("dem.children.mean", "hogares", "Número medio de hijos por hogar", Unit.RATIO,
+       section=Section.DEMOGRAFIA, source=EQUIPO, tier=Tier.BASICO, decimals=2,
+       description="No hay serie oficial anual para todos los municipios (la ECEPOV "
+                   "2021 sólo cubre CCAA, provincias y municipios grandes). Lo aporta "
+                   "el equipo de datos con la definición que indique en la plantilla."),
     _i("dem.household.size", "hogares", "Tamaño medio del hogar", Unit.RATIO,
        section=Section.DEMOGRAFIA, source="INE:Atlas de renta", tier=Tier.BASICO, decimals=2),
     _i("dem.household.single_pct", "hogares", "% hogares unipersonales", Unit.PORCENTAJE,
@@ -146,15 +157,24 @@ _DEMO = [
        section=Section.DEMOGRAFIA, source="INE:Censo", tier=Tier.BASICO, decimals=1),
 
     # -- formación ----------------------------------------------------------
+    _i("dem.edu.primary_or_less_pct", "formacion", "% sin estudios o con estudios primarios",
+       Unit.PORCENTAJE, section=Section.DEMOGRAFIA, direction=_LB,
+       source="INE:Censo anual (educación)", tier=Tier.BASICO, decimals=1,
+       formula="población 15+ con educación primaria o inferior / población 15+ × 100",
+       description="El Censo anual publica primaria e inferior como un solo nivel. "
+                   "Por tramo de edad se guarda como segmento {age}."),
     _i("dem.edu.none_pct", "formacion", "% sin estudios", Unit.PORCENTAJE,
        section=Section.DEMOGRAFIA, direction=_LB, source="INE:Censo", tier=Tier.BASICO, decimals=1),
     _i("dem.edu.primary_pct", "formacion", "% educación primaria", Unit.PORCENTAJE,
        section=Section.DEMOGRAFIA, source="INE:Censo", tier=Tier.BASICO, decimals=1),
     _i("dem.edu.secondary_pct", "formacion", "% secundaria y FP", Unit.PORCENTAJE,
        section=Section.DEMOGRAFIA, source="INE:Censo", tier=Tier.BASICO, decimals=1),
-    _i("dem.edu.university_pct", "formacion", "% estudios universitarios", Unit.PORCENTAJE,
-       section=Section.DEMOGRAFIA, direction=_HB, source="INE:Censo", tier=Tier.BASICO,
-       dimension=Dimension.DEMOGRAFICO, decimals=1),
+    _i("dem.edu.university_pct", "formacion", "% con estudios superiores", Unit.PORCENTAJE,
+       section=Section.DEMOGRAFIA, direction=_HB, source="INE:Censo anual (educación)",
+       tier=Tier.BASICO, dimension=Dimension.DEMOGRAFICO, decimals=1,
+       formula="población 15+ con educación superior / población 15+ × 100",
+       description="Índice de cualificación universitaria. Por tramo de edad se "
+                   "guarda como segmento {age}."),
     _i("dem.edu.postgrad_pct", "formacion", "% posgrado", Unit.PORCENTAJE,
        section=Section.DEMOGRAFIA, direction=_HB, source="INE:Censo", tier=Tier.BASICO, decimals=1),
     _i("dem.edu.qualification_index", "formacion", "Índice de cualificación", Unit.INDICE,
@@ -164,10 +184,14 @@ _DEMO = [
 
     # -- nacionalidades -----------------------------------------------------
     _i("dem.nat.foreign_pct", "nacionalidades", "% población extranjera", Unit.PORCENTAJE,
-       section=Section.DEMOGRAFIA, source="INE:Padrón continuo", tier=Tier.BASICO, decimals=1),
+       section=Section.DEMOGRAFIA, source="INE:Censo anual (nacionalidad)", tier=Tier.BASICO,
+       decimals=1, formula="nacionalidad extranjera / población total × 100",
+       description="Por nacionalidad, no por país de nacimiento."),
     _i("dem.nat.diversity_index", "nacionalidades", "Índice de diversidad cultural", Unit.INDICE,
-       section=Section.DEMOGRAFIA, source="derivado", tier=Tier.BASICO,
-       formula="Shannon normalizado sobre nacionalidades", decimals=3),
+       section=Section.DEMOGRAFIA, source=EQUIPO, tier=Tier.BASICO,
+       formula="Simpson/Blau: 1 − Σ pᵢ² sobre grupos de nacionalidad", decimals=3,
+       description="Índice propio, no oficial del INE: 0 = todos del mismo grupo, "
+                   "cerca de 1 = muy diverso. Lo calcula el equipo de datos."),
     _i("dem.nat.count", "nacionalidades", "Nacionalidades presentes", Unit.UNIDADES,
        section=Section.DEMOGRAFIA, source="INE:Padrón continuo", tier=Tier.BASICO, decimals=0),
 ]
@@ -256,7 +280,10 @@ _ECO = [
     _i("eco.consumer.frequency", "consumo", "Frecuencia de compra semanal", Unit.RATIO,
        section=Section.SOCIOECONOMICO, direction=_HB, source="derivado:ECPF", decimals=2),
     _i("eco.consumer.online_pct", "consumo", "% con hábito de compra online", Unit.PORCENTAJE,
-       section=Section.SOCIOECONOMICO, source="INE:TIC-H", min_level=PRO, decimals=1),
+       section=Section.SOCIOECONOMICO, source="INE:TIC-H", decimals=1,
+       description="Personas de 16 a 74 años que compraron por Internet en los "
+                   "últimos 3 meses. El INE lo publica por comunidad autónoma: "
+                   "provincias y municipios llevan el dato de su comunidad."),
     _i("eco.consumer.local_pref", "consumo", "Preferencia por comercio local", Unit.INDICE,
        section=Section.SOCIOECONOMICO, direction=_HB, source="derivado"),
     _i("eco.consumer.loyalty", "consumo", "Índice de fidelización", Unit.INDICE,
@@ -365,6 +392,15 @@ _TRA = [
        section=Section.TRAFICO, direction=_HB, source="derivado:OSM", dimension=Dimension.MATCH,
        formula="km de viario primario/secundario ponderado por jerarquía",
        description="ÍNDICE RELATIVO dentro del ámbito. No es un aforo."),
+    # Aforos REALES, cuando el equipo de datos los consigue (ayuntamientos,
+    # DGT, mapas de tráfico autonómicos). Conviven con los índices: el índice
+    # sale siempre; el aforo, sólo donde hay medición.
+    _i("tra.pedestrian.aforo", "peatonal", "Aforo peatonal (personas/día)", Unit.PERSONAS,
+       section=Section.TRAFICO, direction=_HB, source=EQUIPO, decimals=0,
+       description="Medición de paso de peatones aportada por el equipo de datos."),
+    _i("tra.vehicle.imd", "vehicular", "Intensidad media diaria (vehículos/día)",
+       Unit.UNIDADES, section=Section.TRAFICO, direction=_HB, source=EQUIPO, decimals=0,
+       description="IMD de las vías del ámbito, aportada por el equipo de datos."),
     _i("tra.transit.stops", "peatonal", "Paradas de transporte público", Unit.UNIDADES,
        section=Section.TRAFICO, direction=_HB, source="OSM", decimals=0),
     _i("tra.road.primary_km", "vehicular", "Viario primario", Unit.INDICE,

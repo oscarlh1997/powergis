@@ -46,7 +46,7 @@ class DerivedCollector(BaseCollector):
         "dem.dependency.total", "dem.ageing.index", "dem.femininity.index",
         "dem.age.18_64_pct",
         "dem.sex.women_pct", "dem.pop.density", "dem.pop.segment_pct",
-        "dem.edu.qualification_index", "dem.nat.diversity_index",
+        "dem.edu.qualification_index",
         "eco.nse.index", "eco.resilience.index", "eco.gross_monthly",
         "eco.disposable.monthly", "eco.gross_net_gap", "eco.saving.rate",
         "eco.financial_stress.index", "eco.sector_spend",

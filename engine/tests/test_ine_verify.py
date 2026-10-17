@@ -1206,7 +1206,8 @@ class TestFilasRecortadasYSecreto:
         }
         c, _ = collector({"29005": [pesada]})
         filas = c._one_table("29005")
-        assert set(filas[0]) == {"Nombre", "Municipio", "Tabla", "Data"}
+        assert set(filas[0]) == {"Nombre", "Municipio", "Dims", "Tabla", "Data"}
+        assert filas[0]["Dims"] == [], "sólo variables no territoriales, y aquí no hay"
         assert filas[0]["Tabla"] == "29005"
         assert filas[0]["Municipio"] is None, "la variable no trae código de municipio"
         assert filas[0]["Data"][0]["Valor"] == 3.4e6
