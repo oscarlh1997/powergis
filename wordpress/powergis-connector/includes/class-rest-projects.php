@@ -550,6 +550,9 @@ final class REST_Projects {
 				'tier'    => CPT::tier_of( $post_id ),
 				'version' => (int) get_post_meta( $post_id, CPT::META_VERSION, true ),
 				'error'   => get_post_meta( $post_id, CPT::META_ERROR, true ) ?: null,
+				// El enlace cambia al publicarse el post (de `?p=` al bonito):
+				// la pantalla de carga del formulario abre este, no el de `create`.
+				'permalink' => get_permalink( $post_id ),
 			),
 			200
 		);

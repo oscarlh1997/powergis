@@ -677,6 +677,52 @@ add_shortcode('crear_proyecto_v6', function () {
 
 <div class="pg-toast" id="pgToast"></div>
 
+<!--
+  Pantalla de carga tras «Realizar proyecto». Se queda hasta que el motor
+  termina y entonces abre el proyecto recién creado.
+
+  La animación definitiva (logo Power GIS Data, versión C con textos) va dentro
+  de `.pg-loading-screen__anim`: sustituye el contenido de ese div por el
+  marcado de la animación y pega su CSS al final del <style> de abajo. El
+  logo y las frases de ahora son un marcador provisional.
+-->
+<div class="pg-loading-screen" id="pgLoadingScreen" role="status" aria-live="polite" hidden>
+  <div class="pg-loading-screen__anim" data-pg-anim-slot>
+    <div class="pg-loading-screen__logo">Power GIS <span>Data</span></div>
+    <div class="pg-loading-screen__spinner" aria-hidden="true"></div>
+  </div>
+  <p class="pg-loading-screen__text" id="pgLoadingText">Preparando tu análisis…</p>
+  <div class="pg-loading-screen__error" id="pgLoadingError" hidden>
+    <p>No hemos podido terminar el informe. Tu proyecto está guardado.</p>
+    <a class="pg-btn pg-btn--primary" id="pgLoadingErrorLink" href="/mis-proyectos/">Ver el proyecto</a>
+  </div>
+</div>
+<style>
+  .pg-loading-screen {
+    position: fixed; inset: 0; z-index: 100000;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 22px; padding: 24px; text-align: center;
+    background: #FFFFFF; color: #505050; font-family: 'Roboto', sans-serif;
+  }
+  .pg-loading-screen[hidden] { display: none; }
+  .pg-loading-screen__anim { display: flex; flex-direction: column; align-items: center; gap: 22px; }
+  .pg-loading-screen__logo { font-family: 'Raleway', sans-serif; font-weight: 700; font-size: 30px; letter-spacing: .5px; }
+  .pg-loading-screen__logo span { color: #FF7124; }
+  .pg-loading-screen__spinner {
+    width: 44px; height: 44px; border-radius: 50%;
+    border: 4px solid #FFF1E7; border-top-color: #FF7124;
+    animation: pg-loading-spin 0.9s linear infinite;
+  }
+  .pg-loading-screen__text { margin: 0; font-size: 15px; color: #888888; min-height: 1.4em; }
+  .pg-loading-screen__error p { margin: 0 0 14px; }
+  .pg-loading-screen__error .pg-btn {
+    display: inline-flex; font-weight: 600; font-size: 13.5px; border-radius: 999px;
+    padding: 12px 22px; text-decoration: none; background: #FF7124; color: #fff;
+  }
+  @keyframes pg-loading-spin { to { transform: rotate(360deg); } }
+  @media (prefers-reduced-motion: reduce) { .pg-loading-screen__spinner { animation-duration: 3s; } }
+</style>
+
 
 <script>
 (function () {
@@ -688,6 +734,7 @@ add_shortcode('crear_proyecto_v6', function () {
   var restCreateUrl = "<?php echo esc_js($rest_create_url); ?>";
   var restDraftUrl  = "<?php echo esc_js($rest_draft_url); ?>";
   var wpNonce = "<?php echo esc_js($wp_nonce); ?>";
+  var restStatusBase = "<?php echo esc_js(rest_url('saas/v1/projects/')); ?>";
 
   var arbol = [];
   var cnaeRows = [];
@@ -1170,17 +1217,105 @@ add_shortcode('crear_proyecto_v6', function () {
   // llamada a /projects/create de siempre. El informe avanzado (de pago) se pide
   // más adelante desde "Mis Proyectos" o desde la propia página del proyecto,
   // ya no forma parte de este formulario.
+  /* ============ PANTALLA DE CARGA → PROYECTO ============ */
+  // Tras crear el proyecto se muestra la pantalla de carga y se consulta el
+  // estado hasta que el motor termina. Sólo entonces se abre el proyecto: hasta
+  // `done` el post sigue en borrador y su enlace no se puede ver todavía.
+  var LOADING_PHRASES = [
+    'Preparando tu análisis…',
+    'Reuniendo datos oficiales de la zona…',
+    'Calculando indicadores demográficos…',
+    'Comparando territorios…',
+    'Redactando las conclusiones…'
+  ];
+  var READY_STATUSES = ['done', 'partial', 'narrative_ready'];
+  var POLL_EVERY_MS = 3000;
+  var POLL_MAX_MS = 5 * 60 * 1000;   // pasado esto se abre igualmente: la página del proyecto se actualiza sola
+
+  function showLoadingScreen() {
+    var screen = document.getElementById('pgLoadingScreen');
+    var text = document.getElementById('pgLoadingText');
+    // Al <body> para que ningún contenedor del tema con transform/overflow
+    // recorte el position:fixed.
+    document.body.appendChild(screen);
+    screen.hidden = false;
+    document.documentElement.style.overflow = 'hidden';
+    var i = 0;
+    var timer = setInterval(function () {
+      i = (i + 1) % LOADING_PHRASES.length;
+      text.textContent = LOADING_PHRASES[i];
+    }, 3500);
+    return {
+      hide: function () {
+        clearInterval(timer);
+        screen.hidden = true;
+        document.documentElement.style.overflow = '';
+      },
+      fail: function (href) {
+        clearInterval(timer);
+        text.hidden = true;
+        var spinner = screen.querySelector('.pg-loading-screen__spinner');
+        if (spinner) spinner.hidden = true;
+        document.getElementById('pgLoadingErrorLink').href = href;
+        document.getElementById('pgLoadingError').hidden = false;
+      }
+    };
+  }
+
+  function getStatus(postId) {
+    return fetch(restStatusBase + postId + '/status', {
+      credentials: 'same-origin',
+      headers: { 'X-WP-Nonce': wpNonce }
+    }).then(function (res) {
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      return res.json();
+    });
+  }
+
+  function waitForProject(postId, fallbackHref) {
+    var started = Date.now();
+    return new Promise(function (resolve, reject) {
+      (function tick() {
+        getStatus(postId).then(function (st) {
+          var href = st.permalink || fallbackHref;
+          if (READY_STATUSES.indexOf(st.status) !== -1) return resolve(href);
+          if (st.status === 'failed') { var err = new Error('failed'); err.href = href; return reject(err); }
+          if (Date.now() - started > POLL_MAX_MS) return resolve(href);
+          setTimeout(tick, POLL_EVERY_MS);
+        }).catch(function () {
+          // Un fallo de red puntual no corta la espera.
+          if (Date.now() - started > POLL_MAX_MS) return resolve(fallbackHref);
+          setTimeout(tick, POLL_EVERY_MS);
+        });
+      })();
+    });
+  }
+
+  /* ============ ENVÍO FINAL: crea el proyecto básico directamente ============ */
+  // 16 ago 2026: se retiró el popup de elección básico/avanzado. El botón final
+  // ahora lanza siempre el proyecto gratuito/básico, exactamente con la misma
+  // llamada a /projects/create de siempre. El informe avanzado (de pago) se pide
+  // más adelante desde "Mis Proyectos" o desde la propia página del proyecto,
+  // ya no forma parte de este formulario.
   function handleFinalSubmit() {
     if (!validateAll()) return;
     btnNext.disabled = true;
     btnNext.textContent = 'Enviando...';
+    var loading = showLoadingScreen();
     saveDraft({ silent: true }).then(function () {
       return apiFetch(restCreateUrl, buildPayload('basico'));
-    }).then(function () {
-      toast('¡Listo! Tu informe se está procesando.');
-      setSaveStatus('Proyecto creado', true);
-      setTimeout(function () { window.location.href = '/mis-proyectos/'; }, 1200);
+    }).then(function (res) {
+      var postId = res && (res.post_id || res.project_id);
+      // Sin id (ruta antigua del tema) no se puede seguir el proyecto.
+      if (!postId) { window.location.href = '/mis-proyectos/'; return; }
+      var href = res.permalink || '/mis-proyectos/';
+      return waitForProject(postId, href).then(function (url) {
+        window.location.href = url;
+      }, function (err) {
+        loading.fail(err.href || href);
+      });
     }).catch(function (err) {
+      loading.hide();
       btnNext.disabled = false;
       btnNext.textContent = 'Realizar proyecto →';
       setSaveStatus('No se pudo crear el informe. Tu borrador está a salvo.', false);
@@ -1188,7 +1323,6 @@ add_shortcode('crear_proyecto_v6', function () {
       console.warn('[PowerGIS] Error creando proyecto:', err);
     });
   }
-
 
 })();
 </script>
