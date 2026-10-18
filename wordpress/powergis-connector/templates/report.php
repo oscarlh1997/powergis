@@ -22,6 +22,15 @@ $pg_status  = \PowerGIS\CPT::status_of( $post_id );
 $pg_tier    = \PowerGIS\CPT::tier_of( $post_id );
 $pg_version = (int) get_post_meta( $post_id, \PowerGIS\CPT::META_VERSION, true );
 $pg_paid    = isset( $_GET['pg_pago'] ) ? sanitize_key( wp_unslash( (string) $_GET['pg_pago'] ) ) : '';
+
+// Navegación flotante y panel de control.
+$pg_scope    = json_decode( (string) get_post_meta( $post_id, \PowerGIS\CPT::META_SCOPE, true ), true );
+$pg_scope    = is_array( $pg_scope ) ? $pg_scope : array();
+$pg_business = json_decode( (string) get_post_meta( $post_id, \PowerGIS\CPT::META_BUSINESS, true ), true );
+$pg_business = is_array( $pg_business ) ? $pg_business : array();
+$pg_user     = wp_get_current_user();
+$pg_others   = \PowerGIS\Render::other_projects( $post_id );
+$pg_mine_url = \PowerGIS\Render::my_projects_url();
 ?>
 <div class="pg-report" data-pg-tier="<?php echo esc_attr( $pg_tier ); ?>">
 
@@ -45,16 +54,6 @@ $pg_paid    = isset( $_GET['pg_pago'] ) ? sanitize_key( wp_unslash( (string) $_G
 				<span class="pg-muted"><?php printf( esc_html__( 'versión %d', 'powergis' ), (int) $pg_version ); ?></span>
 			<?php endif; ?>
 		</div>
-
-		<?php if ( 'avanzado' === $pg_tier ) : ?>
-			<nav class="pg-report__actions">
-				<a class="pg-btn" href="<?php echo esc_url( rest_url( 'saas/v1/projects/' . $post_id . '/export/xlsx' ) ); ?>">Excel</a>
-				<a class="pg-btn" href="<?php echo esc_url( rest_url( 'saas/v1/projects/' . $post_id . '/export/pdf' ) ); ?>">PDF</a>
-				<a class="pg-btn" href="<?php echo esc_url( rest_url( 'saas/v1/projects/' . $post_id . '/export/pptx' ) ); ?>">PowerPoint</a>
-				<a class="pg-btn" href="#geolens">GeoLens</a>
-				<a class="pg-btn" href="#placerank">PlaceRank</a>
-			</nav>
-		<?php endif; ?>
 	</header>
 
 	<?php if ( in_array( $pg_status, array( 'queued', 'running' ), true ) ) : ?>
@@ -62,6 +61,8 @@ $pg_paid    = isset( $_GET['pg_pago'] ) ? sanitize_key( wp_unslash( (string) $_G
 			<?php esc_html_e( 'Estamos calculando tu informe. Esta página se actualiza sola.', 'powergis' ); ?>
 		</div>
 	<?php endif; ?>
+
+	<?php include POWERGIS_PATH . 'templates/report-nav.php'; ?>
 
 	<!-- Todo lo demás lo pinta assets/js/report.js desde el payload JSON. -->
 	<div data-pg-report="<?php echo esc_attr( (string) $post_id ); ?>"></div>

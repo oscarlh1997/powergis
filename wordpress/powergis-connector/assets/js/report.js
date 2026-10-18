@@ -691,6 +691,7 @@
 
 		if (payload.executive_summary) {
 			const summary = el('section', 'pg-summary');
+			summary.id = 'pg-resumen';
 			summary.appendChild(el('h2', null, 'Resumen ejecutivo'));
 			renderKpis(summary, (payload.executive_summary.headline || []).map((item) => ({
 				label: item.label, value: item.value, unit: item.unit,
@@ -727,10 +728,12 @@
 
 		renderGeoLens(root, payload.geolens);
 		renderPlaceRank(root, payload.placerank, CFG.postId);
+		renderConclusions(root, payload.executive_summary);
 		renderUpgradePanel(root, locked, CFG.postId);
 
 		if (payload.sources && payload.sources.length) {
 			const box = el('section', 'pg-sources');
+			box.id = 'pg-fuentes';
 			box.appendChild(el('h2', null, 'Fuentes y metodología'));
 			const list = el('ul');
 			payload.sources.forEach((source) => {
@@ -741,9 +744,226 @@
 		}
 
 		window.addEventListener('resize', () => charts.forEach((chart) => chart.resize()));
+
+		if (payload.scope && payload.scope.name) {
+			document.querySelectorAll('[data-pg-scope-name]').forEach((node) => {
+				node.textContent = payload.scope.name;
+			});
+		}
+		buildToc(root);
+	}
+
+	// ------------------------------------------------------------------ //
+	// Conclusiones
+	// ------------------------------------------------------------------ //
+
+	/**
+	 * Cierre del informe: lo que dice la IA (si ha llegado) y las mejores y
+	 * peores zonas del resumen determinista, que existen siempre.
+	 */
+	function renderConclusions(container, summary) {
+		if (!summary) return;
+		const narrative = summary.narrative || {};
+		const best = summary.mejores_zonas || [];
+		const worst = summary.peores_zonas || [];
+		const hasText = narrative.recomendacion
+			|| (narrative.fortalezas || []).length || (narrative.riesgos || []).length;
+		if (!hasText && !best.length && !worst.length) return;
+
+		const box = el('section', 'pg-conclusions');
+		box.id = 'pg-conclusiones';
+		box.appendChild(el('h2', null, 'Conclusiones'));
+
+		const block = (title, items, render) => {
+			if (!items.length) return;
+			const part = el('div', 'pg-conclusions__block');
+			part.appendChild(el('h3', null, title));
+			const list = el('ul');
+			items.forEach((item) => list.appendChild(el('li', null, render(item))));
+			part.appendChild(list);
+			box.appendChild(part);
+		};
+		const zone = (row) => row.zona
+			+ (row.score !== undefined ? ' · ' + fmt(row.score, 'float', 1) : '');
+
+		block('Fortalezas', narrative.fortalezas || [], String);
+		block('Riesgos', narrative.riesgos || [], String);
+		block('Zonas más favorables', best, zone);
+		block('Zonas menos favorables', worst, zone);
+
+		if (narrative.recomendacion) {
+			const part = el('div', 'pg-conclusions__block');
+			part.appendChild(el('h3', null, 'Recomendación'));
+			part.appendChild(el('p', null, narrative.recomendacion));
+			box.appendChild(part);
+		}
+		container.appendChild(box);
+	}
+
+	// ------------------------------------------------------------------ //
+	// Navegación: X, «Mis proyectos» y panel de control
+	// ------------------------------------------------------------------ //
+
+	/**
+	 * Índice jerárquico del panel, a partir de lo que se ha pintado: un nivel
+	 * por sección (h2) y otro por subsección (h3). Así no hay que mantener
+	 * una lista aparte cuando el motor añade secciones.
+	 */
+	function buildToc(root) {
+		const toc = document.querySelector('[data-pg-toc]');
+		if (!toc) return;
+		toc.innerHTML = '';
+
+		const list = el('ol', 'pg-toc__list');
+		root.querySelectorAll(':scope > section[id]').forEach((section) => {
+			const heading = section.querySelector('h2');
+			if (!heading) return;
+			const item = el('li');
+			const link = el('a', 'pg-toc__link', heading.textContent);
+			link.href = '#' + section.id;
+			link.dataset.pgJump = '';
+			item.appendChild(link);
+			if (section.classList.contains('pg-locked')) {
+				item.appendChild(el('span', 'pg-toc__badge', T.inAdvanced || 'Avanzado'));
+			}
+
+			const subs = section.querySelectorAll(':scope > h3');
+			if (subs.length) {
+				const sublist = el('ol', 'pg-toc__sub');
+				subs.forEach((sub, index) => {
+					if (!sub.id) sub.id = section.id + '-' + (index + 1);
+					const subItem = el('li');
+					const subLink = el('a', 'pg-toc__link', sub.textContent);
+					subLink.href = '#' + sub.id;
+					subLink.dataset.pgJump = '';
+					subItem.appendChild(subLink);
+					sublist.appendChild(subItem);
+				});
+				item.appendChild(sublist);
+			}
+			list.appendChild(item);
+		});
+
+		if (!list.children.length) {
+			toc.appendChild(el('p', 'pg-muted', T.indexEmpty || ''));
+			return;
+		}
+		toc.appendChild(list);
+		syncJumps();
+	}
+
+	/**
+	 * Accesos directos del panel. En el informe básico GeoLens y PlaceRank no
+	 * se pintan: el acceso lleva al panel de compra en vez de a ninguna parte.
+	 */
+	function syncJumps() {
+		document.querySelectorAll('.pg-jump').forEach((link) => {
+			const target = link.dataset.pgTarget || link.getAttribute('href');
+			link.dataset.pgTarget = target;
+			const exists = document.querySelector(target);
+			const upgrade = document.getElementById('pg-upgrade');
+			link.classList.toggle('is-locked', !exists && !!upgrade);
+			if (exists) {
+				link.setAttribute('href', target);
+				link.removeAttribute('aria-disabled');
+			} else if (upgrade) {
+				link.setAttribute('href', '#pg-upgrade');
+				link.removeAttribute('aria-disabled');
+			} else {
+				link.setAttribute('aria-disabled', 'true');
+			}
+		});
+	}
+
+	function initNav() {
+		const dock = document.querySelector('[data-pg-dock]');
+		if (!dock) return;
+
+		// X: vuelve a la página anterior si es de esta web; si no hay, a la
+		// portada (el href del enlace).
+		const close = dock.querySelector('[data-pg-close]');
+		if (close) {
+			close.addEventListener('click', (event) => {
+				let sameSite = false;
+				try {
+					const from = new URL(document.referrer);
+					sameSite = from.origin === window.location.origin
+						&& from.pathname !== window.location.pathname;
+				} catch (e) { /* sin referrer */ }
+				if (sameSite && window.history.length > 1) {
+					event.preventDefault();
+					window.history.back();
+				}
+			});
+		}
+
+		// «Mis proyectos»
+		const menu = dock.querySelector('[data-pg-projects]');
+		const toggle = dock.querySelector('[data-pg-projects-toggle]');
+		const pop = menu && menu.querySelector('.pg-projects-menu__pop');
+		const setMenu = (open) => {
+			if (!toggle || !pop) return;
+			pop.hidden = !open;
+			toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+			menu.classList.toggle('is-open', open);
+		};
+		if (toggle) {
+			toggle.addEventListener('click', (event) => {
+				event.stopPropagation();
+				setMenu(pop.hidden);
+			});
+		}
+		document.addEventListener('click', (event) => {
+			if (menu && !menu.contains(event.target)) setMenu(false);
+		});
+
+		// Panel de control
+		const panel = document.getElementById('pg-panel');
+		const backdrop = document.querySelector('.pg-panel-backdrop');
+		const opener = dock.querySelector('[data-pg-panel-open]');
+		const setPanel = (open) => {
+			if (!panel) return;
+			panel.hidden = !open;
+			if (backdrop) backdrop.hidden = !open;
+			document.documentElement.classList.toggle('pg-panel-open', open);
+			if (opener) opener.setAttribute('aria-expanded', open ? 'true' : 'false');
+			if (open) {
+				setMenu(false);
+				const first = panel.querySelector('.pg-panel__close');
+				if (first) first.focus();
+			} else if (opener) {
+				opener.focus();
+			}
+		};
+		if (opener) opener.addEventListener('click', () => setPanel(panel.hidden));
+		document.querySelectorAll('[data-pg-panel-close]').forEach((node) => {
+			node.addEventListener('click', () => setPanel(false));
+		});
+
+		// Un salto desde el panel lo cierra: si no, en móvil tapa el destino.
+		if (panel) {
+			panel.addEventListener('click', (event) => {
+				const link = event.target.closest('a[href^="#"]');
+				if (!link) return;
+				if (link.getAttribute('aria-disabled') === 'true') {
+					event.preventDefault();
+					return;
+				}
+				setPanel(false);
+			});
+		}
+
+		document.addEventListener('keydown', (event) => {
+			if (event.key !== 'Escape') return;
+			if (panel && !panel.hidden) setPanel(false);
+			else setMenu(false);
+		});
+
+		syncJumps();
 	}
 
 	async function boot() {
+		initNav();
 		const root = document.querySelector('[data-pg-report]');
 		if (!root) return;
 

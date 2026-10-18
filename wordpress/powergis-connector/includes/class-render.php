@@ -83,6 +83,9 @@ final class Render {
 					'extraExports' => __( 'Descarga en Excel, PDF y PowerPoint', 'powergis' ),
 					'redirecting'  => __( 'Conectando con el pago…', 'powergis' ),
 					'unlocking'    => __( 'Pago confirmado. Estamos ampliando tu informe…', 'powergis' ),
+					// Navegación y panel de control
+					'indexEmpty'   => __( 'El índice aparece cuando termina de cargar el informe.', 'powergis' ),
+					'inAdvanced'   => __( 'Avanzado', 'powergis' ),
 					'upgradeSlow'  => __( 'Tu pago se ha registrado, pero el informe ampliado está tardando más de lo normal. No hace falta que pagues otra vez: recarga en unos minutos o escríbenos y lo revisamos.', 'powergis' ),
 				),
 			)
@@ -124,6 +127,90 @@ final class Render {
 		ob_start();
 		include POWERGIS_PATH . 'templates/report.php';
 		return (string) ob_get_clean();
+	}
+
+	// -- navegación de la página del proyecto ----------------------------- //
+
+	/**
+	 * Página con el shortcode [powergis_my_projects]. En powergis.es es
+	 * /mis-proyectos/; si cambia, se ajusta con el filtro.
+	 */
+	public static function my_projects_url(): string {
+		return (string) apply_filters( 'powergis_my_projects_url', home_url( '/mis-proyectos/' ) );
+	}
+
+	/**
+	 * La de Ajustes → Privacidad de WordPress. Si no está elegida, una URL
+	 * provisional que hay que confirmar.
+	 */
+	public static function privacy_url(): string {
+		$url = get_privacy_policy_url();
+		return (string) apply_filters( 'powergis_privacy_url', $url ? $url : home_url( '/politica-de-privacidad/' ) );
+	}
+
+	/** Provisional hasta que exista la página de soporte. */
+	public static function support_url(): string {
+		return (string) apply_filters( 'powergis_support_url', home_url( '/soporte/' ) );
+	}
+
+	/**
+	 * Los otros proyectos del usuario, para el desplegable de «Mis proyectos».
+	 *
+	 * @return array<int,array{title:string,url:string,tier:string}>
+	 */
+	public static function other_projects( int $post_id, int $limit = 8 ): array {
+		$query = new \WP_Query(
+			array(
+				'post_type'      => CPT::POST_TYPE,
+				'author'         => get_current_user_id(),
+				'post_status'    => array( 'publish', 'draft', 'pending' ),
+				'post__not_in'   => array( $post_id ),
+				'posts_per_page' => $limit,
+				'orderby'        => 'date',
+				'order'          => 'DESC',
+				'no_found_rows'  => true,
+				'fields'         => 'ids',
+			)
+		);
+
+		$out = array();
+		foreach ( $query->posts as $id ) {
+			$out[] = array(
+				'title' => get_the_title( $id ),
+				'url'   => (string) get_permalink( $id ),
+				'tier'  => CPT::tier_of( (int) $id ),
+			);
+		}
+		return $out;
+	}
+
+	/**
+	 * Descargas del informe. El `_wpnonce` hace falta: un enlace normal no
+	 * manda la cabecera X-WP-Nonce y, sin nonce, la API REST trata la
+	 * petición como anónima aunque haya sesión.
+	 *
+	 * @return array<string,string> etiqueta → URL
+	 */
+	public static function export_links( int $post_id ): array {
+		$out = array();
+		foreach ( array( 'xlsx' => 'Excel', 'pdf' => 'PDF', 'pptx' => 'PowerPoint' ) as $kind => $label ) {
+			$out[ $label ] = wp_nonce_url(
+				rest_url( REST_Projects::NAMESPACE . '/projects/' . $post_id . '/export/' . $kind ),
+				'wp_rest'
+			);
+		}
+		return $out;
+	}
+
+	public static function scope_label( string $level ): string {
+		$labels = array(
+			'pais'      => __( 'Nacional', 'powergis' ),
+			'nacional'  => __( 'Nacional', 'powergis' ),
+			'ccaa'      => __( 'Comunidad autónoma', 'powergis' ),
+			'provincia' => __( 'Provincia', 'powergis' ),
+			'municipio' => __( 'Municipio', 'powergis' ),
+		);
+		return $labels[ $level ] ?? $level;
 	}
 
 	/**
