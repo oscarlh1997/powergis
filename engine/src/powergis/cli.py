@@ -274,6 +274,47 @@ def limpiar_almacen(
     typer.secho("Almacén limpio", fg=typer.colors.GREEN)
 
 
+@app.command("plantilla-validar")
+def plantilla_validar(
+    ruta: str = typer.Argument(
+        "/data/plantilla-equipo-datos.xlsx", help="Plantilla rellena (.xlsx o .csv)"
+    ),
+) -> None:
+    """Revisa la plantilla del equipo de datos SIN cargarla: qué entra y qué no.
+
+    Hoja por hoja: cuántos valores se cargarían, qué celdas se rechazan y por
+    qué (formato, código desconocido, fuera de rango, sin periodo), qué
+    columnas siguen vacías y qué fórmulas no tienen el resultado guardado.
+    Sale con error si hay algo rechazado, para que `make cargar-plantilla` se
+    pare antes de cargar nada.
+    """
+    from .adapters.collectors.plantilla import validar
+
+    v = validar(ruta)
+    hojas = sorted(set(v.cargados) | set(v.rechazos) | set(v.vacias))
+    for hoja in hojas:
+        cargados = v.cargados.get(hoja, {})
+        typer.secho(f"\n{hoja}: {sum(cargados.values())} valores", bold=True)
+        for code, n in sorted(cargados.items()):
+            typer.echo(f"  ✓ {code}: {n}")
+        for fallo in v.rechazos.get(hoja, [])[:40]:
+            typer.secho(f"  ✗ {fallo}", fg=typer.colors.RED)
+        if len(v.rechazos.get(hoja, [])) > 40:
+            typer.secho(f"  … y {len(v.rechazos[hoja]) - 40} rechazos más", fg=typer.colors.RED)
+        if v.vacias.get(hoja):
+            typer.echo("  · vacías: " + ", ".join(v.vacias[hoja]))
+    for celda in v.formulas_sin_valor[:20]:
+        typer.secho(f"  ✗ {celda}: fórmula sin valor guardado (ábrela y guárdala con Excel "
+                    "o LibreOffice)", fg=typer.colors.RED)
+    typer.echo("")
+    rechazos = sum(len(x) for x in v.rechazos.values())
+    color = typer.colors.GREEN if v.ok else typer.colors.RED
+    typer.secho(f"{v.total()} valores se cargarían · {rechazos} rechazados · "
+                f"{len(v.formulas_sin_valor)} fórmulas sin valor", fg=color, bold=True)
+    if not v.ok:
+        raise typer.Exit(1)
+
+
 @app.command("ine-discover")
 def ine_discover(table_id: str) -> None:
     """Variables y valores de una tabla del INE. Úsalo ANTES de mapearla."""
@@ -1421,7 +1462,7 @@ def load_demo_facts() -> int:
                 "eco.income.household.mean": random.uniform(22_000, 48_000),
                 "eco.income.household.median": random.uniform(19_000, 42_000),
                 "eco.gini": random.uniform(0.26, 0.38),
-                "eco.nse.risk_pct": random.uniform(8.0, 32.0),
+                "eco.poverty.risk_pct": random.uniform(8.0, 32.0),
                 "cli.temp.annual": random.uniform(11.0, 19.0),
                 "cli.rain.days": random.uniform(45, 130),
                 "cli.sun.days": random.uniform(90, 210),

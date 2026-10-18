@@ -7,7 +7,9 @@ Convención de códigos:  <prefijo_sección>.<familia>.<métrica>
     dem.*  demografía        eco.*  socioeconómico
     cmp.*  competencia       anc.*  anclas y atractivos
     sat.*  saturación        cli.*  clima
-    tra.*  tráfico
+    tra.*  tráfico           pol.*  resultados electorales
+    mov.*  traslados         tur.*  turismo
+    inm.*  vivienda
 """
 
 from __future__ import annotations
@@ -202,12 +204,12 @@ _DEMO = [
 # --------------------------------------------------------------------------- #
 
 _ECO = [
-    _i("eco.nse.risk_pct", "nse", "% hogares en riesgo de exclusión", Unit.PORCENTAJE,
+    _i("eco.poverty.risk_pct", "desigualdad", "% hogares en riesgo de exclusión", Unit.PORCENTAJE,
        section=Section.SOCIOECONOMICO, direction=_LB, source="INE:ADRH", min_level=SEC,
        dimension=Dimension.ECONOMICO, decimals=1),
-    _i("eco.gini", "nse", "Índice de Gini", Unit.INDICE, section=Section.SOCIOECONOMICO,
+    _i("eco.gini", "desigualdad", "Índice de Gini", Unit.INDICE, section=Section.SOCIOECONOMICO,
        direction=_LB, source="INE:ADRH", min_level=SEC, decimals=3),
-    _i("eco.resilience.index", "nse", "Índice de resistencia económica", Unit.INDICE,
+    _i("eco.resilience.index", "desigualdad", "Índice de resistencia económica", Unit.INDICE,
        section=Section.SOCIOECONOMICO, direction=_HB, source="derivado", dimension=Dimension.ECONOMICO,
        formula="renta mediana normalizada × (1 - Gini) × (1 - riesgo exclusión)"),
 
@@ -365,6 +367,93 @@ _CLI = [
     _i("cli.seasonality.index", "clima", "Índice de estacionalidad", Unit.INDICE,
        section=Section.CLIMA, direction=_LB, source="derivado",
        formula="desviación típica mensual de temperatura normalizada"),
+    # Las dos que dio de alta el equipo de datos en la plantilla del 18/10/2026.
+    _i("cli.humidity.annual", "clima", "Humedad relativa media anual", Unit.PORCENTAJE,
+       section=Section.CLIMA, source="AEMET", decimals=1,
+       description="Aproximación del equipo de datos: media entre la humedad del mes más "
+                   "húmedo y la del más seco de cada capital (CTE DB-SE-M, anejo F). No es "
+                   "una media de los doce meses."),
+    _i("cli.sun.hours.annual", "clima", "Horas de sol al año", Unit.HORAS,
+       section=Section.CLIMA, direction=_HB, source="AEMET", decimals=0,
+       description="Horas de sol anuales (no días de sol: no es intercambiable con "
+                   "«Días de sol al año»)."),
+]
+
+# --------------------------------------------------------------------------- #
+# Capas complementarias (formulario de octubre de 2026)
+#
+# Cada indicador pertenece a una capa que el cliente enciende o apaga en el
+# formulario (`domain.capas`). Ninguno puntúa en el PlaceRank: son contexto,
+# no criterio. Todos llegan, de momento, por la plantilla del equipo de datos:
+# las fuentes oficiales no tienen una API estable para automatizarlos (ver la
+# hoja «Fuentes nuevas» de la investigación del equipo de datos).
+# --------------------------------------------------------------------------- #
+
+INTERIOR = "Ministerio del Interior: Infoelectoral"
+
+_CTX = [
+    _i("pol.turnout_pct", "electoral", "Participación electoral", Unit.PORCENTAJE,
+       section=Section.CONTEXTO, source=INTERIOR, decimals=1,
+       description="Votantes sobre censo electoral en la última convocatoria indicada en la "
+                   "plantilla (tipo y fecha de la elección en la columna Fuente)."),
+    _i("pol.winner_share_pct", "electoral", "Voto a la candidatura más votada", Unit.PORCENTAJE,
+       section=Section.CONTEXTO, source=INTERIOR, decimals=1,
+       description="Porcentaje de votos válidos de la candidatura más votada. Mide "
+                   "concentración del voto, no la orientación de ninguna persona."),
+    _i("pol.effective_parties", "electoral", "Número efectivo de partidos", Unit.RATIO,
+       section=Section.CONTEXTO, source=INTERIOR, decimals=2,
+       formula="1 / Σ pᵢ² con pᵢ = cuota de voto válido de cada candidatura (Laakso-Taagepera)"),
+    _i("mov.interprov.in_rate", "traslados", "Llegadas desde otras provincias (‰)", Unit.POR_MIL,
+       section=Section.CONTEXTO, source="INE:EMCR", decimals=1,
+       formula="altas por cambio de residencia con origen en otra provincia / población × 1.000"),
+    _i("mov.interprov.out_rate", "traslados", "Salidas hacia otras provincias (‰)", Unit.POR_MIL,
+       section=Section.CONTEXTO, source="INE:EMCR", decimals=1,
+       formula="bajas por cambio de residencia con destino en otra provincia / población × 1.000"),
+    _i("mov.interprov.net_rate", "traslados", "Saldo de traslados entre provincias (‰)",
+       Unit.POR_MIL, section=Section.CONTEXTO, source="INE:EMCR", decimals=1,
+       formula="(llegadas − salidas) / población × 1.000"),
+]
+
+_TUR = [
+    _i("tur.hotel.travellers", "turismo", "Viajeros alojados en hoteles (año)", Unit.PERSONAS,
+       section=Section.TURISMO, source="INE:EOH", decimals=0,
+       description="Encuesta de Ocupación Hotelera. Por municipio sólo en los puntos "
+                   "turísticos del INE: el resto queda en blanco, nunca a cero."),
+    _i("tur.hotel.overnight", "turismo", "Pernoctaciones hoteleras (año)", Unit.UNIDADES,
+       section=Section.TURISMO, source="INE:EOH", decimals=0),
+    _i("tur.hotel.stay_mean", "turismo", "Estancia media en hoteles (días)", Unit.RATIO,
+       section=Section.TURISMO, source="INE:EOH", decimals=2,
+       formula="pernoctaciones / viajeros"),
+    _i("tur.overnight_per_1000hab", "turismo", "Pernoctaciones hoteleras por 1.000 habitantes",
+       Unit.POR_MIL, section=Section.TURISMO, source="INE:EOH", decimals=0,
+       formula="pernoctaciones / población × 1.000"),
+]
+
+_INM = [
+    _i("inm.sales.dwellings", "compraventa", "Compraventas de viviendas (año)", Unit.UNIDADES,
+       section=Section.INMOBILIARIO, source="INE:ETDP", decimals=0,
+       description="Estadística de Transmisiones de Derechos de la Propiedad. El INE la "
+                   "publica por provincia: no hay dato municipal."),
+    _i("inm.sales.per_1000hab", "compraventa", "Compraventas de viviendas por 1.000 habitantes",
+       Unit.POR_MIL, section=Section.INMOBILIARIO, source="INE:ETDP", decimals=1,
+       formula="compraventas de viviendas / población × 1.000",
+       description="Por provincia. Los municipios llevan el dato de su provincia."),
+    _i("inm.dwellings.main_pct", "viviendas", "% viviendas principales", Unit.PORCENTAJE,
+       section=Section.INMOBILIARIO, source="INE:Censo 2021", min_level=SEC, decimals=1),
+    _i("inm.dwellings.empty_pct", "viviendas", "% viviendas vacías", Unit.PORCENTAJE,
+       section=Section.INMOBILIARIO, source="INE:Censo 2021", min_level=SEC, decimals=1,
+       description="Categoría «vacía» del Censo 2021. No incluye las de uso esporádico, "
+                   "que no equivalen a segunda residencia."),
+    _i("inm.price.m2", "precio", "Valor tasado medio de la vivienda libre (€/m²)", Unit.EUROS,
+       section=Section.INMOBILIARIO, source="MIVAU:Valor tasado", decimals=0,
+       description="Valor de tasación, no precio de una operación concreta ni de anuncios. "
+                   "Por provincia; los municipios llevan el dato de su provincia."),
+    _i("inm.price.yoy_change", "precio", "Variación interanual del valor tasado", Unit.PORCENTAJE,
+       section=Section.INMOBILIARIO, source="MIVAU:Valor tasado", decimals=1),
+    _i("inm.rent.m2", "alquiler", "Alquiler de vivienda de referencia (€/m² al mes)", Unit.EUROS,
+       section=Section.INMOBILIARIO, source="MIVAU:SERPAVI", decimals=2,
+       description="Índice de referencia del alquiler (SERPAVI): una aproximación, no la "
+                   "renta de un contrato concreto."),
 ]
 
 # --------------------------------------------------------------------------- #
@@ -400,7 +489,7 @@ _TRA = [
 ]
 
 
-CATALOG: list[Indicator] = [*_DEMO, *_ECO, *_CMP, *_CLI, *_TRA]
+CATALOG: list[Indicator] = [*_DEMO, *_ECO, *_CTX, *_INM, *_CMP, *_TUR, *_CLI, *_TRA]
 
 BY_CODE: dict[str, Indicator] = {i.code: i for i in CATALOG}
 
@@ -425,7 +514,10 @@ def sections_for_tier(tier: Tier) -> list[Section]:
     return [
         Section.DEMOGRAFIA,
         Section.SOCIOECONOMICO,
+        Section.CONTEXTO,
+        Section.INMOBILIARIO,
         Section.COMPETENCIA,
+        Section.TURISMO,
         Section.CLIMA,
         Section.TRAFICO,
     ]

@@ -10,9 +10,12 @@ from __future__ import annotations
 from . import (
     clima,  # noqa: F401
     competencia,  # noqa: F401
+    contexto,  # noqa: F401
     demografia,  # noqa: F401
+    inmobiliario,  # noqa: F401
     socioeconomico,  # noqa: F401
     trafico,  # noqa: F401
+    turismo,  # noqa: F401
 )
 from .base import (
     REGISTRY,

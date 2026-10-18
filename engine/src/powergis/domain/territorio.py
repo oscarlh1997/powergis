@@ -56,3 +56,20 @@ def ccaa_de(level: GeoLevel | str, ine_code: str) -> str | None:
     if nivel in _POR_DEBAJO_DE_PROVINCIA and len(codigo) >= 4:
         return PROVINCIA_A_CCAA.get(codigo.zfill(5)[:2])
     return None
+
+
+def provincia_de(level: GeoLevel | str, ine_code: str) -> str | None:
+    """Código de la provincia de un municipio, distrito o sección, o None.
+
+    Lo necesitan los datos que sólo se publican por provincia (el valor
+    tasado de la vivienda, las compraventas por habitante): los municipios
+    llevan el dato de su provincia.
+    """
+    nivel = GeoLevel(level)
+    codigo = str(ine_code).strip()
+    if nivel is GeoLevel.PROVINCIA:
+        return codigo.zfill(2)
+    if nivel in _POR_DEBAJO_DE_PROVINCIA and len(codigo) >= 4:
+        provincia = codigo.zfill(5)[:2]
+        return provincia if provincia in PROVINCIA_A_CCAA else None
+    return None

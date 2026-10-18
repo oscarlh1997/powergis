@@ -172,7 +172,9 @@ class TestLecturaDelInforme:
         self._build(uow, created)
         payload = signed_get(client, f"/v1/reports/{created}", "wp_user_id=7").json()
         bloqueadas = [s for s in payload["sections"] if not s["available"]]
-        assert len(bloqueadas) == 4
+        # Las 7 de pago: socioeconómico, contexto, inmobiliario, competencia,
+        # turismo, clima y tráfico.
+        assert len(bloqueadas) == 7
         assert all(set(s) == {"id", "title", "available", "locked_reason"} for s in bloqueadas)
         assert payload["placerank"] is None
         assert "eco.income.household.mean" not in json.dumps(payload)
@@ -213,12 +215,12 @@ class TestCatalogoPublico:
         disponibles = [s["id"] for s in response.json()["sections"] if s["available"]]
         assert disponibles == ["demografia"]
 
-    def test_el_catalogo_avanzado_lista_las_cinco(self, client):
+    def test_el_catalogo_avanzado_lista_las_ocho(self, client):
         disponibles = [
             s["id"] for s in client.get("/v1/reports/catalog/avanzado").json()["sections"]
             if s["available"]
         ]
-        assert len(disponibles) == 5
+        assert len(disponibles) == 8
 
 
 class TestEndpointsInternos:

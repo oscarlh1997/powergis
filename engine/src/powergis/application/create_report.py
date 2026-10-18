@@ -46,6 +46,7 @@ class CreateReport:
             segments=payload.segments.to_domain(),
             business=payload.business.to_domain(),
             target=payload.target.to_domain(),
+            layers=payload.layers.to_domain(),
             tier=payload.tier,
             created_at=datetime.now(UTC),
         )

@@ -13,6 +13,7 @@ Cómo se puntúa cada criterio, dentro del ámbito consultado:
 
     'higher'  → percentil de la zona (más es mejor)
     'lower'   → 100 - percentil
+    'middle'  → 100 en la mediana del ámbito, 0 en los extremos
     'range'   → 100 dentro del intervalo, decae fuera de forma proporcional
 
 «Indiferente» no puntúa: el criterio se descarta en vez de meter ruido.
@@ -37,7 +38,7 @@ class Criterion:
     """Un requisito del perfil traducido a un indicador del almacén."""
 
     indicator: str
-    kind: str = "higher"              # higher | lower | range
+    kind: str = "higher"              # higher | lower | middle | range
     weight: float = 1.0
     minimum: float | None = None
     maximum: float | None = None
@@ -60,6 +61,8 @@ class Criterion:
         percentile = stats.percentile_of(value, population)
         if percentile is None:
             return None
+        if self.kind == "middle":
+            return max(0.0, 100.0 - 2.0 * abs(percentile - 50.0))
         return 100.0 - percentile if self.kind == "lower" else percentile
 
 
@@ -106,6 +109,14 @@ FAMILY: dict[str, tuple[str, str]] = {
 
 # nacionalidades que cuentan como público local: elegirlas no puntúa.
 NACIONALIDAD_LOCAL = {"espana", "españa", "espanola", "española", "local"}
+
+# «Peso de población extranjera» (formulario de octubre de 2026) → cómo se
+# puntúa el % de población extranjera de cada zona dentro del ámbito.
+FOREIGN_SHARE: dict[str, str] = {
+    "alta": "higher",
+    "media": "middle",
+    "baja": "lower",
+}
 
 # tramos de renta bruta anual del hogar (€)
 INCOME_BRACKETS: dict[str, tuple[float | None, float | None]] = {
@@ -176,6 +187,7 @@ class TargetProfile:
     family_status: str | None = None
     education_level: str | None = None
     nationality: str | None = None
+    foreign_share: str | None = None
     annual_income: str | None = None
     monthly_available_income: str | None = None
     average_ticket: str | None = None
@@ -214,16 +226,24 @@ class TargetProfile:
             code, kind = FAMILY[family]
             out.append(Criterion(code, kind, 1.0, label="Estructura familiar"))
 
-        # El NSE se quitó del formulario y del motor (equipo de datos,
-        # 18/10/2026): no hay fuente de clases sociales por zona y la renta
-        # ya mide la capacidad de consumo. Si un proyecto antiguo lo trae, se
-        # ignora.
+        # Sin nivel socioeconómico: se quitó del formulario y del motor
+        # (equipo de datos, 18/10/2026). No hay fuente de clases sociales por
+        # zona y la renta ya mide la capacidad de consumo. Un perfil guardado
+        # antes con ese campo lo pierde al leerse (`from_mapping` lo ignora).
 
         # Público extranjero: el Censo anual da el % de extranjeros por
         # municipio, no por país de origen, así que cualquier nacionalidad
         # no española pide zonas con más población extranjera.
+        # El formulario de octubre de 2026 ya no pregunta la nacionalidad: pide
+        # el peso de población extranjera (baja, media, alta). Si llega, manda;
+        # la nacionalidad se sigue entendiendo para los proyectos de antes.
+        share = _norm(self.foreign_share)
         nationality = _norm(self.nationality)
-        if nationality not in INDIFERENTE and nationality not in NACIONALIDAD_LOCAL:
+        if share in FOREIGN_SHARE:
+            out.append(Criterion(
+                "dem.nat.foreign_pct", FOREIGN_SHARE[share], 1.0, label="Población extranjera"
+            ))
+        elif nationality not in INDIFERENTE and nationality not in NACIONALIDAD_LOCAL:
             out.append(Criterion("dem.nat.foreign_pct", "higher", 1.0, label="Población extranjera"))
 
         bracket = _bracket(self.annual_income, INCOME_BRACKETS)
@@ -269,7 +289,7 @@ class TargetProfile:
         return out
 
     def as_dict(self) -> dict[str, Any]:
-        return {
+        out = {
             "age_range": list(self.age_range),
             "gender": self.gender,
             "family_status": self.family_status,
@@ -285,6 +305,11 @@ class TargetProfile:
             "traffic_generators_medium": list(self.traffic_generators_medium),
             "direct_competition": self.direct_competition,
         }
+        # Sólo si se declaró: así el perfil (y el hash de idempotencia) de los
+        # proyectos anteriores no cambia.
+        if self.foreign_share:
+            out["foreign_share"] = self.foreign_share
+        return out
 
     @classmethod
     def from_mapping(cls, data: dict[str, Any] | None) -> TargetProfile:
@@ -306,6 +331,7 @@ class TargetProfile:
             family_status=one("family_status"),
             education_level=one("education_level"),
             nationality=one("nationality"),
+            foreign_share=one("foreign_share"),
             annual_income=one("annual_income"),
             monthly_available_income=one("monthly_available_income"),
             average_ticket=one("average_ticket"),
@@ -372,9 +398,8 @@ def match_scores(ctx, target: TargetProfile) -> dict[int, float | None]:
 
     # Descartar en silencio es lo que convierte un hueco de datos en un
     # Match% que parece bajo. El cliente declaró un criterio y tiene derecho
-    # a saber que no se ha podido medir: medido en un motor real, NSE,
-    # estructura familiar y postgrado suman el 29 % del peso y ninguno tiene
-    # colector todavía.
+    # a saber que no se ha podido medir: en un motor real, la estructura
+    # familiar o el ticket del sector pueden quedarse sin dato en el ámbito.
     if descartados:
         perdido = sum(descartados.values())
         total = sum(c.weight for c in criteria)

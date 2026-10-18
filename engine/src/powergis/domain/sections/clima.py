@@ -33,17 +33,25 @@ class Clima(SectionBuilder):
     def subsections(self, ctx: SectionContext) -> list[Subsection | None]:
         codes = [
             "cli.temp.annual", "cli.precip.annual", "cli.rain.days",
-            "cli.sun.days", "cli.comfort.index", "cli.seasonality.index",
+            "cli.sun.days", "cli.sun.hours.annual", "cli.humidity.annual",
+            "cli.comfort.index", "cli.seasonality.index",
         ]
-        if not ctx.has_any(codes):
+        if not ctx.has_any(codes) and all(ctx.parent_value(c) is None for c in codes):
             ctx.warnings.append("Climatología no disponible: no hay normales de AEMET cargadas.")
             return []
+        # «Horas de sol» y «humedad» sólo existen si el equipo de datos las
+        # cargó (plantilla): su KPI sale sólo entonces, para no añadir dos
+        # «no disponible» a todos los informes con AEMET.
+        nuevos = ("cli.sun.hours.annual", "cli.humidity.annual")
+        kpi_codes = [c for c in codes if c not in nuevos or (
+            c in ctx.catalog and (ctx.has_any([c]) or ctx.parent_value(c) is not None)
+        )]
 
         return [
             Subsection(
                 id="clima.general",
                 title="Condiciones climáticas del ámbito",
-                kpis=[kpi_from(ctx, c) for c in codes],
+                kpis=[kpi_from(ctx, c) for c in kpi_codes],
                 charts=[self._monthly(ctx, "cli.temp.month", "Temperatura media mensual",
                                       "line", Unit.GRADOS_C),
                         self._monthly(ctx, "cli.precip.month", "Precipitación mensual",
@@ -53,7 +61,9 @@ class Clima(SectionBuilder):
                         ctx, "cli.tabla", "Clima por zona", codes,
                         highlight_by="cli.comfort.index",
                         footnote="Fuente: AEMET OpenData, normales climatológicas 1991-2020. "
-                                 "© AEMET. Asignación por estación más cercana ponderada por altitud.",
+                                 "© AEMET. Asignación por estación más cercana ponderada por "
+                                 "altitud. Donde no hay AEMET, dato anual del equipo de datos "
+                                 "(AEMET vía datosespana.com); la humedad es una aproximación.",
                     )
                 ],
             )

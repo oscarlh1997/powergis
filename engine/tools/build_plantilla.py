@@ -6,6 +6,14 @@ las hojas y los códigos salen de allí, así que la plantilla y el cargador no
 pueden desincronizarse.
 
     python tools/build_plantilla.py [salida.xlsx]
+    python tools/build_plantilla.py salida.xlsx --desde plantilla-rellena.xlsx
+
+Con `--desde`, la plantilla nueva se rellena con todo lo que traía la vieja:
+cada valor (o fórmula) va a la misma fila y al mismo código de columna; el
+periodo y la fuente de «Indicadores», las filas de «Educacion por edad» y de
+«Series historicas», y las hojas que el equipo añadió por su cuenta (notas,
+cálculos auxiliares) se copian tal cual. Lo que la plantilla nueva ya no tiene
+(una columna que se quitó del catálogo) se lista al terminar.
 """
 
 from __future__ import annotations
@@ -26,7 +34,9 @@ sys.path.insert(0, str(RAIZ / "src"))
 from powergis.adapters.collectors.plantilla import (  # noqa: E402
     COLUMNAS,
     COLUMNAS_EDAD,
+    COLUMNAS_HISTORICO,
     HOJA_EDAD,
+    HOJA_HISTORICO,
     HOJA_INDICADORES,
     HOJAS,
     SEMILLAS,
@@ -56,6 +66,25 @@ YA_POR_API: dict[str, str] = {
     "cli.sun.days": "AEMET, si sigue conectada.",
     "cli.rain.days": "AEMET, si sigue conectada.",
     "dem.edu.secondary_pct": "Sí en municipios de 500+ hab. Solo los menores.",
+    "cli.humidity.annual": "No. Alta del equipo de datos (18/10/2026).",
+    "cli.sun.hours.annual": "No. Alta del equipo de datos (18/10/2026).",
+    "pol.turnout_pct": "No. Infoelectoral publica ficheros por convocatoria, sin API.",
+    "pol.winner_share_pct": "No. Se calcula con los ficheros de Infoelectoral.",
+    "pol.effective_parties": "No. Se calcula con los ficheros de Infoelectoral.",
+    "mov.interprov.in_rate": "No. INE EMCR: descarga por año, sin API confirmada.",
+    "mov.interprov.out_rate": "No. INE EMCR.",
+    "mov.interprov.net_rate": "No. INE EMCR.",
+    "tur.hotel.travellers": "No. INE EOH (tablas 2074 y 2078), API sin verificar.",
+    "tur.hotel.overnight": "No. INE EOH.",
+    "tur.hotel.stay_mean": "No. INE EOH.",
+    "tur.overnight_per_1000hab": "No. INE EOH / Padrón.",
+    "inm.sales.dwellings": "No. INE ETDP (tablas 6149/6150), sólo hasta provincia.",
+    "inm.sales.per_1000hab": "No. INE ETDP / Padrón. Municipios heredan la provincia.",
+    "inm.dwellings.main_pct": "No. Censo 2021 (consulta a medida, sin API).",
+    "inm.dwellings.empty_pct": "No. Censo 2021.",
+    "inm.price.m2": "No. MIVAU, CSV VDP006_01. Municipios heredan la provincia.",
+    "inm.price.yoy_change": "No. MIVAU.",
+    "inm.rent.m2": "No. MIVAU SERPAVI (tablas resumen; sin API).",
 }
 
 AZUL = PatternFill("solid", fgColor="1F4E79")
@@ -120,12 +149,26 @@ def construir(salida: Path) -> Path:
         ("5. Porcentajes de 0 a 100 (12,5 y no 0,125). Decimales con coma o punto.", False),
         ("6. «Educacion por edad»: una fila por territorio y tramo de edad (25-34, 65+…).", False),
         ("7. La fila 2 (gris) son los códigos que lee el motor: no la toquéis.", False),
+        ("8. «Series historicas»: una fila por territorio, indicador y año (formato largo). "
+         "Sólo para el valor tasado (inm.price.m2) y el alquiler (inm.rent.m2).", False),
+        ("9. Negativos: sólo en el saldo de traslados y en la variación del valor tasado. "
+         "En lo demás, un negativo se rechaza.", False),
+        ("10. Podéis usar fórmulas y hojas auxiliares propias: se lee el valor calculado. "
+         "Guardad el fichero con Excel o LibreOffice para que el valor quede grabado.", False),
         ("", False),
         ("REGLAS DEL MOTOR", True),
         ("· Si un indicador ya lo trae una API oficial, la plantilla solo rellena HUECOS "
          "(columna «¿Lo trae ya la API?» de la hoja Indicadores).", False),
         ("· La compra online es solo por comunidad autónoma: provincias y municipios heredan "
          "el dato de su comunidad. Ya está precargada con la TIC-H 2025.", False),
+        ("· El valor tasado y las compraventas por habitante son provinciales, y el clima anual "
+         "de esta plantilla también: los municipios heredan el dato de su provincia (si AEMET "
+         "da el del municipio, manda AEMET).", False),
+        ("· Las series de resultados electorales, traslados, turismo y vivienda son las capas que "
+         "el cliente enciende o apaga en el formulario. Lo que no carguéis sale como «sin datos».",
+         False),
+        ("· El NSE (clases sociales) se eliminó del formulario y del motor el 18/10/2026: ya no "
+         "hay columnas para él. El perfil económico se mide con la renta.", False),
         ("· Si necesitáis otro dato que no está aquí, añadidlo en «Indicadores» y avisad: "
          "hay que darlo de alta en el catálogo antes de cargarlo.", False),
         ("", False),
@@ -205,11 +248,175 @@ def construir(salida: Path) -> Path:
     niveles.add("A3:A5000")
     edad.column_dimensions["B"].number_format = "@"
 
+    # -- Series históricas ----------------------------------------------------
+    hist = libro.create_sheet(HOJA_HISTORICO)
+    _cabecera(
+        hist,
+        ["Nivel", "Código INE", "Territorio", "Indicador", "Año", "Valor"],
+        ["nivel", "codigo_ine", "territorio", "indicador", "anio", "valor"],
+    )
+    hist.freeze_panes = "A3"
+    niveles_h = DataValidation(type="list", formula1='"pais,ccaa,provincia,municipio"',
+                               allow_blank=True)
+    indicadores_h = DataValidation(type="list", formula1='"' + ",".join(COLUMNAS_HISTORICO) + '"',
+                                   allow_blank=True)
+    hist.add_data_validation(niveles_h)
+    hist.add_data_validation(indicadores_h)
+    niveles_h.add("A3:A20000")
+    indicadores_h.add("D3:D20000")
+    hist.column_dimensions["B"].number_format = "@"
+    hist.column_dimensions["D"].width = 22
+
     salida.parent.mkdir(parents=True, exist_ok=True)
     libro.save(salida)
     return salida
 
 
+# --------------------------------------------------------------------------- #
+# Migrar una plantilla rellena a la estructura nueva
+# --------------------------------------------------------------------------- #
+
+#: Columnas fijas (no indicadores) de las hojas en formato largo.
+_FIJAS = {"nivel", "codigo_ine", "territorio", "edad", "indicador", "anio", "valor"}
+
+
+def migrar(vieja: Path, nueva: Path) -> list[str]:
+    """Pasa a `nueva` (recién construida) todo lo que trae `vieja`.
+
+    Devuelve los avisos: columnas o filas que no tienen sitio en la nueva.
+    """
+    from openpyxl import load_workbook
+
+    origen = load_workbook(vieja)              # con fórmulas, no valores
+    destino = load_workbook(nueva)
+    avisos: list[str] = []
+
+    # 1. Hojas por nivel: misma fila (código INE) y misma columna (código).
+    for hoja in HOJAS:
+        if hoja not in origen.sheetnames:
+            continue
+        o, d = origen[hoja], destino[hoja]
+        cols_o = {str(c.value or "").strip(): c.column for c in o[2] if c.value}
+        cols_d = {str(c.value or "").strip(): c.column for c in d[2] if c.value}
+        filas_d = {_clave(d.cell(row=r, column=1).value): r for r in range(3, d.max_row + 1)
+                   if d.cell(row=r, column=1).value not in (None, "")}
+        for r in range(3, o.max_row + 1):
+            codigo = o.cell(row=r, column=1).value
+            if codigo in (None, ""):
+                continue
+            fila = filas_d.get(_clave(codigo))
+            if fila is None:
+                fila = d.max_row + 1
+                d.cell(row=fila, column=1, value=str(codigo)).number_format = "@"
+                d.cell(row=fila, column=2, value=o.cell(row=r, column=2).value)
+                filas_d[_clave(codigo)] = fila
+            for code, col in cols_o.items():
+                if code in ("codigo_ine", "territorio"):
+                    continue
+                valor = o.cell(row=r, column=col).value
+                if valor in (None, ""):
+                    continue
+                if code not in cols_d:
+                    avisos.append(f"{hoja}!{o.cell(row=r, column=col).coordinate}: la columna "
+                                  f"«{code}» ya no existe; valor «{valor}» no copiado")
+                    continue
+                d.cell(row=fila, column=cols_d[code], value=valor)
+        quitadas = sorted(set(cols_o) - set(cols_d) - {"codigo_ine", "territorio"})
+        if quitadas:
+            avisos.append(f"{hoja}: columnas que ya no están (vacías, sin pérdida si no hay "
+                          f"avisos de valor): {', '.join(quitadas)}")
+
+    # 2. Indicadores: periodo y fuente; y las filas que añadió el equipo.
+    if HOJA_INDICADORES in origen.sheetnames:
+        o, d = origen[HOJA_INDICADORES], destino[HOJA_INDICADORES]
+        filas_d = {str(d.cell(row=r, column=1).value).strip(): r for r in range(2, d.max_row + 1)
+                   if d.cell(row=r, column=1).value}
+        for r in range(2, o.max_row + 1):
+            code = str(o.cell(row=r, column=1).value or "").strip()
+            if not code:
+                continue
+            if code not in filas_d:
+                avisos.append(f"Indicadores: «{code}» ya no está en el catálogo; fila no copiada")
+                continue
+            for col in (7, 8):   # periodo, fuente
+                valor = o.cell(row=r, column=col).value
+                if valor not in (None, ""):
+                    d.cell(row=filas_d[code], column=col, value=valor)
+
+    # 3. Formato largo: se copian las filas tal cual, por nombre de columna.
+    for hoja in (HOJA_EDAD, HOJA_HISTORICO):
+        if hoja not in origen.sheetnames:
+            continue
+        o, d = origen[hoja], destino[hoja]
+        cols_o = [str(c.value or "").strip() for c in o[2]]
+        cols_d = {str(c.value or "").strip(): c.column for c in d[2] if c.value}
+        for r in range(3, o.max_row + 1):
+            valores = [o.cell(row=r, column=j + 1).value for j in range(len(cols_o))]
+            if all(v in (None, "") for v in valores):
+                continue
+            fila = d.max_row + 1
+            for code, valor in zip(cols_o, valores, strict=True):
+                if valor in (None, ""):
+                    continue
+                if code not in cols_d:
+                    avisos.append(f"{hoja}!fila {r}: la columna «{code}» ya no existe")
+                    continue
+                d.cell(row=fila, column=cols_d[code], value=valor)
+
+    # 4. Hojas propias del equipo (notas, cálculos auxiliares): tal cual y en
+    #    el mismo sitio, para que sus fórmulas sigan apuntando a lo mismo.
+    propias = [n for n in origen.sheetnames if n not in destino.sheetnames]
+    for nombre in propias:
+        _copiar_hoja(origen[nombre], destino.create_sheet(nombre))
+        destino.move_sheet(nombre, offset=origen.sheetnames.index(nombre)
+                           - destino.sheetnames.index(nombre))
+
+    destino.save(nueva)
+    return avisos
+
+
+def _clave(codigo: object) -> str:
+    if isinstance(codigo, float) and codigo.is_integer():
+        codigo = int(codigo)
+    texto = str(codigo).strip()
+    if texto.isdigit():
+        return texto.lstrip("0") or "0"   # «08019» y 8019 son el mismo municipio
+    return texto
+
+
+def _copiar_hoja(o, d) -> None:
+    from copy import copy
+
+    for fila in o.iter_rows():
+        for c in fila:
+            if c.value is None and not c.has_style:
+                continue
+            nueva = d.cell(row=c.row, column=c.column, value=c.value)
+            if c.has_style:
+                nueva.font = copy(c.font)
+                nueva.fill = copy(c.fill)
+                nueva.alignment = copy(c.alignment)
+                nueva.border = copy(c.border)
+                nueva.number_format = c.number_format
+    for letra, dim in o.column_dimensions.items():
+        d.column_dimensions[letra].width = dim.width
+    for n, dim in o.row_dimensions.items():
+        if dim.height:
+            d.row_dimensions[n].height = dim.height
+    for rango in o.merged_cells.ranges:
+        d.merge_cells(str(rango))
+    d.freeze_panes = o.freeze_panes
+
+
 if __name__ == "__main__":
-    destino = Path(sys.argv[1]) if len(sys.argv) > 1 else Path("plantilla-equipo-datos.xlsx")
-    print(construir(destino))
+    import argparse
+
+    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser.add_argument("salida", nargs="?", default="plantilla-equipo-datos.xlsx")
+    parser.add_argument("--desde", help="plantilla rellena cuyos datos se pasan a la nueva")
+    args = parser.parse_args()
+    destino = construir(Path(args.salida))
+    if args.desde:
+        for aviso in migrar(Path(args.desde), destino):
+            print("AVISO:", aviso)
+    print(destino)

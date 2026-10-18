@@ -226,7 +226,7 @@ class TestEconomicos:
 
         con_mediana = coleccionar(
             {"eco.income.household.median": 28_000.0, "eco.gini": 0.32,
-             "eco.nse.risk_pct": 18.0},
+             "eco.poverty.risk_pct": 18.0},
             ["eco.resilience.index"],
         )
         assert "eco.resilience.index" in con_mediana
@@ -259,12 +259,12 @@ class TestEconomicos:
     def test_mas_desigualdad_no_mejora_la_resiliencia(self):
         igual = coleccionar(
             {"eco.income.household.median": 28_000.0, "eco.gini": 0.25,
-             "eco.nse.risk_pct": 10.0},
+             "eco.poverty.risk_pct": 10.0},
             ["eco.resilience.index"],
         )
         desigual = coleccionar(
             {"eco.income.household.median": 28_000.0, "eco.gini": 0.45,
-             "eco.nse.risk_pct": 30.0},
+             "eco.poverty.risk_pct": 30.0},
             ["eco.resilience.index"],
         )
         assert desigual["eco.resilience.index"] <= igual["eco.resilience.index"]

@@ -382,6 +382,7 @@ class SqlProjectRepository:
             tier=Tier(row.tier),
             created_at=row.created_at,
             target=TargetProfile.from_mapping(row.target or {}),
+            layers=dict(row.layers or {}),
         )
 
     def get(self, project_uuid: UUID) -> Project | None:
@@ -401,6 +402,7 @@ class SqlProjectRepository:
             segments=project.segments.as_dict(),
             business=project.business.as_dict(),
             target=project.target.as_dict() if project.target else {},
+            layers=dict(project.layers or {}),
             sector=project.business.sector,
             tier=str(project.tier),
         )

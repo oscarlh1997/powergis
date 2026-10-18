@@ -148,6 +148,8 @@ class ProjectRow(Base):
     business: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
     # Perfil de cliente objetivo: alimenta el Match% del PlaceRank.
     target: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+    # Interruptores de las capas complementarias del formulario (`domain.capas`).
+    layers: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
     sector: Mapped[str | None] = mapped_column(String(64))
     tier: Mapped[str] = mapped_column(String(16), nullable=False, default="basico")
     created_at: Mapped[datetime] = mapped_column(

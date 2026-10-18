@@ -54,7 +54,12 @@ class Section(StrEnum):
 
     DEMOGRAFIA = "demografia"
     SOCIOECONOMICO = "socioeconomico"
+    # Capas complementarias del formulario (octubre de 2026). Cada una se
+    # enciende o apaga con su interruptor: ver `domain.capas`.
+    CONTEXTO = "contexto"
+    INMOBILIARIO = "inmobiliario"
     COMPETENCIA = "competencia"
+    TURISMO = "turismo"
     CLIMA = "clima"
     TRAFICO = "trafico"
 
@@ -158,3 +163,6 @@ class Unit(StrEnum):
     DIAS = "días"
     KM2 = "km²"
     UNIDADES = "ud"
+    HORAS = "h"
+    #: Por cada 1.000 habitantes (tasas de traslados, compraventas, pernoctaciones).
+    POR_MIL = "‰"

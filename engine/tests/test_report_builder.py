@@ -35,7 +35,7 @@ class TestInformeBasico:
 
     def test_las_demas_secciones_viajan_bloqueadas(self, basic):
         bloqueadas = [s for s in basic.sections if not s.available]
-        assert len(bloqueadas) == 4
+        assert len(bloqueadas) == 7
         assert all(s.locked_reason == "tier" for s in bloqueadas)
 
     def test_el_basico_no_lleva_placerank(self, basic):
@@ -153,7 +153,7 @@ class TestContratoDelPayload:
         assert set(advanced.as_dict()) == {
             "project_uuid", "tier", "version", "engine_version", "generated_at",
             "scope", "segments", "business", "sections", "geolens", "placerank",
-            "executive_summary", "glossary", "sources", "warnings",
+            "executive_summary", "glossary", "sources", "warnings", "layers",
         }
 
     def test_forma_uniforme_de_las_secciones(self, advanced):

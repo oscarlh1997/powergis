@@ -189,7 +189,7 @@ class DerivedCollector(BaseCollector):
             modelled.update(consumo_del_sector(disposable, self.sector))
 
         gini = v("eco.gini")
-        risk = v("eco.nse.risk_pct")
+        risk = v("eco.poverty.risk_pct")
         median = v("eco.income.household.median")
         if median is not None:
             modelled["eco.resilience.index"] = _resilience(median, gini, risk)

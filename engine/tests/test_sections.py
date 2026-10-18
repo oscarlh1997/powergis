@@ -9,9 +9,10 @@ from powergis.domain.sections import REGISTRY
 
 
 class TestRegistro:
-    def test_las_cinco_secciones_estan_registradas(self):
+    def test_las_ocho_secciones_estan_registradas(self):
         assert set(REGISTRY) == {
             Section.DEMOGRAFIA, Section.SOCIOECONOMICO,
+            Section.CONTEXTO, Section.INMOBILIARIO, Section.TURISMO,
             Section.COMPETENCIA, Section.CLIMA, Section.TRAFICO,
         }
 

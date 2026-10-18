@@ -16,9 +16,14 @@ Reglas, en este orden de importancia:
 2. **Nada sin periodo ni fuente.** Cada indicador lleva en la hoja
    «Indicadores» su periodo de referencia y su fuente; sin periodo no se carga
    ese indicador y la orden sale con error.
-3. **Lo que el INE sólo da por comunidad autónoma se hereda.** La compra
-   online (TIC-H) es por comunidad; provincias y municipios llevan el dato de
-   su comunidad, y la fuente lo dice.
+3. **Lo que sólo se publica por arriba se hereda.** La compra online (TIC-H)
+   es por comunidad; provincias y municipios llevan el dato de su comunidad.
+   El precio tasado y las compraventas por habitante son provinciales, y el
+   clima anual que trae la plantilla también: los municipios llevan el de su
+   provincia. La fuente lo dice siempre, y lo oficial sigue mandando.
+4. **Las series anuales van aparte.** La hoja «Series historicas» (formato
+   largo: nivel, código, indicador, año, valor) guarda el histórico del
+   precio y del alquiler de la vivienda con segmento de año.
 
 La semilla `seed/compra_online_ccaa_2025.csv` trae ya la compra online de 2025,
 así que funciona aunque la plantilla todavía no exista.
@@ -38,7 +43,7 @@ from typing import Any
 
 from ...domain.enums import GeoLevel
 from ...domain.models import Fact, Geo, Segments
-from ...domain.territorio import ccaa_de
+from ...domain.territorio import ccaa_de, provincia_de
 from .base import BaseCollector
 
 log = logging.getLogger(__name__)
@@ -62,6 +67,7 @@ HOJAS: dict[str, GeoLevel] = {
 }
 HOJA_EDAD = "Educacion por edad"
 HOJA_INDICADORES = "Indicadores"
+HOJA_HISTORICO = "Series historicas"
 
 #: Cifras del código INE por nivel. Excel se come los ceros a la izquierda
 #: si alguien escribe el código como número; se reponen aquí.
@@ -83,6 +89,8 @@ _TODOS = (GeoLevel.PAIS, GeoLevel.CCAA, GeoLevel.PROVINCIA, GeoLevel.MUNICIPIO,
           GeoLevel.SECCION)
 _LOCAL = (GeoLevel.MUNICIPIO, GeoLevel.SECCION)
 _TERR = (GeoLevel.PAIS, GeoLevel.CCAA, GeoLevel.PROVINCIA, GeoLevel.MUNICIPIO)
+_HASTA_PROVINCIA = (GeoLevel.PAIS, GeoLevel.CCAA, GeoLevel.PROVINCIA)
+_SIN_PAIS = (GeoLevel.CCAA, GeoLevel.PROVINCIA, GeoLevel.MUNICIPIO)
 
 #: Lo que la plantilla puede traer, en el orden de las columnas.
 COLUMNAS: tuple[Columna, ...] = (
@@ -120,19 +128,93 @@ COLUMNAS: tuple[Columna, ...] = (
     Columna("cli.precip.annual", "Clima · precipitación anual (mm)", _TERR),
     Columna("cli.sun.days", "Clima · días de sol al año", _TERR),
     Columna("cli.rain.days", "Clima · días de lluvia al año", _TERR),
+    # Altas del equipo de datos en la entrega del 18/10/2026. Van detrás de
+    # las anteriores para no mover ninguna columna: las fórmulas de la hoja
+    # «Clima - calculo CCAA» apuntan a ellas por letra.
+    Columna("cli.humidity.annual", "Clima · humedad relativa media anual (%)", _TERR,
+            "Media anual de humedad relativa. Si es una aproximación (media del mes más "
+            "húmedo y del más seco), decidlo en la columna Fuente."),
+    Columna("cli.sun.hours.annual", "Clima · horas de sol anuales (h)", _TERR,
+            "Horas de sol al año, NO días: no confundir con «días de sol»."),
+    # -- Capas complementarias del formulario (interruptores) -----------------
+    Columna("pol.turnout_pct", "Elecciones · participación (%)", _TERR,
+            "Votantes / censo electoral de la última convocatoria. En «Indicadores», "
+            "Periodo = fecha de la elección y Fuente = tipo de elección (generales, "
+            "municipales…) e Infoelectoral. Una sola convocatoria para todas las filas."),
+    Columna("pol.winner_share_pct", "Elecciones · voto a la candidatura más votada (%)", _TERR,
+            "Porcentaje de votos válidos de la candidatura más votada. Misma convocatoria."),
+    Columna("pol.effective_parties", "Elecciones · nº efectivo de partidos", _TERR,
+            "1 / Σ pᵢ² con las cuotas de voto válido de cada candidatura. Misma convocatoria."),
+    Columna("mov.interprov.in_rate", "Traslados · llegadas desde otras provincias (‰)", _SIN_PAIS,
+            "Altas por cambio de residencia con origen en otra provincia por 1.000 hab. "
+            "(INE, EMCR)."),
+    Columna("mov.interprov.out_rate", "Traslados · salidas hacia otras provincias (‰)", _SIN_PAIS,
+            "Bajas por cambio de residencia con destino otra provincia por 1.000 hab."),
+    Columna("mov.interprov.net_rate", "Traslados · saldo entre provincias (‰)", _SIN_PAIS,
+            "Llegadas − salidas por 1.000 hab. Puede ser negativo."),
+    Columna("tur.hotel.travellers", "Turismo · viajeros en hoteles (año)", _TERR,
+            "INE, Encuesta de Ocupación Hotelera, total anual. Municipios: sólo los puntos "
+            "turísticos del INE; el resto en blanco, nunca 0."),
+    Columna("tur.hotel.overnight", "Turismo · pernoctaciones hoteleras (año)", _TERR,
+            "Total anual de pernoctaciones (EOH). Mismo criterio para municipios."),
+    Columna("tur.hotel.stay_mean", "Turismo · estancia media (días)", _TERR,
+            "Pernoctaciones / viajeros."),
+    Columna("tur.overnight_per_1000hab", "Turismo · pernoctaciones por 1.000 hab.", _TERR,
+            "Pernoctaciones / población × 1.000. Es la que compara zonas de distinto tamaño."),
+    Columna("inm.sales.dwellings", "Vivienda · compraventas de viviendas (año)",
+            _HASTA_PROVINCIA,
+            "INE, ETDP, total anual. No hay dato municipal: no lo pongáis por municipio."),
+    Columna("inm.sales.per_1000hab", "Vivienda · compraventas por 1.000 hab.", _HASTA_PROVINCIA,
+            "Compraventas / población × 1.000. Los municipios heredan el de su provincia."),
+    Columna("inm.dwellings.main_pct", "Vivienda · % viviendas principales", _TODOS,
+            "INE, Censo 2021: viviendas principales / total de viviendas × 100."),
+    Columna("inm.dwellings.empty_pct", "Vivienda · % viviendas vacías", _TODOS,
+            "INE, Censo 2021: viviendas vacías / total × 100. Las de uso esporádico NO "
+            "cuentan como vacías ni como segunda residencia."),
+    Columna("inm.price.m2", "Vivienda · valor tasado medio (€/m²)", _HASTA_PROVINCIA,
+            "MIVAU, valor tasado medio de la vivienda libre, último trimestre. Los "
+            "municipios heredan el de su provincia. El histórico va en «Series historicas»."),
+    Columna("inm.price.yoy_change", "Vivienda · variación interanual del valor tasado (%)",
+            _HASTA_PROVINCIA, "Puede ser negativa (−3,2)."),
+    Columna("inm.rent.m2", "Vivienda · alquiler de referencia (€/m² al mes)", _TERR,
+            "MIVAU, SERPAVI (tablas resumen). Es una referencia, no un contrato."),
 )
+
+#: Indicadores con serie anual (hoja «Series historicas», segmento {"year"}).
+#: Tienen que coincidir con `domain.sections.inmobiliario.SERIES_HISTORICAS`.
+COLUMNAS_HISTORICO: tuple[str, ...] = ("inm.price.m2", "inm.rent.m2")
+
+#: Indicadores que admiten valores negativos (el resto, no).
+ADMITEN_NEGATIVOS = frozenset({"mov.interprov.net_rate", "inm.price.yoy_change"})
 
 #: Columnas de la hoja de educación por tramo de edad (se guardan con segmento).
 COLUMNAS_EDAD: tuple[str, ...] = (
     "dem.edu.primary_or_less_pct", "dem.edu.secondary_pct", "dem.edu.university_pct",
 )
 
-#: Indicadores que el INE sólo publica por comunidad autónoma.
-POR_COMUNIDAD = frozenset({"eco.consumer.online_pct"})
+#: Lo que sólo se publica por arriba y de dónde lo heredan los niveles de
+#: debajo, en orden: el primero que tenga dato. Sólo tasas, precios y medias:
+#: un total (compraventas, pernoctaciones) no se hereda nunca.
+HEREDA: dict[str, tuple[GeoLevel, ...]] = {
+    # INE TIC-H: sólo por comunidad autónoma.
+    "eco.consumer.online_pct": (GeoLevel.CCAA,),
+    # ETDP y valor tasado del MIVAU: por provincia.
+    "inm.sales.per_1000hab": (GeoLevel.PROVINCIA,),
+    "inm.price.m2": (GeoLevel.PROVINCIA,),
+    "inm.price.yoy_change": (GeoLevel.PROVINCIA,),
+    # Clima anual de la plantilla (AEMET por capital de provincia). Si AEMET
+    # da el dato del municipio, manda AEMET: esto sólo rellena huecos.
+    "cli.temp.annual": (GeoLevel.PROVINCIA,),
+    "cli.precip.annual": (GeoLevel.PROVINCIA,),
+    "cli.sun.days": (GeoLevel.PROVINCIA,),
+    "cli.rain.days": (GeoLevel.PROVINCIA,),
+    "cli.humidity.annual": (GeoLevel.PROVINCIA,),
+    "cli.sun.hours.annual": (GeoLevel.PROVINCIA,),
+}
+#: Compatibilidad: lo que se hereda de la comunidad autónoma.
+POR_COMUNIDAD = frozenset(c for c, de in HEREDA.items() if de == (GeoLevel.CCAA,))
 
-_POR_DEBAJO_DE_CCAA = frozenset({
-    GeoLevel.PROVINCIA, GeoLevel.MUNICIPIO, GeoLevel.DISTRITO, GeoLevel.SECCION,
-})
+_NOMBRE_NIVEL = {GeoLevel.CCAA: "comunidad autónoma", GeoLevel.PROVINCIA: "provincia"}
 
 CargadorDeHechos = Callable[[list[int], list[str]], list[Fact]]
 
@@ -146,13 +228,24 @@ class Registro:
     periodo: date
     fuente: str
     edad: str = ""
+    anio: str = ""
+    #: Hoja de la que sale (para el informe de validación).
+    hoja: str = ""
+
+    @property
+    def segmento(self) -> dict[str, str]:
+        if self.edad:
+            return {"age": self.edad}
+        if self.anio:
+            return {"year": self.anio}
+        return {}
 
 
 class PlantillaCollector(BaseCollector):
     name = "plantilla"
     TODAS_LAS_GEOS = True
     PROVIDES = tuple(dict.fromkeys(
-        [c.code for c in COLUMNAS] + list(COLUMNAS_EDAD)
+        [c.code for c in COLUMNAS] + list(COLUMNAS_EDAD) + list(COLUMNAS_HISTORICO)
     ))
 
     def __init__(
@@ -203,33 +296,50 @@ class PlantillaCollector(BaseCollector):
             for code in sorted(wanted):
                 suyos = propios.get((str(nivel), geo.ine_code, code), [])
                 for r in suyos:
-                    # La API manda: sólo se rellenan huecos de lo oficial.
-                    if not r.edad and (geo.geo_id, code) in ocupados:
+                    # La API manda: sólo se rellenan huecos de lo oficial. Lo
+                    # segmentado (edad, año) no compite con lo oficial.
+                    if not r.segmento and (geo.geo_id, code) in ocupados:
                         continue
                     out.append(self.fact(
                         geo, code, r.valor, period or r.periodo,
-                        {"age": r.edad} if r.edad else None, source_ref=self._ref(r.fuente),
+                        r.segmento or None, source_ref=self._ref(r.fuente),
                     ))
-                if code not in POR_COMUNIDAD or nivel not in _POR_DEBAJO_DE_CCAA:
+                if any(not r.segmento for r in suyos) or (geo.geo_id, code) in ocupados:
                     continue
-                if any(not r.edad for r in suyos):
+                heredado = self._heredado(propios, nivel, geo.ine_code, code)
+                if heredado is None:
                     continue
-                ccaa = ccaa_de(nivel, geo.ine_code)
-                de_la_ccaa = [
-                    r for r in propios.get((str(GeoLevel.CCAA), ccaa or "", code), [])
-                    if not r.edad
-                ]
-                if not de_la_ccaa:
-                    continue
-                r = de_la_ccaa[0]
+                r, de = heredado
                 heredados += 1
                 out.append(self.fact(
                     geo, code, r.valor, period or r.periodo, None,
-                    source_ref=f"{self._ref(r.fuente)} · dato de la comunidad autónoma",
+                    source_ref=f"{self._ref(r.fuente)} · dato de la {_NOMBRE_NIVEL[de]}",
                 ))
         if heredados:
-            log.info("plantilla: %d valores heredados de su comunidad autónoma", heredados)
+            log.info("plantilla: %d valores heredados de su provincia o comunidad", heredados)
         return out
+
+    @staticmethod
+    def _heredado(
+        propios: dict[tuple[str, str, str], list[Registro]],
+        nivel: GeoLevel,
+        codigo: str,
+        code: str,
+    ) -> tuple[Registro, GeoLevel] | None:
+        """El dato de la provincia o comunidad de la que cuelga, si se hereda."""
+        for de in HEREDA.get(code, ()):
+            if nivel.rank <= de.rank:
+                continue
+            if de is GeoLevel.CCAA:
+                padre = ccaa_de(nivel, codigo)
+            elif nivel is GeoLevel.PROVINCIA:
+                padre = None
+            else:
+                padre = provincia_de(nivel, codigo)
+            filas = [r for r in propios.get((str(de), padre or "", code), []) if not r.segmento]
+            if filas:
+                return filas[0], de
+        return None
 
     # ------------------------------------------------------------------ #
 
@@ -255,17 +365,17 @@ class PlantillaCollector(BaseCollector):
 
     def leer(self) -> list[Registro]:
         """Semillas + plantilla. Lo de la plantilla pisa a la semilla."""
-        registros: dict[tuple[str, str, str, str], Registro] = {}
+        registros: dict[tuple[str, str, str, str, str], Registro] = {}
         for ruta in self._semillas:
             for r in self._leer_csv(ruta):
-                registros[(str(r.nivel), r.codigo, r.indicador, r.edad)] = r
+                registros[(str(r.nivel), r.codigo, r.indicador, r.edad, r.anio)] = r
         if self._ruta.exists():
             leidos = (
                 self._leer_csv(self._ruta) if self._ruta.suffix.lower() == ".csv"
                 else self._leer_xlsx(self._ruta)
             )
             for r in leidos:
-                registros[(str(r.nivel), r.codigo, r.indicador, r.edad)] = r
+                registros[(str(r.nivel), r.codigo, r.indicador, r.edad, r.anio)] = r
         else:
             log.info("plantilla: no hay fichero en %s; sólo semillas", self._ruta)
         return list(registros.values())
@@ -286,10 +396,11 @@ class PlantillaCollector(BaseCollector):
                 except (KeyError, ValueError):
                     self.fallos.append(f"{ruta.name}:{n}: nivel desconocido «{fila.get('nivel')}»")
                     continue
+                anio = _anio(fila.get("anio") or fila.get("año") or "")
                 r = self._registro(
                     nivel, fila.get("codigo_ine", ""), fila.get("indicador", ""),
-                    fila.get("valor"), fila.get("periodo"), fila.get("fuente", ""),
-                    fila.get("edad", ""), donde=f"{ruta.name}:{n}",
+                    fila.get("valor"), fila.get("periodo") or anio, fila.get("fuente", ""),
+                    fila.get("edad", ""), anio=anio, donde=f"{ruta.name}:{n}",
                 )
                 if r is not None:
                     out.append(r)
@@ -343,7 +454,42 @@ class PlantillaCollector(BaseCollector):
                                        edad=edad, donde=f"{HOJA_EDAD}!fila {n}")
                     if r is not None:
                         out.append(r)
+        if HOJA_HISTORICO in libro.sheetnames:
+            out += self._leer_historico(libro[HOJA_HISTORICO], meta)
         libro.close()
+        return out
+
+    def _leer_historico(self, hoja: Any, meta: dict[str, tuple[Any, str]]) -> list[Registro]:
+        """Formato largo: nivel | codigo_ine | territorio | indicador | año | valor."""
+        out: list[Registro] = []
+        filas = list(hoja.iter_rows(values_only=True))
+        for n, fila in enumerate(filas[2:], start=3):
+            if not fila or len(fila) < 6 or all(v in (None, "") for v in fila):
+                continue
+            if fila[5] in (None, ""):
+                continue
+            donde = f"{HOJA_HISTORICO}!fila {n}"
+            try:
+                nivel = GeoLevel(str(fila[0] or "").strip().lower())
+            except ValueError:
+                self.fallos.append(f"{donde}: nivel desconocido «{fila[0]}»")
+                continue
+            code = str(fila[3] or "").strip()
+            if code not in COLUMNAS_HISTORICO:
+                self.fallos.append(
+                    f"{donde}: «{code}» no tiene serie histórica (solo "
+                    + ", ".join(COLUMNAS_HISTORICO) + ")"
+                )
+                continue
+            anio = _anio(fila[4])
+            if not anio:
+                self.fallos.append(f"{donde}: año vacío o ilegible «{fila[4]}»")
+                continue
+            _, fuente = meta.get(code, (None, ""))
+            r = self._registro(nivel, fila[1], code, fila[5], int(anio), fuente,
+                               anio=anio, donde=donde)
+            if r is not None:
+                out.append(r)
         return out
 
     def _meta_indicadores(self, libro: Any) -> dict[str, tuple[Any, str]]:
@@ -379,6 +525,7 @@ class PlantillaCollector(BaseCollector):
         fuente: str,
         edad: str = "",
         *,
+        anio: str = "",
         donde: str,
     ) -> Registro | None:
         indicador = str(indicador or "").strip()
@@ -391,6 +538,9 @@ class PlantillaCollector(BaseCollector):
             return None
         if indicador.endswith("_pct") and not 0.0 <= numero <= 100.0:
             self.fallos.append(f"{donde}: {indicador} = {numero} está fuera de 0–100")
+            return None
+        if numero < 0 and indicador not in ADMITEN_NEGATIVOS:
+            self.fallos.append(f"{donde}: {indicador} = {numero} no puede ser negativo")
             return None
         fecha = _periodo(periodo)
         if fecha is None:
@@ -406,7 +556,78 @@ class PlantillaCollector(BaseCollector):
             periodo=fecha,
             fuente=fuente or "sin fuente indicada",
             edad=edad,
+            anio=anio,
+            hoja=donde.split("!")[0],
         )
+
+
+# --------------------------------------------------------------------------- #
+# Validación sin base de datos (`powergis plantilla-validar`)
+# --------------------------------------------------------------------------- #
+
+
+@dataclass(slots=True)
+class Validacion:
+    """Lo que pasaría al cargar la plantilla, hoja por hoja."""
+
+    cargados: dict[str, dict[str, int]]          # hoja → indicador → valores
+    rechazos: dict[str, list[str]]               # hoja → motivos
+    vacias: dict[str, list[str]]                 # hoja → columnas sin un valor
+    formulas_sin_valor: list[str]                # celdas con fórmula y sin resultado guardado
+
+    @property
+    def ok(self) -> bool:
+        return not any(self.rechazos.values()) and not self.formulas_sin_valor
+
+    def total(self) -> int:
+        return sum(sum(v.values()) for v in self.cargados.values())
+
+
+def validar(ruta: str | Path) -> Validacion:
+    """Lee la plantilla como lo haría la carga, sin tocar el almacén."""
+    from openpyxl import load_workbook
+
+    ruta = Path(ruta)
+    colector = PlantillaCollector(ruta, semillas=())
+    registros = colector.leer()
+
+    cargados: dict[str, dict[str, int]] = {}
+    for r in registros:
+        cuenta = cargados.setdefault(r.hoja or "?", {})
+        cuenta[r.indicador] = cuenta.get(r.indicador, 0) + 1
+
+    rechazos: dict[str, list[str]] = {}
+    for fallo in colector.fallos:
+        donde = fallo.split("!")[0] if "!" in fallo else "General"
+        rechazos.setdefault(donde, []).append(fallo)
+
+    vacias: dict[str, list[str]] = {}
+    formulas: list[str] = []
+    if ruta.suffix.lower() != ".csv":
+        con_formulas = load_workbook(ruta, read_only=True, data_only=False)
+        con_valores = load_workbook(ruta, read_only=True, data_only=True)
+        for hoja in (*HOJAS, HOJA_EDAD, HOJA_HISTORICO):
+            if hoja not in con_formulas.sheetnames:
+                continue
+            f_filas = list(con_formulas[hoja].iter_rows(values_only=True))
+            v_filas = list(con_valores[hoja].iter_rows(values_only=True))
+            codigos = [str(c or "").strip() for c in (f_filas[1] if len(f_filas) > 1 else ())]
+            for i, (ff, vv) in enumerate(zip(f_filas[2:], v_filas[2:], strict=False), start=3):
+                for j, (f, v) in enumerate(zip(ff, vv, strict=False)):
+                    if isinstance(f, str) and f.startswith("=") and v is None:
+                        from openpyxl.utils import get_column_letter
+
+                        formulas.append(f"{hoja}!{get_column_letter(j + 1)}{i}")
+            if hoja in HOJAS:
+                rellenas = {
+                    codigos[j] for fila in v_filas[2:] for j, v in enumerate(fila)
+                    if j >= 2 and j < len(codigos) and v not in (None, "")
+                }
+                vacias[hoja] = [c for c in codigos[2:] if c and c not in rellenas]
+        con_formulas.close()
+        con_valores.close()
+    return Validacion(cargados=cargados, rechazos=rechazos, vacias=vacias,
+                      formulas_sin_valor=formulas)
 
 
 # --------------------------------------------------------------------------- #
@@ -458,6 +679,16 @@ def _periodo(raw: Any) -> date | None:
     if m := re.search(r"(19|20)\d{2}", texto):
         return date(int(m.group(0)), 1, 1)
     return None
+
+
+def _anio(raw: Any) -> str:
+    """2019, '2019', 2019.0, '2019-T4' → '2019'."""
+    if isinstance(raw, datetime | date):
+        return str(raw.year)
+    if isinstance(raw, float) and raw.is_integer():
+        raw = int(raw)
+    m = re.search(r"(19|20)\d{2}", str(raw or ""))
+    return m.group(0) if m else ""
 
 
 def _tramo(raw: Any) -> str:

@@ -122,10 +122,7 @@
           ],
           "education_level": "universitario",
           "family_status": "nido_lleno",
-          "nse": [
-            "a/b",
-            "c+"
-          ],
+          "foreign_share": "media",
           "annual_income": "45-75k",
           "monthly_available_income": "801-2500",
           "average_ticket": "medio_alto",

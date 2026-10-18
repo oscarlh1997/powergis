@@ -76,7 +76,7 @@ SPECS: tuple[TableSpec, ...] = (
     # al total y escribiría varios valores para el mismo municipio. Se
     # completan en cuanto se vean con `powergis ine-tablas 353 --contiene umbrales`.
     # -----------------------------------------------------------------------
-    TableSpec("37677", "eco.nse.risk_pct", "municipio", match=("riesgo de pobreza",),
+    TableSpec("37677", "eco.poverty.risk_pct", "municipio", match=("riesgo de pobreza",),
               env_prefix="ADRH_TABLE_", pendiente="familia de umbrales relativos; hay que ver sus series"),
     TableSpec("30833", "eco.income.under15k_pct", "municipio", match=("menos de 15",),
               env_prefix="ADRH_TABLE_", pendiente="familia de umbrales fijos; hay que ver sus series"),
@@ -127,10 +127,10 @@ class AdrhCollector(IneCollector):
 
 def _gini_en_tanto_por_uno(fact: Fact) -> Fact:
     """El Atlas publica el Gini de 0 a 100 (31,5); el catálogo y los índices
-    de NSE y resiliencia lo usan de 0 a 1 (0,315).
+    de resistencia económica lo usan de 0 a 1 (0,315).
 
     Sin esto, `min(gini, 0.6)` daba siempre 0,6: todas las zonas parecían
-    igual de desiguales, el NSE salía multiplicado por 0,7 en todas partes y
+    igual de desiguales, la resistencia salía multiplicada por 0,7 en todas partes y
     el Gini dejaba de distinguir nada. Se convierte sólo si viene en la escala
     grande, así que un cambio de formato del INE no lo rompe.
     """

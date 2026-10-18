@@ -57,6 +57,21 @@ class SectionContext:
     business: dict[str, Any] = field(default_factory=dict)
     target: Any = None          # domain.target.TargetProfile
     warnings: list[str] = field(default_factory=list)
+    #: Capas que el cliente apagó en el formulario (`domain.capas`). Sus
+    #: indicadores ya no están en `catalog`; las secciones lo usan para no
+    #: avisar de «sin datos» de algo que el cliente no pidió.
+    hidden_layers: frozenset[str] = frozenset()
+
+    # -- capas ---------------------------------------------------------------
+
+    def layer_on(self, layer: str) -> bool:
+        return layer not in self.hidden_layers
+
+    def visible(self, codes: Sequence[str]) -> list[str]:
+        """`codes` sin los que pertenecen a una capa apagada."""
+        from ..capas import visibles
+
+        return visibles(codes, self.hidden_layers)
 
     # -- acceso a hechos ----------------------------------------------------
 
@@ -135,6 +150,8 @@ _TYPE_BY_UNIT: dict[Unit, str] = {
     Unit.MM: "float",
     Unit.DIAS: "int",
     Unit.KM2: "float",
+    Unit.HORAS: "int",
+    Unit.POR_MIL: "float",
 }
 
 
@@ -146,6 +163,31 @@ def column_for(ind: Indicator, key: str | None = None, label: str | None = None)
         decimals=ind.decimals,
         direction=ind.direction,
     )
+
+
+_NIVEL_NOMBRE = {
+    "pais": "país", "ccaa": "comunidad autónoma", "provincia": "provincia",
+    "municipio": "municipio", "seccion": "sección censal",
+}
+
+
+def sin_datos_de_capa(ctx: SectionContext, codes: Sequence[str], que: str) -> bool:
+    """¿No hay nada que enseñar de una capa? Si es así, dice por qué.
+
+    Distingue «la fuente no llega a este nivel» (p. ej. turismo por sección
+    censal) de «todavía no se ha cargado» (la plantilla del equipo de datos
+    está vacía): son dos avisos distintos para quien lee el informe.
+    """
+    if ctx.has_any(codes) or any(ctx.parent_value(c) is not None for c in codes):
+        return False
+    if not any(c in ctx.catalog for c in codes):
+        nivel = _NIVEL_NOMBRE.get(str(ctx.scope.resolve_children_level()), "este nivel")
+        ctx.warnings.append(f"{que}: la fuente no se publica por {nivel}; no se muestra en "
+                            "este ámbito.")
+    else:
+        ctx.warnings.append(f"{que}: todavía no hay datos cargados para este ámbito "
+                            "(plantilla del equipo de datos).")
+    return True
 
 
 def kpi_from(
@@ -279,7 +321,7 @@ class SectionBuilder(ABC):
     def allowed(self, tier: Tier) -> bool:
         return self.tier in tier.includes
 
-    def preview_labels(self, limit: int = 6) -> list[str]:
+    def preview_labels(self, limit: int = 6, hidden: frozenset[str] = frozenset()) -> list[str]:
         """Índice de venta de una sección bloqueada.
 
         Sale del CATÁLOGO, no del contexto: son los nombres de los indicadores
@@ -288,15 +330,31 @@ class SectionBuilder(ABC):
         dato aunque alguien lo intente.
         """
         from .. import indicators as catalog
+        from ..capas import capa_de
 
         labels: list[str] = []
         for ind in catalog.by_section(self.section):
+            if capa_de(ind.code) in hidden:
+                continue
             label = (ind.label or "").strip()
             if label and label not in labels:
                 labels.append(label)
             if len(labels) >= limit:
                 break
         return labels
+
+    def hidden(self, hidden_layers: frozenset[str]) -> bool:
+        """¿Ha apagado el cliente TODAS las capas de las que vive esta sección?
+
+        Las secciones de siempre (demografía, clima…) no dependen de ninguna
+        capa y nunca se ocultan.
+        """
+        from ..capas import capas_de_seccion
+
+        if self.section not in _SOLO_CAPAS:
+            return False
+        capas = capas_de_seccion(self.section)
+        return bool(capas) and all(c in hidden_layers for c in capas)
 
     def build(self, ctx: SectionContext) -> SectionResult:
         if not self.allowed(ctx.tier):
@@ -305,7 +363,7 @@ class SectionBuilder(ABC):
                 title=self.title,
                 available=False,
                 locked_reason="tier",
-                preview=self.preview_labels(),
+                preview=self.preview_labels(hidden=ctx.hidden_layers),
             )
         subsections = self.subsections(ctx)
         codes = self.indicator_codes
@@ -327,6 +385,9 @@ class SectionBuilder(ABC):
 
 
 REGISTRY: dict[Section, SectionBuilder] = {}
+
+#: Secciones que sólo existen por sus capas: con todas apagadas, no se pintan.
+_SOLO_CAPAS = frozenset({Section.CONTEXTO, Section.TURISMO, Section.INMOBILIARIO})
 
 
 def register(cls: type[SectionBuilder]) -> type[SectionBuilder]:

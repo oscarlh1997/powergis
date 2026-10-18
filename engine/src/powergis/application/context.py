@@ -10,13 +10,14 @@ import itertools
 from collections.abc import Sequence
 from dataclasses import dataclass, replace
 
+from ..domain import capas as capas_mod
 from ..domain import consumo
 from ..domain import indicators as catalog_mod
 from ..domain.enums import GeoLevel, Section, Tier
 from ..domain.errors import GeoNotFound, ValidationError
 from ..domain.models import Geo, Indicator, Project, Scope, Segments
 from ..domain.ports import UnitOfWork
-from ..domain.sections import demografia
+from ..domain.sections import demografia, inmobiliario
 from ..domain.sections.base import SectionContext
 
 
@@ -135,7 +136,10 @@ def build_context(
     resolved = resolve_scope(uow, project.scope, max_children)
 
     wanted = list(sections or catalog_mod.sections_for_tier(tier))
-    indicators = indicators_for(tier, wanted)
+    # Lo que el cliente apagó en el formulario no se pide siquiera: así no
+    # sale en su sección, ni en GeoLens, ni en el glosario.
+    hidden = capas_mod.ocultas(getattr(project, "layers", None))
+    indicators = [i for i in indicators_for(tier, wanted) if capas_mod.capa_de(i.code) not in hidden]
     codes = [i.code for i in indicators]
 
     # Filtrar por granularidad publicada: pedir renta por sección censal cuando
@@ -164,6 +168,13 @@ def build_context(
         facts += uow.facts.fetch(
             geo_ids, por_edad, [{"age": t} for t in demografia.TRAMOS_EDAD_EDUCACION]
         )
+    # Las series anuales (precio y alquiler de la vivienda) se guardan con
+    # segmento de año, igual que la educación con el de edad.
+    historicas = [c for c in inmobiliario.SERIES_HISTORICAS if c in codigos]
+    if historicas:
+        facts += uow.facts.fetch(
+            geo_ids, historicas, [{"year": a} for a in inmobiliario.ANIOS_HISTORICO]
+        )
     if por_sector:
         visibles = set(codigos)
         facts = [
@@ -187,6 +198,7 @@ def build_context(
         facts=SectionContext.index(facts),
         business=project.business.as_dict(),
         target=project.target,
+        hidden_layers=hidden,
     )
 
     if resolved.note:

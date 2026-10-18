@@ -388,4 +388,5 @@ def _rehydrate(payload: dict[str, Any]):
         glossary=payload.get("glossary", []),
         sources=payload.get("sources", []),
         warnings=payload.get("warnings", []),
+        layers=payload.get("layers", {}),
     )

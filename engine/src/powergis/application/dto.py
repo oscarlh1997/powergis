@@ -99,9 +99,8 @@ class TargetIn(BaseModel):
     family_status: str | None = Field(default=None, max_length=48)
     education_level: str | None = Field(default=None, max_length=48)
     nationality: str | None = Field(default=None, max_length=64)
-    # Ya no se usa (el NSE salió del formulario el 18/10/2026). Se sigue
-    # aceptando para que un proyecto guardado con él no dé 422 al relanzarse.
-    nse: list[str] = Field(default_factory=list, max_length=8)
+    # «Peso de población extranjera» del formulario: baja | media | alta.
+    foreign_share: str | None = Field(default=None, max_length=16)
     annual_income: str | None = Field(default=None, max_length=32)
     monthly_available_income: str | None = Field(default=None, max_length=32)
     average_ticket: str | None = Field(default=None, max_length=32)
@@ -114,6 +113,41 @@ class TargetIn(BaseModel):
 
     def to_domain(self) -> TargetProfile:
         return TargetProfile.from_mapping(self.model_dump())
+
+
+class LayersIn(BaseModel):
+    """Interruptores de las capas complementarias del formulario.
+
+    Mismos nombres que `datos_territoriales` en `[crear_proyecto_v6]`. Se
+    admite `true`/`false` y también el `incluir`/`excluir` del formulario.
+    Lo que no se manda queda encendido.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    votaciones_politicas: bool = True
+    traslados_entre_provincias: bool = True
+    nivel_turistico: bool = True
+    compra_venta_inmuebles: bool = True
+    viviendas_vacias_principales: bool = True
+    precio_vivienda_historico: bool = True
+    catastro_locales_cartografia: bool = True
+    alquiler_vivienda_proxy: bool = True
+
+    @field_validator("*", mode="before")
+    @classmethod
+    def _incluir_excluir(cls, v: Any) -> Any:
+        from ..domain.capas import a_booleano
+
+        if v is None:
+            return True
+        convertido = a_booleano(v)
+        if convertido is None:
+            raise ValueError("Usa true/false o incluir/excluir")
+        return convertido
+
+    def to_domain(self) -> dict[str, bool]:
+        return self.model_dump()
 
 
 class CreateReportIn(BaseModel):
@@ -129,6 +163,7 @@ class CreateReportIn(BaseModel):
     segments: SegmentsIn = Field(default_factory=SegmentsIn)
     business: BusinessIn = Field(default_factory=BusinessIn)
     target: TargetIn = Field(default_factory=TargetIn)
+    layers: LayersIn = Field(default_factory=LayersIn)
     callback_url: str | None = Field(default=None, max_length=500)
     force: bool = False
 

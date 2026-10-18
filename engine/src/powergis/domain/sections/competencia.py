@@ -111,10 +111,13 @@ class Competencia(SectionBuilder):
         )
 
     def _saturacion(self, ctx: SectionContext) -> Subsection | None:
-        codes = [
+        # Los locales del Catastro (ocupación y disponibles) son la capa
+        # «Catastro: locales y cartografía» del formulario: si el cliente la
+        # apagó, no salen.
+        codes = ctx.visible([
             "sat.isc", "sat.demand_supply", "sat.occupancy", "sat.available_units",
             "sat.rent_m2", "sat.turnover", "sat.survival3y", "sat.opportunity.index",
-        ]
+        ])
         if not ctx.has_any(codes):
             return None
 
@@ -129,11 +132,10 @@ class Competencia(SectionBuilder):
             id="competencia.saturacion",
             title="Índice de saturación comercial",
             kpis=[
-                kpi_from(ctx, "sat.isc"),
-                kpi_from(ctx, "sat.demand_supply"),
-                kpi_from(ctx, "sat.occupancy"),
-                kpi_from(ctx, "sat.survival3y"),
-                kpi_from(ctx, "sat.opportunity.index"),
+                kpi_from(ctx, c) for c in ctx.visible([
+                    "sat.isc", "sat.demand_supply", "sat.occupancy",
+                    "sat.survival3y", "sat.opportunity.index",
+                ])
             ],
             charts=[
                 build_chart(ctx, "sat.isc_chart", "Saturación frente a oportunidad",
@@ -142,7 +144,13 @@ class Competencia(SectionBuilder):
             tables=[
                 build_table(ctx, "sat.tabla_saturacion", "Saturación comercial por zona", codes,
                             highlight_by="sat.opportunity.index",
-                            footnote="Fuentes: Catastro (locales), INE/DIRCE (rotación y "
-                                     "supervivencia empresarial)." + note)
+                            footnote=(
+                                "Fuentes: Catastro (locales), INE/DIRCE (rotación y "
+                                "supervivencia empresarial)."
+                                if ctx.layer_on("catastro_locales_cartografia")
+                                else "Fuentes: INE/DIRCE (rotación y supervivencia "
+                                     "empresarial). Locales del Catastro excluidos a "
+                                     "petición del cliente."
+                            ) + note)
             ],
         )

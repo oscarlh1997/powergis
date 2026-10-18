@@ -393,11 +393,21 @@ cargar-datos:  ## Carga COMPLETA y en orden: catálogo → INE → renta → der
 	$(ENGINE) powergis almacen-estado
 	$(ENGINE) powergis almacen-estado --nivel provincia
 
+.PHONY: validar-plantilla
+validar-plantilla:  ## Revisa la plantilla SIN cargarla (qué entra, qué se rechaza y por qué): make validar-plantilla PLANTILLA=fichero.xlsx
+	@test -f "$(PLANTILLA)" || { echo "No encuentro $(PLANTILLA)"; exit 1; }
+	$(COMPOSE) cp "$(PLANTILLA)" $(if $(filter cx23,$(TIER)),api,worker-etl):/data/plantilla-a-validar.xlsx
+	$(ETL) powergis plantilla-validar /data/plantilla-a-validar.xlsx
+
 .PHONY: cargar-plantilla
 PLANTILLA ?= plantilla-equipo-datos.xlsx
 cargar-plantilla:  ## Sube y carga la plantilla del equipo de datos: make cargar-plantilla PLANTILLA=fichero.xlsx
 	@test -f "$(PLANTILLA)" || { echo "No encuentro $(PLANTILLA)"; exit 1; }
 	$(COMPOSE) cp "$(PLANTILLA)" $(if $(filter cx23,$(TIER)),api,worker-etl):/data/plantilla-equipo-datos.xlsx
+	@# Antes de escribir nada: una celda mala paraba la carga a medias (el
+	@# nivel nacional entraba y el resto no). Ahora se ve todo y no se carga.
+	@$(ETL) powergis plantilla-validar /data/plantilla-equipo-datos.xlsx || { \
+		echo ""; echo "ABORTADO: corrige lo marcado con ✗ y vuelve a lanzar. No se ha cargado nada."; exit 1; }
 	$(ENGINE) powergis sync-catalog
 	@for nivel in pais ccaa provincia municipio; do \
 		$(ETL) powergis ingest plantilla --level $$nivel || exit 1; \

@@ -132,6 +132,15 @@ class TestCoberturaDeColectores:
 
         routed.update(OsmCollector.PROVIDES)
 
+        # Lo que trae la plantilla del equipo de datos está listado de forma
+        # explícita (`PlantillaCollector.PROVIDES`): las capas del formulario
+        # de octubre de 2026 no tienen API estable y viven de ella.
+        from powergis.adapters.collectors.plantilla import PlantillaCollector
+
+        por_api = len([i for i in catalog.CATALOG if i.code in routed])
+        assert por_api / len(catalog.CATALOG) > 0.6, "la mayor parte debe venir de una API"
+        routed.update(PlantillaCollector.PROVIDES)
+
         orphans = sorted(i.code for i in catalog.CATALOG if i.code not in routed)
         cobertura = 1 - len(orphans) / len(catalog.CATALOG)
-        assert cobertura > 0.75, f"cobertura {cobertura:.0%}; huérfanos: {orphans}"
+        assert cobertura > 0.85, f"cobertura {cobertura:.0%}; huérfanos: {orphans}"

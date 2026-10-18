@@ -52,7 +52,7 @@ def build_registry(
             facts_lookup=facts_lookup,
             sector=sector,
             # Sin esto el colector de derivados no ve el almacén y no escribe
-            # nada: la renta disponible, el NSE y el gasto en el sector no
+            # nada: la renta disponible, la resistencia y el gasto en el sector no
             # llegaban a existir. Ver `DerivedCollector.__init__`.
             facts_loader=_cargador_de_hechos(session) if session is not None else None,
         ),

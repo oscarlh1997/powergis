@@ -11,6 +11,7 @@ from collections.abc import Sequence
 from datetime import UTC, datetime
 from uuid import UUID
 
+from . import capas as capas_mod
 from . import geolens as geolens_mod
 from . import indicators as catalog_mod
 from . import placerank as placerank_mod
@@ -53,10 +54,15 @@ class ReportBuilder:
         wanted = list(only) if only else catalog_mod.sections_for_tier(tier)
         reusable = _reusable_sections(previous, wanted) if previous else {}
 
+        hidden = ctx.hidden_layers
         sections: list[SectionResult] = []
         for section in catalog_mod.sections_for_tier(Tier.AVANZADO):
             builder = REGISTRY.get(section)
             if builder is None:
+                continue
+            if builder.hidden(hidden):
+                # El cliente apagó todas las capas de esta sección: no sale,
+                # ni siquiera como bloqueada en el informe básico.
                 continue
 
             if section not in wanted:
@@ -71,13 +77,13 @@ class ReportBuilder:
                         title=builder.title,
                         available=False,
                         locked_reason="tier",
-                        preview=builder.preview_labels(),
+                        preview=builder.preview_labels(hidden=hidden),
                     )
                 )
                 continue
 
             if section in reusable:
-                sections.append(reusable[section])
+                sections.append(_sin_capas_ocultas(reusable[section], hidden))
                 continue
 
             ctx.tier = tier
@@ -99,6 +105,7 @@ class ReportBuilder:
             glossary=self._glossary(ctx, wanted),
             sources=self._sources(sections),
             warnings=sorted(set(ctx.warnings)),
+            layers=capas_mod.normalizar(project.layers),
         )
         report.executive_summary = self._executive_summary(report, ctx, placerank)
         return report
@@ -284,6 +291,7 @@ def _section_from_dict(raw: dict, section: Section) -> SectionResult:
                     for t in s.get("tables", [])
                 ],
                 narrative=s.get("narrative"),
+                layer=s.get("layer"),
             )
         )
     return SectionResult(
@@ -294,6 +302,14 @@ def _section_from_dict(raw: dict, section: Section) -> SectionResult:
         sources=raw.get("sources", []),
         coverage=raw.get("coverage", 1.0),
     )
+
+
+def _sin_capas_ocultas(section: SectionResult, hidden: frozenset[str]) -> SectionResult:
+    """Una sección reutilizada del snapshot anterior, sin las capas apagadas."""
+    if not hidden:
+        return section
+    section.subsections = [s for s in section.subsections if s.layer not in hidden]
+    return section
 
 
 def indicators_for(tier: Tier, sections: Sequence[Section]) -> list[Indicator]:

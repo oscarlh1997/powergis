@@ -286,9 +286,13 @@ class Subsection:
     charts: list[Chart] = field(default_factory=list)
     tables: list[Table] = field(default_factory=list)
     narrative: str | None = None
+    #: Capa del formulario de la que sale (`domain.capas`), si es una de las
+    #: complementarias. El front la usa para respetar el interruptor también
+    #: en snapshots guardados.
+    layer: str | None = None
 
     def as_dict(self) -> dict[str, Any]:
-        return {
+        out = {
             "id": self.id,
             "title": self.title,
             "kpis": [k.as_dict() for k in self.kpis],
@@ -296,6 +300,9 @@ class Subsection:
             "tables": [t.as_dict() for t in self.tables],
             "narrative": self.narrative,
         }
+        if self.layer:
+            out["layer"] = self.layer
+        return out
 
 
 @dataclass(slots=True)
@@ -420,6 +427,8 @@ class Report:
     glossary: list[dict[str, str]] = field(default_factory=list)
     sources: list[dict[str, str]] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
+    #: Interruptores del formulario: capa → se muestra o no (`domain.capas`).
+    layers: dict[str, bool] = field(default_factory=dict)
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -438,6 +447,7 @@ class Report:
             "glossary": self.glossary,
             "sources": self.sources,
             "warnings": self.warnings,
+            "layers": dict(self.layers),
         }
 
 
@@ -459,6 +469,9 @@ class Project:
     # Perfil de cliente objetivo declarado en el formulario. Alimenta la
     # dimensión Match del PlaceRank (`domain.target.TargetProfile`).
     target: Any = None
+    # Interruptores de las capas complementarias (`domain.capas`). Vacío =
+    # todas encendidas, que es como salían los proyectos de antes.
+    layers: dict[str, bool] = field(default_factory=dict)
 
     def input_hash(self, tier: Tier | None = None) -> str:
         """Hash estable de las entradas. Base de la idempotencia."""
@@ -475,6 +488,14 @@ class Project:
             "target": self.target.as_dict() if self.target else None,
             "tier": str(tier or self.tier),
         }
+        # Sólo si alguna capa está apagada: así el hash de los proyectos que
+        # ya existían (todas encendidas) no cambia y su idempotencia se
+        # conserva.
+        from .capas import ocultas
+
+        hidden = sorted(ocultas(self.layers))
+        if hidden:
+            payload["hidden_layers"] = hidden
         blob = json.dumps(payload, sort_keys=True, separators=(",", ":"))
         return hashlib.sha256(blob.encode("utf-8")).hexdigest()
 

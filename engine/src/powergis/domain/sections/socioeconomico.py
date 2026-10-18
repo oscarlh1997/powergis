@@ -43,7 +43,7 @@ class Socioeconomico(SectionBuilder):
         # Sin NSE (decisión del equipo de datos, 18/10/2026): no hay fuente de
         # clases sociales por zona. El perfil se mide con la renta del Atlas y
         # con su desigualdad.
-        codes = ["eco.gini", "eco.nse.risk_pct", "eco.resilience.index"]
+        codes = ["eco.gini", "eco.poverty.risk_pct", "eco.resilience.index"]
         if not ctx.has_any(codes):
             ctx.warnings.append(f"Desigualdad de la renta: {_SECRETO}")
             return None
