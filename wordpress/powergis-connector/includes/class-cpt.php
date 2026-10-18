@@ -38,6 +38,7 @@ final class CPT {
 	public const META_SEGMENTS = '_pg_segments';
 	public const META_BUSINESS = '_pg_business';
 	public const META_TARGET   = '_pg_target';
+	public const META_LAYERS   = '_pg_layers';
 	public const META_RAW      = '_pg_form_raw';
 	public const META_ERROR    = '_pg_last_error';
 	public const META_UPDATED  = '_pg_updated_at';
@@ -110,6 +111,7 @@ final class CPT {
 			self::META_SEGMENTS => 'string',
 			self::META_BUSINESS => 'string',
 			self::META_TARGET   => 'string',
+			self::META_LAYERS   => 'string',
 			self::META_RAW      => 'string',
 		);
 		foreach ( $private as $key => $type ) {

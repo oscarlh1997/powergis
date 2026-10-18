@@ -51,7 +51,12 @@
 			case 'pct':
 				return value.toLocaleString('es-ES', opts) + ' %';
 			case 'eur':
-				return value.toLocaleString('es-ES', { maximumFractionDigits: 0 }) + ' €';
+				// Rentas y precios por hogar sin decimales; el alquiler por m²
+				// (11,40 €) los necesita. Manda el `decimals` del indicador.
+				return value.toLocaleString('es-ES', {
+					minimumFractionDigits: decimals ? d : 0,
+					maximumFractionDigits: decimals ? d : 0,
+				}) + ' €';
 			default:
 				return value.toLocaleString('es-ES', opts);
 		}
@@ -137,7 +142,10 @@
 			grid: { left: 56, right: 16, top: 56, bottom: 72, containLabel: true },
 			tooltip: {
 				trigger: 'axis',
-				valueFormatter: (v) => fmt(v, unitType(chart.unit), 2),
+				// Euros: sin decimales en cifras grandes (rentas), con dos en
+				// las pequeñas (alquiler por m²).
+				valueFormatter: (v) => fmt(v, unitType(chart.unit),
+					unitType(chart.unit) === 'eur' && Math.abs(v) >= 100 ? 0 : 2),
 			},
 			legend: { bottom: 0, type: 'scroll' },
 			xAxis: {
@@ -716,7 +724,16 @@
 
 		const locked = [];
 
+		// Interruptores del formulario («Incluir nivel turístico»…). El motor
+		// ya no manda lo apagado; esto cubre los informes guardados antes.
+		const layers = payload.layers || {};
+		const layerOff = (key) => Boolean(key) && layers[key] === false;
+
 		(payload.sections || []).forEach((section) => {
+			const subsections = (section.subsections || []).filter((sub) => !layerOff(sub.layer));
+			if (section.available && section.subsections && section.subsections.length && !subsections.length) {
+				return;   // todas sus capas apagadas: la sección no se pinta
+			}
 			if (!section.available) {
 				if (SHARED) return;   // al invitado no se le vende nada
 				locked.push(section);
@@ -727,7 +744,7 @@
 			box.id = 'seccion-' + section.id;
 			box.appendChild(el('h2', null, section.title));
 
-			(section.subsections || []).forEach((sub) => {
+			subsections.forEach((sub) => {
 				box.appendChild(el('h3', null, sub.title));
 				renderKpis(box, sub.kpis);
 				(sub.charts || []).forEach((chart) => renderChart(box, chart));

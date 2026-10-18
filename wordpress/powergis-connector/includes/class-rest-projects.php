@@ -405,6 +405,7 @@ final class REST_Projects {
 		$segments = $mapped['segments'];
 		$business = $mapped['business'];
 		$target   = $mapped['target'];
+		$layers   = $mapped['layers'];
 		$tier     = 'basico';   // el avanzado SOLO se concede tras el pago
 
 		update_post_meta( $post_id, CPT::META_UUID, $uuid );
@@ -413,6 +414,7 @@ final class REST_Projects {
 		update_post_meta( $post_id, CPT::META_SEGMENTS, wp_json_encode( $segments ) );
 		update_post_meta( $post_id, CPT::META_BUSINESS, wp_json_encode( $business ) );
 		update_post_meta( $post_id, CPT::META_TARGET, wp_json_encode( $target ) );
+		update_post_meta( $post_id, CPT::META_LAYERS, wp_json_encode( $layers ) );
 		update_post_meta( $post_id, CPT::META_RAW, wp_json_encode( $input ) );
 
 		CPT::set_tier( $post_id, 'basico' );
@@ -435,6 +437,9 @@ final class REST_Projects {
 				'segments'     => $segments,
 				'business'     => $business,
 				'target'       => $target,
+				// Interruptores de las capas del formulario: lo apagado no sale
+				// en el informe (ni en GeoLens, ni en las exportaciones).
+				'layers'       => $layers,
 				'callback_url' => REST_Callback::url(),
 			),
 			$uuid  // clave de idempotencia: el UUID del proyecto
@@ -524,6 +529,7 @@ final class REST_Projects {
 		update_post_meta( $post_id, CPT::META_SEGMENTS, wp_json_encode( $mapped['segments'] ) );
 		update_post_meta( $post_id, CPT::META_BUSINESS, wp_json_encode( $mapped['business'] ) );
 		update_post_meta( $post_id, CPT::META_TARGET, wp_json_encode( $mapped['target'] ) );
+		update_post_meta( $post_id, CPT::META_LAYERS, wp_json_encode( $mapped['layers'] ) );
 		update_post_meta( $post_id, CPT::META_RAW, wp_json_encode( $input ) );
 		update_post_meta( $post_id, CPT::META_STATUS, 'draft' );
 
@@ -727,24 +733,38 @@ final class REST_Projects {
 	 * puede depender de un esquema fijo: se limpia todo por tipo y la
 	 * validación semántica la hace el motor.
 	 *
+	 * Recursivo, con tope de profundidad. La versión anterior sólo bajaba un
+	 * nivel y tiraba todo lo que no fuera escalar dentro de un bloque: el
+	 * payload anidado de `[crear_proyecto_v6]` perdía
+	 * `definicion.delimitacion_geografica` (y con ella la zona: «No hemos
+	 * podido identificar la zona» en todo estudio que no fuera nacional),
+	 * `actividad_economica`, la edad, la renta anual y el clima.
+	 *
 	 * @param array<string,mixed> $input
 	 * @return array<string,mixed>
 	 */
-	private static function sanitize_input( array $input ): array {
+	private static function sanitize_input( array $input, int $depth = 0 ): array {
 		$out = array();
 		foreach ( $input as $key => $value ) {
-			$key = sanitize_key( (string) $key );
-			if ( '' === $key || str_starts_with( $key, '_' ) ) {
-				continue;   // nonces y campos internos de JetFormBuilder
+			$list = is_int( $key );
+			if ( ! $list ) {
+				$key = sanitize_key( (string) $key );
+				if ( '' === $key || str_starts_with( $key, '_' ) ) {
+					continue;   // nonces y campos internos de JetFormBuilder
+				}
 			}
 			if ( is_array( $value ) ) {
-				$out[ $key ] = array_slice(
-					array_map( 'sanitize_text_field', array_filter( $value, 'is_scalar' ) ),
-					0,
-					50
-				);
+				if ( $depth >= 4 ) {
+					continue;   // nada del formulario baja tanto
+				}
+				$out[ $key ] = array_slice( self::sanitize_input( $value, $depth + 1 ), 0, 50, ! array_is_list( $value ) );
 			} elseif ( is_bool( $value ) || is_numeric( $value ) ) {
 				$out[ $key ] = $value;
+			} elseif ( null === $value ) {
+				$out[ $key ] = null;
+			} elseif ( $depth > 0 ) {
+				// Dentro de un bloque: valores de desplegable, una línea.
+				$out[ $key ] = sanitize_text_field( substr( (string) $value, 0, 2000 ) );
 			} else {
 				$out[ $key ] = sanitize_textarea_field( substr( (string) $value, 0, 2000 ) );
 			}

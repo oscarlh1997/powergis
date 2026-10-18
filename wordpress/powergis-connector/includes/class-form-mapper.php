@@ -4,9 +4,9 @@
  *
  * ORIGEN DE ESTOS NOMBRES
  * -----------------------
- * Del shortcode `[crear_proyecto_v6]` (`shortcodes.php` del tema, revisión de
- * agosto de 2026), publicado en `/crear-proyecto/` y
- * `/crear-proyecto-geolocalizado/`. El JetFormBuilder 3118 queda descartado.
+ * Del shortcode `[crear_proyecto_v6]` (`includes/shortcodes.php` del plugin
+ * SaaS Studies, revisión de octubre de 2026), publicado en `/crear-proyecto/`
+ * y `/crear-proyecto-geolocalizado/`. El JetFormBuilder 3118 queda descartado.
  *
  * El formulario manda un payload ANIDADO, construido por `buildPayload()`:
  *
@@ -19,11 +19,22 @@
  *     },
  *     ticket: [...],
  *     buyer_persona: { edad[], genero, estado_civil[], academia,
- *                      nacionalidad[], renta_anual[], renta_mensual },
+ *                      peso_poblacion_extranjera, renta_anual[], renta_mensual,
+ *                      nacionalidad[] (siempre vacío desde octubre de 2026) },
  *     ecosistema:    { comp_directa, comp_indirecta_alta, comp_indirecta_media,
  *                      gen_trafico_alto, gen_trafico_medio },
- *     entorno:       { clima[], trafico_peaton[], trafico_vehicular[], comentarios }
+ *     entorno:       { clima[], trafico_peaton[], trafico_vehicular[] },
+ *     datos_territoriales: { votaciones_politicas, traslados_entre_provincias,
+ *                      nivel_turistico, compra_venta_inmuebles,
+ *                      viviendas_vacias_principales, precio_vivienda_historico,
+ *                      catastro_locales_cartografia, alquiler_vivienda_proxy }
+ *                      → 'incluir' | 'excluir'
  *   }
+ *
+ * Lo que el formulario manda y el motor NO usa (se guarda en el post, nada
+ * más): `ultimo_paso`, `ecosistema.comp_indirecta_alta/_media` (no hay
+ * criterio de competencia indirecta) y el `sector` del desplegable (es el
+ * número de fila del CSV; el sector sale del CNAE).
  *
  * EL PROBLEMA QUE RESUELVE ESTA CLASE
  * -----------------------------------
@@ -93,6 +104,21 @@ final class Form_Mapper {
 	private const INDIFERENTE = 'indiferente';
 
 	/**
+	 * Capas complementarias: los interruptores de `datos_territoriales`.
+	 * Mismos nombres en el formulario, aquí y en el motor (`domain/capas.py`).
+	 */
+	public const LAYERS = array(
+		'votaciones_politicas',
+		'traslados_entre_provincias',
+		'nivel_turistico',
+		'compra_venta_inmuebles',
+		'viviendas_vacias_principales',
+		'precio_vivienda_historico',
+		'catastro_locales_cartografia',
+		'alquiler_vivienda_proxy',
+	);
+
+	/**
 	 * TRADUCCIÓN AL VOCABULARIO DEL MOTOR
 	 * -----------------------------------
 	 * Varios `<option>` del shortcode no llevan atributo `value`, así que
@@ -160,6 +186,12 @@ final class Form_Mapper {
 			'media'    => 'medio',
 			'baja'     => 'bajo',
 		),
+		// «Peso de población extranjera» del formulario de octubre de 2026.
+		'foreign'      => array(
+			'alta'  => 'alta',
+			'media' => 'media',
+			'baja'  => 'baja',
+		),
 	);
 
 	// ---------------------------------------------------------------------- //
@@ -186,7 +218,33 @@ final class Form_Mapper {
 			'segments' => self::segments( $input ),
 			'business' => self::business( $input ),
 			'target'   => self::target( $input ),
+			'layers'   => self::layers( $input ),
 		);
+	}
+
+	/**
+	 * Interruptores de las capas complementarias, como booleanos.
+	 *
+	 * El formulario manda `incluir` / `excluir`. Lo que no viene se deja
+	 * encendido —igual que hace el motor—, así que un formulario antiguo sin
+	 * `datos_territoriales` sigue dando el informe completo.
+	 *
+	 * @param array<string,mixed> $input
+	 * @return array<string,bool>
+	 */
+	public static function layers( array $input ): array {
+		$raw = self::sub( $input, 'datos_territoriales' );
+		$out = array();
+		foreach ( self::LAYERS as $key ) {
+			$value = $raw[ $key ] ?? null;
+			if ( null === $value || '' === $value ) {
+				$out[ $key ] = true;
+				continue;
+			}
+			$slug        = self::slug( $value );
+			$out[ $key ] = ! in_array( $slug, array( 'excluir', 'excluida', 'excluido', 'no', 'false', '0', 'off', 'ocultar' ), true );
+		}
+		return $out;
 	}
 
 	/**
@@ -247,7 +305,11 @@ final class Form_Mapper {
 			'gender'                    => self::clean_one( $bp['genero'] ?? null ),
 			'family_status'             => self::vocab( 'family', self::first_of( $bp['estado_civil'] ?? null ) ),
 			'education_level'           => self::vocab( 'education', $bp['academia'] ?? null ),
+			// El formulario ya no pregunta la nacionalidad (manda la lista
+			// vacía): pregunta el peso de población extranjera. La
+			// nacionalidad se sigue entendiendo para los borradores de antes.
 			'nationality'               => self::clean_one( self::first_of( $bp['nacionalidad'] ?? null ) ),
+			'foreign_share'             => self::vocab( 'foreign', $bp['peso_poblacion_extranjera'] ?? null ),
 			'annual_income'             => self::vocab( 'income_year', self::first_of( $bp['renta_anual'] ?? null ) ),
 			'monthly_available_income'  => self::vocab( 'income_month', $bp['renta_mensual'] ?? null ),
 			// De varios tramos marcados gana el más alto, igual que en
