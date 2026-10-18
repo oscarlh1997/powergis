@@ -35,7 +35,17 @@ final class Render {
 		if ( ! is_singular( CPT::POST_TYPE ) && ! self::page_has_shortcode() ) {
 			return;
 		}
+		self::enqueue_assets( (int) get_the_ID() );
+	}
 
+	/**
+	 * Bundle, estilos y configuración del informe. Lo usa también la página
+	 * del invitado (`Shares`), que no es un post: allí `postId` va a 0 y
+	 * `shareToken` lleva el token del enlace.
+	 *
+	 * @param array<string,mixed> $extra Claves que se añaden a `PowerGISConfig`.
+	 */
+	public static function enqueue_assets( int $post_id, array $extra = array() ): void {
 		wp_enqueue_script(
 			'powergis-report',
 			POWERGIS_URL . 'assets/js/report.js',
@@ -56,11 +66,17 @@ final class Render {
 		wp_enqueue_script( 'maplibre-gl', 'https://cdnjs.cloudflare.com/ajax/libs/maplibre-gl/4.7.1/maplibre-gl.js', array(), '4.7.1', true );
 		wp_enqueue_style( 'maplibre-gl', 'https://cdnjs.cloudflare.com/ajax/libs/maplibre-gl/4.7.1/maplibre-gl.css', array(), '4.7.1' );
 
-		$post_id = get_the_ID();
+		// El diálogo de compartir va en su propio fichero para que el panel de
+		// control pueda llevarse el botón a donde quiera: basta con poner un
+		// `[data-pg-share-open]` en cualquier parte de la página.
+		if ( empty( $extra['shareToken'] ) ) {
+			wp_enqueue_script( 'powergis-share', POWERGIS_URL . 'assets/js/share.js', array( 'powergis-report' ), POWERGIS_VERSION, true );
+		}
+
 		wp_localize_script(
 			'powergis-report',
 			'PowerGISConfig',
-			array(
+			$extra + array(
 				'restUrl'  => esc_url_raw( rest_url( REST_Projects::NAMESPACE ) ),
 				'nonce'    => wp_create_nonce( 'wp_rest' ),
 				'postId'   => (int) $post_id,

@@ -27,6 +27,7 @@ final class Plugin {
 		REST_Callback::hooks();
 		Stripe::hooks();
 		Render::hooks();
+		Shares::hooks();
 		Form::hooks();
 		Settings::hooks();
 		Dev::hooks();   // no hace nada salvo con POWERGIS_DEV_MODE

@@ -21,6 +21,9 @@
 
 	const CFG = window.PowerGISConfig || {};
 	const T = CFG.i18n || {};
+	// Enlace compartido: el invitado ve el informe y nada más. Sin compra,
+	// sin exportaciones y sin reajuste del PlaceRank (son del dueño).
+	const SHARED = Boolean(CFG.shareToken);
 
 	const PALETTE = ['#2563eb', '#f59e0b', '#059669', '#7c3aed', '#dc2626', '#0891b2'];
 	const SEQ = ['#eff6ff', '#bfdbfe', '#60a5fa', '#2563eb', '#1e40af'];
@@ -492,11 +495,18 @@
 		section.appendChild(el('h2', null, 'PlaceRank'));
 		section.appendChild(el('p', 'pg-muted', placerank.method));
 
+		const table = el('div');
+		if (SHARED) {
+			section.appendChild(table);
+			drawRank(table, placerank.rows);
+			container.appendChild(section);
+			return;
+		}
+
 		// Ajuste de pesos en vivo: el backend reutiliza las dimensiones ya
 		// calculadas, así que responde al instante.
 		const sliders = el('div', 'pg-weights');
 		const weights = Object.assign({}, placerank.weights);
-		const table = el('div');
 
 		Object.keys(weights).forEach((key) => {
 			const row = el('label', 'pg-weight');
@@ -708,6 +718,7 @@
 
 		(payload.sections || []).forEach((section) => {
 			if (!section.available) {
+				if (SHARED) return;   // al invitado no se le vende nada
 				locked.push(section);
 				renderLockedMarker(root, section);
 				return;
@@ -968,6 +979,9 @@
 		if (!root) return;
 
 		const postId = Number(root.dataset.pgReport || CFG.postId);
+		const reportPath = SHARED
+			? '/shared/' + encodeURIComponent(CFG.shareToken) + '/report'
+			: '/projects/' + postId + '/report';
 		root.innerHTML = '<div class="pg-loading">' + (T.loading || 'Cargando…') + '</div>';
 
 		// Vuelta de Stripe. El webhook desbloquea el informe en segundo plano,
@@ -978,14 +992,14 @@
 		// secciones bloqueadas y el botón de comprar. Es el peor momento
 		// posible para un fallo, y no lo detecta ningún reintento por error
 		// porque no hay error: hay una respuesta correcta y antigua.
-		const justPaid = /[?&]pg_pago=ok\b/.test(window.location.search);
+		const justPaid = !SHARED && /[?&]pg_pago=ok\b/.test(window.location.search);
 		const waitUntil = Date.now() + 180000;   // 3 min: si el webhook no ha
 		                                         // llegado, algo va mal de verdad
 
 		let delay = 2000;
 		const attempt = async () => {
 			try {
-				const payload = await api('/projects/' + postId + '/report');
+				const payload = await api(reportPath);
 
 				if (justPaid && payload.tier !== 'avanzado' && Date.now() < waitUntil) {
 					root.innerHTML = '<div class="pg-loading">'
@@ -1018,7 +1032,10 @@
 					setTimeout(attempt, delay);
 					return;
 				}
-				root.innerHTML = '<div class="pg-error">' + (error.message || T.error) + '</div>';
+				// textContent: en la página del invitado el mensaje lo decide
+				// el servidor, pero no se interpreta como HTML en ningún caso.
+				root.innerHTML = '';
+				root.appendChild(el('div', 'pg-error', error.message || T.error));
 			}
 		};
 		attempt();

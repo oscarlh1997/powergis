@@ -3,7 +3,7 @@
  * Plugin Name:       PowerGIS Connector
  * Plugin URI:        https://powergis.es
  * Description:       Conecta WordPress con el motor de informes de PowerGIS: CPT de proyectos, endpoints firmados, Stripe Checkout y render del informe desde el payload JSON.
- * Version:           1.0.3
+ * Version:           1.1.0
  * Requires at least: 6.4
  * Requires PHP:      8.1
  * Author:            PowerGIS
@@ -22,7 +22,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'POWERGIS_VERSION', '1.0.3' );
+define( 'POWERGIS_VERSION', '1.1.0' );
 define( 'POWERGIS_FILE', __FILE__ );
 define( 'POWERGIS_PATH', plugin_dir_path( __FILE__ ) );
 define( 'POWERGIS_URL', plugin_dir_url( __FILE__ ) );
@@ -46,6 +46,7 @@ require_once POWERGIS_PATH . 'includes/class-rest-projects.php';
 require_once POWERGIS_PATH . 'includes/class-rest-callback.php';
 require_once POWERGIS_PATH . 'includes/class-stripe.php';
 require_once POWERGIS_PATH . 'includes/class-render.php';
+require_once POWERGIS_PATH . 'includes/class-shares.php';
 require_once POWERGIS_PATH . 'includes/class-form.php';
 require_once POWERGIS_PATH . 'includes/class-dev.php';
 require_once POWERGIS_PATH . 'includes/class-settings.php';
@@ -63,6 +64,7 @@ register_activation_hook(
 	static function (): void {
 		\PowerGIS\CPT::register();
 		\PowerGIS\CPT::seed_terms();
+		\PowerGIS\Shares::install();
 		flush_rewrite_rules();
 	}
 );
