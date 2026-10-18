@@ -118,6 +118,7 @@ $mapped = PowerGIS\Form_Mapper::to_engine_payload( $payload, $resolver->as_calla
 WP_CLI::log( '  scope    : ' . wp_json_encode( $mapped['scope'], JSON_UNESCAPED_UNICODE ) );
 WP_CLI::log( '  segments : ' . wp_json_encode( $mapped['segments'], JSON_UNESCAPED_UNICODE ) );
 WP_CLI::log( '  business : ' . wp_json_encode( $mapped['business'], JSON_UNESCAPED_UNICODE ) );
+WP_CLI::log( '  layers   : ' . wp_json_encode( $mapped['layers'] ?? array(), JSON_UNESCAPED_UNICODE ) );
 WP_CLI::log( '  target   : ' . count( $mapped['target'] ) . ' campos declarados' );
 
 foreach ( $mapped['target'] as $campo => $valor ) {

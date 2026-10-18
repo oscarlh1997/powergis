@@ -159,7 +159,7 @@ return ob_get_clean();
 
 
 /**
- * Shortcode: Crear Proyecto V6
+ * Shortcode: Crear Proyecto V6 (perfil de cliente y capas territoriales)
  * Reescrito 16 ago 2026: mismo mecanismo de datos/nonce que la versión original
  * (probada y funcionando), con nuevo diseño de marca PowerGIS, formulario en pasos,
  * autoguardado de borrador, tooltips de ayuda y payload anidado bajo "definicion"
@@ -198,7 +198,6 @@ add_shortcode('crear_proyecto_v6', function () {
 
     $cnae_url    = SAAS_STUDIES_URL . 'data/Estructura_CNAE2025.csv';
     $arbol_url   = SAAS_STUDIES_URL . 'data/arbol.json';
-    $paises_url  = SAAS_STUDIES_URL . 'data/paises.csv';
 
     $rest_create_url = rest_url('saas/v1/projects/create');
     $rest_draft_url  = rest_url('saas/v1/projects/save-draft');
@@ -324,7 +323,7 @@ add_shortcode('crear_proyecto_v6', function () {
   .pg-suggestion { padding: 9px 13px; font-size: 13.5px; cursor: pointer; }
   .pg-suggestion:hover, .pg-suggestion.is-active { background: var(--pg-orange-light); }
 
-  /* Selector de nacionalidades (chips, hasta 5) */
+  /* Chips de selección múltiple */
   .pg-chips { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 10px; }
   .pg-chip { display: inline-flex; align-items: center; gap: 6px; background: var(--pg-orange-light); color: var(--pg-orange-dark); font-family: 'Poppins', sans-serif; font-size: 12.5px; font-weight: 600; padding: 6px 8px 6px 12px; border-radius: 999px; }
   .pg-chip button { background: none; border: none; color: var(--pg-orange-dark); cursor: pointer; font-size: 13px; line-height: 1; padding: 2px; }
@@ -343,6 +342,18 @@ add_shortcode('crear_proyecto_v6', function () {
   .pg-btn--primary { background: var(--pg-orange); color: #fff; }
   .pg-btn--primary:hover:not(:disabled) { background: var(--pg-orange-dark); }
   .pg-actions .pg-btn--soft { margin-left: auto; }
+  .pg-actions.is-final { display:block; padding:18px 24px; }
+  .pg-actions__nav { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+  .pg-final-submit { width:100%; justify-content:center; margin-top:12px; padding:16px 22px; font-size:15px; }
+  .pg-policy-note { font-size:12px; line-height:1.55; color:var(--pg-ink-soft); text-align:center; margin:10px 0 0; }
+  .pg-switch-row { display:flex; align-items:center; justify-content:space-between; gap:16px; padding:12px 14px; border:1px solid var(--pg-line); border-radius:12px; }
+  .pg-switch-row p { margin:3px 0 0; }
+  .pg-switch-row input[type=checkbox] { position:absolute; opacity:0; width:1px; height:1px; }
+  .pg-switch__track { display:block; width:44px; height:25px; border-radius:99px; background:#c7cbd1; position:relative; transition:background .2s; flex-shrink:0; cursor:pointer; }
+  .pg-switch__track:after { content:""; position:absolute; top:3px; left:3px; width:19px; height:19px; border-radius:50%; background:#fff; box-shadow:0 1px 3px #0002; transition:transform .2s; }
+  .pg-switch input:checked + .pg-switch__track { background:var(--pg-orange); }
+  .pg-switch input:checked + .pg-switch__track:after { transform:translateX(19px); }
+  .pg-layer-subsections.is-disabled { opacity:.38; filter:grayscale(1); pointer-events:none; }
   .pg-save-status { font-size: 12px; color: var(--pg-ink-soft); font-family: 'Poppins', sans-serif; white-space: nowrap; }
   .pg-save-status.is-ok { color: var(--pg-success); }
 
@@ -384,7 +395,7 @@ add_shortcode('crear_proyecto_v6', function () {
       <div class="pg-field">
         <label class="pg-label">1. Tipo de estudio<span class="req">*</span><span class="pg-info" tabindex="0" data-tip="Selecciona el tipo de estudio que deseas realizar.">i</span></label>
         <div class="pg-cards pg-cards--4" data-group="tipo_estudio">
-          <label class="pg-card"><input type="radio" name="tipo_estudio" value="nacional"><span class="pg-card__ui"><img src="https://powergis.es/wp-content/uploads/2026/07/spaintrans.png" alt="" loading="lazy">Nacional</span></label>
+          <label class="pg-card"><input type="radio" name="tipo_estudio" value="nacional" checked><span class="pg-card__ui"><img src="https://powergis.es/wp-content/uploads/2026/07/spaintrans.png" alt="" loading="lazy">Nacional</span></label>
           <label class="pg-card"><input type="radio" name="tipo_estudio" value="ccaa"><span class="pg-card__ui"><img src="https://powergis.es/wp-content/uploads/2026/07/comuni-trans.png" alt="" loading="lazy">Comunidad</span></label>
           <label class="pg-card"><input type="radio" name="tipo_estudio" value="provincia"><span class="pg-card__ui"><img src="https://powergis.es/wp-content/uploads/2026/07/municipio-trans.png" alt="" loading="lazy">Provincia</span></label>
           <label class="pg-card"><input type="radio" name="tipo_estudio" value="poblacion"><span class="pg-card__ui"><img src="https://powergis.es/wp-content/uploads/2026/07/prov-trans.png" alt="" loading="lazy">Población</span></label>
@@ -443,7 +454,8 @@ add_shortcode('crear_proyecto_v6', function () {
       <div class="pg-block">
         <div class="pg-field" style="margin-top:0">
           <label class="pg-label">4. Clasificación del ticket promedio<span class="req">*</span><span class="pg-info" tabindex="0" data-tip="Valor medio de una transacción de venta habitual, para determinar el posicionamiento de precio.">i</span></label>
-          <div class="pg-ticket-grid" id="ticket-grid" data-warn-max="2">
+          <div class="pg-ticket-grid" id="ticket-grid" data-warn-max="2" data-exclusive="Indiferente">
+            <label class="pg-ticket"><input type="checkbox" name="ticket" value="Indiferente" checked><span class="pg-ticket__ui"><span><span class="pg-ticket__name">Indiferente</span><br><span class="pg-ticket__range">Cualquier rango de gasto</span></span></span></label>
             <label class="pg-ticket"><input type="checkbox" name="ticket" value="Micro"><span class="pg-ticket__ui"><span><span class="pg-ticket__name">Micro-gasto</span><br><span class="pg-ticket__range">&lt; 10€ · impulso / recurrente</span></span></span></label>
             <label class="pg-ticket"><input type="checkbox" name="ticket" value="Bajo"><span class="pg-ticket__ui"><span><span class="pg-ticket__name">Bajo</span><br><span class="pg-ticket__range">10-50€ · consumo diario</span></span></span></label>
             <label class="pg-ticket"><input type="checkbox" name="ticket" value="Medio"><span class="pg-ticket__ui"><span><span class="pg-ticket__name">Medio</span><br><span class="pg-ticket__range">51-200€ · compra planificada</span></span></span></label>
@@ -452,7 +464,7 @@ add_shortcode('crear_proyecto_v6', function () {
             <label class="pg-ticket"><input type="checkbox" name="ticket" value="Lujo"><span class="pg-ticket__ui"><span><span class="pg-ticket__name">Lujo</span><br><span class="pg-ticket__range">&gt; 5.000€ · alta consideración</span></span></span></label>
           </div>
           <p class="pg-max-warning" id="ticket-warning">Se recomienda marcar 1 o 2 opciones para obtener resultados más precisos.</p>
-          <p class="pg-error-msg">Elige al menos una franja de ticket promedio.</p>
+          <p class="pg-error-msg">Selecciona un rango de ticket o deja «Indiferente».</p>
         </div>
       </div>
     </section>
@@ -460,14 +472,14 @@ add_shortcode('crear_proyecto_v6', function () {
     <!-- ============ SECCIÓN 2: BUYER PERSONA ============ -->
     <section class="pg-section" data-section="1">
       <h2 class="pg-section__title">Perfil del público objetivo (Buyer Persona)</h2>
-      <p class="pg-section__desc">Detalla quién es el consumidor ideal al que dirigiremos los esfuerzos. Ninguno de estos campos es obligatorio.</p>
+      <p class="pg-section__desc">Define el perfil del cliente objetivo. La edad y las dos variables de renta son obligatorias; puedes dejar «Indiferente» si no tienes una preferencia concreta.</p>
 
       <div class="pg-block">
         <div class="pg-block__title">Atributos demográficos</div>
         <div class="pg-field" style="margin-top:0">
-          <label class="pg-label">1. Rango de edad prioritario<span class="pg-info" tabindex="0" data-tip="Identifica los grupos de edad que concentran la mayor parte de tu demanda potencial.">i</span></label>
-          <div class="pg-list" data-group="edad" data-exclusive="Indiferente">
-            <label class="pg-opt"><input type="checkbox" name="edad" value="Indiferente"><span class="pg-opt__ui"><span class="pg-opt__dot"></span><span class="pg-opt__text">Indiferente</span></span></label>
+          <label class="pg-label">1. Rango de edad prioritario<span class="req">*</span><span class="pg-info" tabindex="0" data-tip="Identifica los grupos de edad que concentran la mayor parte de tu demanda potencial.">i</span></label>
+          <div class="pg-list" data-group="edad" data-exclusive="Indiferente" aria-required="true">
+            <label class="pg-opt"><input type="checkbox" name="edad" value="Indiferente" checked><span class="pg-opt__ui"><span class="pg-opt__dot"></span><span class="pg-opt__text">Indiferente</span></span></label>
             <label class="pg-opt"><input type="checkbox" name="edad" value="18-24"><span class="pg-opt__ui"><span class="pg-opt__dot"></span><span class="pg-opt__text">18 – 24 años</span><span class="pg-info" tabindex="0" data-tip="Jóvenes adultos, estudiantes o primer empleo.">i</span></span></label>
             <label class="pg-opt"><input type="checkbox" name="edad" value="25-34"><span class="pg-opt__ui"><span class="pg-opt__dot"></span><span class="pg-opt__text">25 – 34 años</span><span class="pg-info" tabindex="0" data-tip="Profesionales jóvenes, inicio de independencia financiera.">i</span></span></label>
             <label class="pg-opt"><input type="checkbox" name="edad" value="35-44"><span class="pg-opt__ui"><span class="pg-opt__dot"></span><span class="pg-opt__text">35 – 44 años</span><span class="pg-info" tabindex="0" data-tip="Consolidación profesional y familiar.">i</span></span></label>
@@ -476,12 +488,13 @@ add_shortcode('crear_proyecto_v6', function () {
             <label class="pg-opt"><input type="checkbox" name="edad" value="65+"><span class="pg-opt__ui"><span class="pg-opt__dot"></span><span class="pg-opt__text">65 años o más</span><span class="pg-info" tabindex="0" data-tip="Jubilados con necesidades específicas de ocio y salud.">i</span></span></label>
           </div>
           <div id="gen-labels" class="pg-hint"></div>
+          <p class="pg-error-msg">Selecciona una franja de edad o marca «Indiferente».</p>
         </div>
 
         <div class="pg-field">
-          <label class="pg-label" for="f-genero">2. Segmentación por género<span class="req">*</span><span class="pg-info" tabindex="0" data-tip="Indica si tu producto se dirige a un sexo específico o si tiene un enfoque neutro/unisex.">i</span></label>
+          <label class="pg-label" for="f-genero">2. Segmentación por género<span class="pg-info" tabindex="0" data-tip="Indica si tu producto se dirige a un sexo específico o si tiene un enfoque neutro/unisex.">i</span></label>
           <select class="pg-select" id="f-genero" name="genero">
-            <option value="Indiferente">Indiferente</option>
+            <option value="Indiferente" selected>Indiferente</option>
             <option value="Femenino">Femenino</option>
             <option value="Masculino">Masculino</option>
           </select>
@@ -490,11 +503,10 @@ add_shortcode('crear_proyecto_v6', function () {
         <div class="pg-field">
           <label class="pg-label">3. Estado civil y estructura familiar<span class="pg-info" tabindex="0" data-tip="Define si tu cliente ideal es soltero, casado, o si su decisión de compra depende de su rol familiar. Puedes marcar varias.">i</span></label>
           <div class="pg-list" data-group="estado_civil" data-exclusive="Indiferente">
-            <label class="pg-opt"><input type="checkbox" name="estado_civil" value="Indiferente"><span class="pg-opt__ui"><span class="pg-opt__dot"></span><span class="pg-opt__text">Indiferente</span></span></label>
+            <label class="pg-opt"><input type="checkbox" name="estado_civil" value="Indiferente" checked><span class="pg-opt__ui"><span class="pg-opt__dot"></span><span class="pg-opt__text">Indiferente</span></span></label>
             <label class="pg-opt"><input type="checkbox" name="estado_civil" value="Soltero"><span class="pg-opt__ui"><span class="pg-opt__dot"></span><span class="pg-opt__text">Soltero(a) sin hijos</span></span></label>
             <label class="pg-opt"><input type="checkbox" name="estado_civil" value="Pareja"><span class="pg-opt__ui"><span class="pg-opt__dot"></span><span class="pg-opt__text">En pareja / casado(a) sin hijos</span></span></label>
-            <label class="pg-opt"><input type="checkbox" name="estado_civil" value="Nido Lleno"><span class="pg-opt__ui"><span class="pg-opt__dot"></span><span class="pg-opt__text">Nido lleno</span><span class="pg-info" tabindex="0" data-tip="Pareja con hijos menores de 12 años.">i</span></span></label>
-            <label class="pg-opt"><input type="checkbox" name="estado_civil" value="Nido Adolescentes"><span class="pg-opt__ui"><span class="pg-opt__dot"></span><span class="pg-opt__text">Nido con adolescentes</span><span class="pg-info" tabindex="0" data-tip="Hijos de 13 a 18 años.">i</span></span></label>
+            <label class="pg-opt"><input type="checkbox" name="estado_civil" value="Pareja con hijos"><span class="pg-opt__ui"><span class="pg-opt__dot"></span><span class="pg-opt__text">Pareja con hijos</span><span class="pg-info" tabindex="0" data-tip="Pareja con hijos menores o adolescentes.">i</span></span></label>
             <label class="pg-opt"><input type="checkbox" name="estado_civil" value="Nido Vacío"><span class="pg-opt__ui"><span class="pg-opt__dot"></span><span class="pg-opt__text">Nido vacío</span><span class="pg-info" tabindex="0" data-tip="Hijos que ya se independizaron.">i</span></span></label>
             <label class="pg-opt"><input type="checkbox" name="estado_civil" value="Monoparental"><span class="pg-opt__ui"><span class="pg-opt__dot"></span><span class="pg-opt__text">Monoparental</span><span class="pg-info" tabindex="0" data-tip="Padre o madre soltero(a) con hijos.">i</span></span></label>
           </div>
@@ -503,42 +515,40 @@ add_shortcode('crear_proyecto_v6', function () {
         <div class="pg-field">
           <label class="pg-label" for="f-academia">4. Nivel de formación académica<span class="pg-info" tabindex="0" data-tip="Grado máximo de estudios que suele tener tu cliente.">i</span></label>
           <select class="pg-select" id="f-academia" name="academia">
-            <option>Indiferente</option>
-            <option>Sin estudios / Educación básica</option>
-            <option>Educación Secundaria / Bachillerato</option>
-            <option>Técnico Superior / Grado Medio</option>
-            <option>Universitario / Grado Licenciatura</option>
-            <option>Postgrado (Maestría, Doctorado, MBA)</option>
+            <option value="Indiferente" selected>Indiferente</option>
+            <option value="Sin estudios o primaria">Sin estudios o primaria</option>
+            <option value="Secundaria y FP de grado medio">Secundaria y FP de grado medio</option>
+            <option value="Estudios superiores (FP superior y universidad)">Estudios superiores (FP superior y universidad)</option>
           </select>
         </div>
 
         <div class="pg-field">
-          <label class="pg-label">5. Nacionalidad<span class="pg-info" tabindex="0" data-tip="Especifica si tu público es local, extranjero o pertenece a una comunidad cultural determinada.">i</span></label>
-          <select class="pg-select" id="f-nacionalidad-picker"><option value="">Cargando países...</option></select>
-          <div class="pg-chips" id="nacionalidad-chips"></div>
-          <p class="pg-chips-note" id="nacionalidad-note">Elige hasta 5. Déjalo vacío si es indiferente.</p>
+          <label class="pg-label" for="f-peso-extranjera">5. Peso de población extranjera<span class="pg-info" tabindex="0" data-tip="Indica la proporción de población extranjera que te interesa en el área. PowerGIS deberá contrastarla con los datos disponibles para cada zona.">i</span></label>
+          <select class="pg-select" id="f-peso-extranjera" name="peso_poblacion_extranjera">
+            <option value="Indiferente" selected>Indiferente</option>
+            <option value="Baja">Baja</option>
+            <option value="Media">Media</option>
+            <option value="Alta">Alta</option>
+          </select>
         </div>
       </div>
 
       <div class="pg-block">
-        <div class="pg-block__title">Perfil socioeconómico</div>
-        <div class="pg-field" style="margin-top:0">
-          <label class="pg-label">6. Nivel socioeconómico (NSE)<span class="req">*</span><span class="pg-info" tabindex="0" data-tip="Clasifica el estatus social de tu audiencia según su capacidad de consumo y acceso a bienes.">i</span></label>
-          <div class="pg-list" data-group="nse" data-exclusive="Indiferente" data-max="3">
-            <label class="pg-opt"><input type="checkbox" name="nse" value="Indiferente"><span class="pg-opt__ui"><span class="pg-opt__dot"></span><span class="pg-opt__text">Indiferente</span></span></label>
-            <label class="pg-opt"><input type="checkbox" name="nse" value="A/B"><span class="pg-opt__ui"><span class="pg-opt__dot"></span><span class="pg-opt__text">A/B — Clase alta</span><span class="pg-info" tabindex="0" data-tip="Lujo, alta capacidad de ahorro.">i</span></span></label>
-            <label class="pg-opt"><input type="checkbox" name="nse" value="C+"><span class="pg-opt__ui"><span class="pg-opt__dot"></span><span class="pg-opt__text">C+ — Media-alta</span><span class="pg-info" tabindex="0" data-tip="Confort, servicios premium.">i</span></span></label>
-            <label class="pg-opt"><input type="checkbox" name="nse" value="C"><span class="pg-opt__ui"><span class="pg-opt__dot"></span><span class="pg-opt__text">C — Media</span><span class="pg-info" tabindex="0" data-tip="Consumo estándar, créditos.">i</span></span></label>
-            <label class="pg-opt"><input type="checkbox" name="nse" value="D+"><span class="pg-opt__ui"><span class="pg-opt__dot"></span><span class="pg-opt__text">D+ — Media-baja</span><span class="pg-info" tabindex="0" data-tip="Consumo básico, sensible al precio.">i</span></span></label>
-            <label class="pg-opt"><input type="checkbox" name="nse" value="D/E"><span class="pg-opt__ui"><span class="pg-opt__dot"></span><span class="pg-opt__text">D/E — Baja</span><span class="pg-info" tabindex="0" data-tip="Subsistencia.">i</span></span></label>
-          </div>
-          <p class="pg-max-warning" id="nse-warning">Hemos limitado la selección a máximo 3 para obtener mejores resultados.</p>
-        </div>
-
+        <div class="pg-block__title">Variables de contexto del público objetivo</div>
         <div class="pg-field">
-          <label class="pg-label">7. Renta bruta anual por hogar<span class="pg-info" tabindex="0" data-tip="Estima el ingreso total acumulado por la unidad familiar del cliente objetivo.">i</span></label>
-          <div class="pg-list" data-group="renta_anual" data-exclusive="Indiferente">
-            <label class="pg-opt"><input type="checkbox" name="renta_anual" value="Indiferente"><span class="pg-opt__ui"><span class="pg-opt__dot"></span><span class="pg-opt__text">Indiferente</span></span></label>
+          <div class="pg-switch-row"><div><b>Incluir resultados electorales</b><p class="pg-hint">Añade resultados electorales agregados al análisis territorial, sin inferir la ideología de personas concretas.</p></div><label class="pg-switch"><input type="checkbox" name="datos_votaciones_politicas" checked><span class="pg-switch__track"></span></label></div>
+        </div>
+        <div class="pg-field">
+          <div class="pg-switch-row"><div><b>Incluir traslados entre provincias</b><p class="pg-hint">Considera los movimientos entre provincias como contexto de movilidad y demanda.</p></div><label class="pg-switch"><input type="checkbox" name="datos_traslados_entre_provincias" checked><span class="pg-switch__track"></span></label></div>
+        </div>
+      </div>
+
+      <div class="pg-block">
+        <div class="pg-block__title">Capacidad económica del público objetivo</div>
+        <div class="pg-field">
+          <label class="pg-label">6. Renta bruta anual por hogar<span class="req">*</span><span class="pg-info" tabindex="0" data-tip="Estima el ingreso total acumulado por la unidad familiar del cliente objetivo.">i</span></label>
+          <div class="pg-list" data-group="renta_anual" data-exclusive="Indiferente" aria-required="true">
+            <label class="pg-opt"><input type="checkbox" name="renta_anual" value="Indiferente" checked><span class="pg-opt__ui"><span class="pg-opt__dot"></span><span class="pg-opt__text">Indiferente</span></span></label>
             <label class="pg-opt"><input type="checkbox" name="renta_anual" value="Subsistencia"><span class="pg-opt__ui"><span class="pg-opt__dot"></span><span class="pg-opt__text">Subsistencia</span><span class="pg-info" tabindex="0" data-tip="< 12.000 €/año">i</span></span></label>
             <label class="pg-opt"><input type="checkbox" name="renta_anual" value="Baja-Media"><span class="pg-opt__ui"><span class="pg-opt__dot"></span><span class="pg-opt__text">Clase baja-media</span><span class="pg-info" tabindex="0" data-tip="12.000€ a 24.000€/año">i</span></span></label>
             <label class="pg-opt"><input type="checkbox" name="renta_anual" value="Media"><span class="pg-opt__ui"><span class="pg-opt__dot"></span><span class="pg-opt__text">Clase media</span><span class="pg-info" tabindex="0" data-tip="24.001€ a 45.000€/año">i</span></span></label>
@@ -546,17 +556,19 @@ add_shortcode('crear_proyecto_v6', function () {
             <label class="pg-opt"><input type="checkbox" name="renta_anual" value="Alta"><span class="pg-opt__ui"><span class="pg-opt__dot"></span><span class="pg-opt__text">Clase alta</span><span class="pg-info" tabindex="0" data-tip="75.001€ a 150.000€/año">i</span></span></label>
             <label class="pg-opt"><input type="checkbox" name="renta_anual" value="HNWI"><span class="pg-opt__ui"><span class="pg-opt__dot"></span><span class="pg-opt__text">Alto patrimonio (HNWI)</span><span class="pg-info" tabindex="0" data-tip="> 150.000 €/año">i</span></span></label>
           </div>
+          <p class="pg-error-msg">Selecciona una franja de renta anual o marca «Indiferente».</p>
         </div>
 
         <div class="pg-field">
-          <label class="pg-label" for="f-renta-mensual">8. Renta mensual disponible<span class="pg-info" tabindex="0" data-tip="Excedente de dinero que le queda al cliente tras cubrir sus necesidades básicas.">i</span></label>
-          <select class="pg-select" id="f-renta-mensual" name="renta_mensual">
-            <option value="Indiferente">Indiferente</option>
-            <option value="Renta Crítica">Renta crítica — &lt; 300€ libres/mes (ahorro nulo)</option>
-            <option value="Renta Ajustada">Renta ajustada — 301€-800€ libres/mes (busca ofertas)</option>
-            <option value="Renta Holgada">Renta holgada — 801€-2.500€ libres/mes (ocio, marcas premium)</option>
-            <option value="Renta Discrecional">Renta discrecional — &gt; 2.500€ libres/mes (lujo e inversión)</option>
+          <label class="pg-label" for="f-renta-mensual">7. Renta mensual disponible (ahorro)<span class="req">*</span><span class="pg-info" tabindex="0" data-tip="Dinero que queda al hogar después de cubrir sus gastos básicos. Es una aproximación a su capacidad de ahorro y gasto discrecional.">i</span></label>
+          <select class="pg-select" id="f-renta-mensual" name="renta_mensual" aria-required="true">
+            <option value="Indiferente" selected>Indiferente</option>
+            <option value="Renta Crítica">Renta crítica — menos de 300 €/mes disponibles (ahorro bajo o nulo)</option>
+            <option value="Renta Ajustada">Renta ajustada — 301–800 €/mes disponibles (ahorro limitado; sensible al precio)</option>
+            <option value="Renta Holgada">Renta holgada — 801–2.500 €/mes disponibles (capacidad de ahorro y ocio)</option>
+            <option value="Renta Discrecional">Renta discrecional — más de 2.500 €/mes disponibles (mayor ahorro, inversión y consumo premium)</option>
           </select>
+          <p class="pg-error-msg">Selecciona una opción de renta mensual disponible o marca «Indiferente».</p>
         </div>
       </div>
     </section>
@@ -572,7 +584,7 @@ add_shortcode('crear_proyecto_v6', function () {
             <b style="font-family:'Poppins',sans-serif;font-size:13.5px">Competencia directa</b>
             <p class="pg-hint" style="margin-top:2px">Negocios que ofrecen exactamente el mismo producto o servicio que el tuyo, en tu radio de influencia. Ej: si abres una lavandería, tu competencia directa son otras lavanderías cercanas.</p>
           </div>
-          <label class="pg-switch"><input type="checkbox" name="comp_directa"><span class="pg-switch__track"></span></label>
+          <label class="pg-switch"><input type="checkbox" name="comp_directa" checked><span class="pg-switch__track"></span></label>
         </div>
       </div>
 
@@ -627,7 +639,7 @@ add_shortcode('crear_proyecto_v6', function () {
       <div class="pg-field">
         <label class="pg-label">Climatología y factores estacionales<span class="pg-info" tabindex="0" data-tip="Indica si la demanda de tu producto varía según el clima dominante.">i</span></label>
         <div class="pg-list" data-group="clima" data-exclusive="Indiferente">
-          <label class="pg-opt"><input type="checkbox" name="clima" value="Indiferente"><span class="pg-opt__ui"><span class="pg-opt__dot"></span><span class="pg-opt__text">Indiferente</span></span></label>
+          <label class="pg-opt"><input type="checkbox" name="clima" value="Indiferente" checked><span class="pg-opt__ui"><span class="pg-opt__dot"></span><span class="pg-opt__text">Indiferente</span></span></label>
           <label class="pg-opt"><input type="checkbox" name="clima" value="Calido"><span class="pg-opt__ui"><span class="pg-opt__dot"></span><span class="pg-opt__text">Cálido</span></span></label>
           <label class="pg-opt"><input type="checkbox" name="clima" value="Templado"><span class="pg-opt__ui"><span class="pg-opt__dot"></span><span class="pg-opt__text">Templado</span></span></label>
           <label class="pg-opt"><input type="checkbox" name="clima" value="Frio"><span class="pg-opt__ui"><span class="pg-opt__dot"></span><span class="pg-opt__text">Frío</span></span></label>
@@ -640,7 +652,7 @@ add_shortcode('crear_proyecto_v6', function () {
         <div class="pg-field" style="margin-top:0">
           <label class="pg-label">Tráfico peatonal<span class="pg-info" tabindex="0" data-tip="Flujo de personas a pie en la zona.">i</span></label>
           <div class="pg-list" data-group="trafico_peaton" data-exclusive="Indiferente">
-            <label class="pg-opt"><input type="checkbox" name="trafico_peaton" value="Indiferente"><span class="pg-opt__ui"><span class="pg-opt__dot"></span><span class="pg-opt__text">Indiferente</span></span></label>
+            <label class="pg-opt"><input type="checkbox" name="trafico_peaton" value="Indiferente" checked><span class="pg-opt__ui"><span class="pg-opt__dot"></span><span class="pg-opt__text">Indiferente</span></span></label>
             <label class="pg-opt"><input type="checkbox" name="trafico_peaton" value="Muy Alta"><span class="pg-opt__ui"><span class="pg-opt__dot"></span><span class="pg-opt__text">Muy alta (Premium)</span></span></label>
             <label class="pg-opt"><input type="checkbox" name="trafico_peaton" value="Alta"><span class="pg-opt__ui"><span class="pg-opt__dot"></span><span class="pg-opt__text">Alta</span></span></label>
             <label class="pg-opt"><input type="checkbox" name="trafico_peaton" value="Media"><span class="pg-opt__ui"><span class="pg-opt__dot"></span><span class="pg-opt__text">Media</span></span></label>
@@ -650,7 +662,7 @@ add_shortcode('crear_proyecto_v6', function () {
         <div class="pg-field" style="margin-top:0">
           <label class="pg-label">Tráfico vehicular<span class="pg-info" tabindex="0" data-tip="Flujo de coches y transporte en la zona.">i</span></label>
           <div class="pg-list" data-group="trafico_vehicular" data-exclusive="Indiferente">
-            <label class="pg-opt"><input type="checkbox" name="trafico_vehicular" value="Indiferente"><span class="pg-opt__ui"><span class="pg-opt__dot"></span><span class="pg-opt__text">Indiferente</span></span></label>
+            <label class="pg-opt"><input type="checkbox" name="trafico_vehicular" value="Indiferente" checked><span class="pg-opt__ui"><span class="pg-opt__dot"></span><span class="pg-opt__text">Indiferente</span></span></label>
             <label class="pg-opt"><input type="checkbox" name="trafico_vehicular" value="Muy Alta"><span class="pg-opt__ui"><span class="pg-opt__dot"></span><span class="pg-opt__text">Muy alta</span></span></label>
             <label class="pg-opt"><input type="checkbox" name="trafico_vehicular" value="Alta"><span class="pg-opt__ui"><span class="pg-opt__dot"></span><span class="pg-opt__text">Alta</span></span></label>
             <label class="pg-opt"><input type="checkbox" name="trafico_vehicular" value="Media"><span class="pg-opt__ui"><span class="pg-opt__dot"></span><span class="pg-opt__text">Media</span></span></label>
@@ -659,18 +671,36 @@ add_shortcode('crear_proyecto_v6', function () {
         </div>
       </div>
 
-      <div class="pg-field">
-        <label class="pg-label" for="f-comentarios">¿Algún comentario que debamos saber al realizar este proyecto?</label>
-        <textarea class="pg-input" id="f-comentarios" name="comentarios" rows="3" placeholder="Opcional" style="resize:vertical"></textarea>
+      <div class="pg-block">
+        <div class="pg-block__title">Capas territoriales complementarias</div>
+        <p class="pg-block__desc">Activa las fuentes que quieres incorporar al informe. Las capas inmobiliarias se activan o desactivan todas juntas.</p>
+        <div class="pg-field">
+          <div class="pg-switch-row"><div><b>Incluir nivel turístico</b><p class="pg-hint">Añade el contexto turístico al informe cuando esté activado.</p></div><label class="pg-switch"><input type="checkbox" name="datos_nivel_turistico" checked><span class="pg-switch__track"></span></label></div>
+        </div>
+        <div class="pg-field">
+          <div class="pg-switch-row"><div><b>Incluir mercado inmobiliario y parque residencial</b><p class="pg-hint">Activa conjuntamente todas las subsecciones inmobiliarias. No se pueden configurar de forma individual.</p></div><label class="pg-switch"><input type="checkbox" id="f-datos-inmobiliario" name="datos_mercado_inmobiliario" checked><span class="pg-switch__track"></span></label></div>
+        </div>
+        <div id="pgLayerSubsections" class="pg-layer-subsections">
+          <div class="pg-row2">
+            <div class="pg-field"><label class="pg-label" for="f-datos-compraventa">Compra-venta de inmuebles</label><select class="pg-select" id="f-datos-compraventa" name="datos_compra_venta_inmuebles" disabled><option value="incluir" selected>Incluida</option><option value="excluir">Excluida</option></select></div>
+            <div class="pg-field"><label class="pg-label" for="f-datos-viviendas">Viviendas vacías y principales</label><select class="pg-select" id="f-datos-viviendas" name="datos_viviendas_vacias_principales" disabled><option value="incluir" selected>Incluida</option><option value="excluir">Excluida</option></select></div>
+            <div class="pg-field"><label class="pg-label" for="f-datos-precio-vivienda">Precio de vivienda e histórico</label><select class="pg-select" id="f-datos-precio-vivienda" name="datos_precio_vivienda_historico" disabled><option value="incluir" selected>Incluida</option><option value="excluir">Excluida</option></select></div>
+            <div class="pg-field"><label class="pg-label" for="f-datos-catastro">Catastro (locales y cartografía)</label><select class="pg-select" id="f-datos-catastro" name="datos_catastro_locales_cartografia" disabled><option value="incluir" selected>Incluida</option><option value="excluir">Excluida</option></select></div>
+            <div class="pg-field"><label class="pg-label" for="f-datos-alquiler">Alquiler de vivienda (proxy/estimación)</label><select class="pg-select" id="f-datos-alquiler" name="datos_alquiler_vivienda_proxy" disabled><option value="incluir" selected>Incluida</option><option value="excluir">Excluida</option></select></div>
+          </div>
+        </div>
       </div>
     </section>
 
     <div class="pg-actions">
       <div class="pg-validation-banner" id="pgValidationBanner">Datos obligatorios sin rellenar</div>
-      <button type="button" class="pg-btn pg-btn--ghost" id="pgBtnPrev">← Anterior</button>
-      <button type="button" class="pg-btn pg-btn--soft" id="pgBtnDraft">Guardar borrador</button>
-      <span class="pg-save-status" id="pgSaveStatus" aria-live="polite"></span>
-      <button type="button" class="pg-btn pg-btn--primary" id="pgBtnNext" style="margin-left:auto">Siguiente →</button>
+      <div class="pg-actions__nav" id="pgActionNav">
+        <button type="button" class="pg-btn pg-btn--ghost" id="pgBtnPrev">← Anterior</button>
+        <button type="button" class="pg-btn pg-btn--soft" id="pgBtnDraft">Guardar borrador</button>
+        <span class="pg-save-status" id="pgSaveStatus" aria-live="polite"></span>
+      </div>
+      <button type="button" class="pg-btn pg-btn--primary" id="pgBtnNext">Siguiente →</button>
+      <p class="pg-policy-note" id="pgPolicyNote" hidden>Al realizar el proyecto, confirmas que estás de acuerdo con nuestra <a href="https://powergis.es/privacy-policy/" target="_blank" rel="noopener noreferrer">política de tratamiento de datos</a>. Una vez enviado, no podrás deshacer la creación desde este formulario.</p>
     </div>
   </form>
 </div>
@@ -730,7 +760,6 @@ add_shortcode('crear_proyecto_v6', function () {
 
   var arbolUrl = "<?php echo esc_js($arbol_url); ?>";
   var cnaeUrl  = "<?php echo esc_js($cnae_url); ?>";
-  var paisesUrl = "<?php echo esc_js($paises_url); ?>";
   var restCreateUrl = "<?php echo esc_js($rest_create_url); ?>";
   var restDraftUrl  = "<?php echo esc_js($rest_draft_url); ?>";
   var wpNonce = "<?php echo esc_js($wp_nonce); ?>";
@@ -739,7 +768,6 @@ add_shortcode('crear_proyecto_v6', function () {
   var arbol = [];
   var cnaeRows = [];
   var cnaeFullData = [];
-  var nacionalidadesElegidas = [];
 
   var state = { projectId: null, step: 0, saving: false, firstSaveTriggered: false };
   var form = document.getElementById('pgForm');
@@ -811,8 +839,8 @@ add_shortcode('crear_proyecto_v6', function () {
         genero: getVal('genero'),
         estado_civil: getMulti('estado_civil'),
         academia: getVal('academia'),
-        nacionalidad: nacionalidadesElegidas.slice(),
-        nse: getMulti('nse'),
+        nacionalidad: [],
+        peso_poblacion_extranjera: getVal('peso_poblacion_extranjera'),
         renta_anual: getMulti('renta_anual'),
         renta_mensual: getVal('renta_mensual')
       },
@@ -827,7 +855,16 @@ add_shortcode('crear_proyecto_v6', function () {
         clima: getMulti('clima'),
         trafico_peaton: getMulti('trafico_peaton'),
         trafico_vehicular: getMulti('trafico_vehicular'),
-        comentarios: getVal('comentarios')
+      },
+      datos_territoriales: {
+        votaciones_politicas: getChecked('datos_votaciones_politicas') ? 'incluir' : 'excluir',
+        compra_venta_inmuebles: getChecked('datos_mercado_inmobiliario') ? 'incluir' : 'excluir',
+        viviendas_vacias_principales: getChecked('datos_mercado_inmobiliario') ? 'incluir' : 'excluir',
+        nivel_turistico: getChecked('datos_nivel_turistico') ? 'incluir' : 'excluir',
+        precio_vivienda_historico: getChecked('datos_mercado_inmobiliario') ? 'incluir' : 'excluir',
+        traslados_entre_provincias: getChecked('datos_traslados_entre_provincias') ? 'incluir' : 'excluir',
+        catastro_locales_cartografia: getChecked('datos_mercado_inmobiliario') ? 'incluir' : 'excluir',
+        alquiler_vivienda_proxy: getChecked('datos_mercado_inmobiliario') ? 'incluir' : 'excluir'
       },
       report_tier: reportTier || 'borrador'
     };
@@ -887,7 +924,13 @@ add_shortcode('crear_proyecto_v6', function () {
       s.classList.toggle('is-done', n < state.step);
     });
     btnPrev.disabled = state.step === 0;
-    btnNext.textContent = state.step === sections.length - 1 ? 'Realizar proyecto →' : 'Siguiente →';
+    var isFinalStep = state.step === sections.length - 1;
+    btnNext.textContent = isFinalStep ? 'Realizar proyecto →' : 'Siguiente →';
+    var actions = btnNext.closest('.pg-actions');
+    actions.classList.toggle('is-final', isFinalStep);
+    document.getElementById('pgPolicyNote').hidden = !isFinalStep;
+    btnNext.classList.toggle('pg-final-submit', isFinalStep);
+    document.getElementById('pgActionNav').style.display = isFinalStep ? 'none' : 'flex';
     window.scrollTo({ top: wizard.offsetTop - 10, behavior: 'smooth' });
   }
   function goToStep(n) {
@@ -923,9 +966,9 @@ add_shortcode('crear_proyecto_v6', function () {
   form.addEventListener('change', hideValidationBanner);
 
   /* ============ VALIDACIÓN POR PASO (bloquea "Siguiente") ============ */
-  // Solo el paso 0 (Definición) tiene campos obligatorios en el negocio actual;
-  // Buyer Persona / Ecosistema / Entorno son 100% opcionales. Se deja la
-  // estructura por pasos por si en el futuro se añaden obligatorios en otros.
+  // Obligatorios de definición y perfil del cliente objetivo.
+  // Edad y ambas variables de renta aceptan «Indiferente» como respuesta explícita,
+  // pero no permiten que el usuario deje los controles sin selección.
   var REQUIRED = {
     0: [
       { field: 'project_name', check: function () { return getVal('project_name').trim() !== ''; } },
@@ -936,6 +979,11 @@ add_shortcode('crear_proyecto_v6', function () {
       { field: 'sector', check: function () { return getVal('sector') !== ''; } },
       { field: 'actividad', check: function () { return getVal('actividad') !== ''; } },
       { field: 'ticket', check: function () { return getMulti('ticket').length > 0; }, wrapSelector: '#ticket-grid' }
+    ],
+    1: [
+      { field: 'edad', check: function () { return getMulti('edad').length > 0; }, wrapSelector: '[data-group="edad"]' },
+      { field: 'renta_anual', check: function () { return getMulti('renta_anual').length > 0; }, wrapSelector: '[data-group="renta_anual"]' },
+      { field: 'renta_mensual', check: function () { return getVal('renta_mensual') !== ''; } }
     ]
   };
 
@@ -945,12 +993,12 @@ add_shortcode('crear_proyecto_v6', function () {
     return el ? (el.closest('.pg-field') || el.closest('.pg-conditional')) : null;
   }
 
-  function validateStep(stepIndex) {
+  function validateStep(stepIndex, includeHidden) {
     var rules = REQUIRED[stepIndex] || [];
     var firstInvalid = null;
     rules.forEach(function (r) {
       var wrap = wrapFor(r);
-      var visible = !wrap || wrap.offsetParent !== null;
+      var visible = !!includeHidden || !wrap || wrap.offsetParent !== null;
       var ok = r.check();
       if (wrap) wrap.classList.toggle('has-error', visible && !ok);
       if (!ok && visible && !firstInvalid) firstInvalid = wrap;
@@ -959,7 +1007,7 @@ add_shortcode('crear_proyecto_v6', function () {
   }
   function validateAll() {
     for (var i = 0; i < sections.length; i++) {
-      var invalid = validateStep(i);
+      var invalid = validateStep(i, true);
       if (invalid) { goToStep(i); invalid.scrollIntoView({ behavior: 'smooth', block: 'center' }); showValidationBanner(); return false; }
     }
     return true;
@@ -1129,56 +1177,6 @@ add_shortcode('crear_proyecto_v6', function () {
     input.addEventListener('blur', function () { setTimeout(function () { box.classList.remove('is-visible'); }, 150); });
   });
 
-  /* ============ NACIONALIDAD: selector repetible hasta 5 ============ */
-  var selNacPicker = document.getElementById('f-nacionalidad-picker');
-  var chipsBox = document.getElementById('nacionalidad-chips');
-  var nacNote = document.getElementById('nacionalidad-note');
-  var PAISES_FALLBACK = ["España","Marruecos","Rumanía","Colombia","Venezuela","Ecuador","Perú","Argentina","Italia","China","Reino Unido","Francia","Alemania","Portugal","Ucrania","República Dominicana","Cuba","Bolivia","Honduras","Paraguay","Senegal","Nigeria","Pakistán","India","Brasil","México","Estados Unidos","Chile","Uruguay","Polonia","Otro"];
-
-  function renderNacPicker(paises) {
-    var disponibles = paises.filter(function (p) { return nacionalidadesElegidas.indexOf(p) === -1; });
-    selNacPicker.innerHTML = '<option value="">' + (nacionalidadesElegidas.length ? 'Añadir otra...' : 'Selecciona un país...') + '</option>';
-    disponibles.forEach(function (p) {
-      var opt = document.createElement('option'); opt.value = p; opt.textContent = p;
-      selNacPicker.appendChild(opt);
-    });
-    var atMax = nacionalidadesElegidas.length >= 5;
-    selNacPicker.disabled = atMax;
-    nacNote.textContent = atMax ? 'Has alcanzado el máximo de 5 nacionalidades.' : 'Elige hasta 5. Déjalo vacío si es indiferente. (' + nacionalidadesElegidas.length + '/5)';
-  }
-  function renderChips() {
-    chipsBox.innerHTML = '';
-    nacionalidadesElegidas.forEach(function (p) {
-      var chip = document.createElement('span'); chip.className = 'pg-chip';
-      chip.innerHTML = '<span></span><button type="button" aria-label="Quitar ' + p + '">✕</button>';
-      chip.querySelector('span').textContent = p;
-      chip.querySelector('button').addEventListener('click', function () {
-        nacionalidadesElegidas = nacionalidadesElegidas.filter(function (x) { return x !== p; });
-        renderChips(); renderNacPicker(window.__pgPaisesCache || PAISES_FALLBACK);
-      });
-      chipsBox.appendChild(chip);
-    });
-  }
-  selNacPicker.addEventListener('change', function () {
-    if (this.value && nacionalidadesElegidas.length < 5) {
-      nacionalidadesElegidas.push(this.value);
-      renderChips();
-      renderNacPicker(window.__pgPaisesCache || PAISES_FALLBACK);
-    }
-  });
-
-  fetch(paisesUrl).then(function (r) { return r.text(); }).then(function (t) {
-    var rows = t.split(/\r?\n/).slice(1);
-    var paises = rows.map(function (r) { return (r.split(',')[0] || '').replace(/"/g, '').trim(); }).filter(Boolean);
-    if (!paises.length) throw new Error('CSV de países vacío');
-    window.__pgPaisesCache = paises;
-    renderNacPicker(paises);
-  }).catch(function (err) {
-    console.warn('[PowerGIS] Usando lista de países de ejemplo:', err.message);
-    window.__pgPaisesCache = PAISES_FALLBACK;
-    renderNacPicker(PAISES_FALLBACK);
-  });
-
   /* ============ GRUPOS EXCLUSIVOS ("Indiferente") + MÁXIMOS ============ */
   document.querySelectorAll('[data-exclusive]').forEach(function (group) {
     var exclusiveValue = group.dataset.exclusive;
@@ -1207,16 +1205,25 @@ add_shortcode('crear_proyecto_v6', function () {
     ticketWarning.classList.toggle('is-visible', count > 2);
   });
 
+  var inmobiliarioToggle = form.querySelector('[name="datos_mercado_inmobiliario"]');
+  var inmobiliarioSubsections = document.getElementById('pgLayerSubsections');
+  function syncInmobiliario() {
+    var enabled = inmobiliarioToggle.checked;
+    inmobiliarioSubsections.classList.toggle('is-disabled', !enabled);
+    // Los cinco desplegables sólo enseñan lo que hace el interruptor: siguen
+    // deshabilitados, pero dicen «Excluida» cuando está apagado.
+    inmobiliarioSubsections.querySelectorAll('select').forEach(function (el) {
+      el.disabled = true;
+      el.value = enabled ? 'incluir' : 'excluir';
+    });
+  }
+  inmobiliarioToggle.addEventListener('change', syncInmobiliario);
+  syncInmobiliario();
+
   updateLocationVisibility();
   updateTipoExplainer();
   renderStep();
 
-  /* ============ ENVÍO FINAL: crea el proyecto básico directamente ============ */
-  // 16 ago 2026: se retiró el popup de elección básico/avanzado. El botón final
-  // ahora lanza siempre el proyecto gratuito/básico, exactamente con la misma
-  // llamada a /projects/create de siempre. El informe avanzado (de pago) se pide
-  // más adelante desde "Mis Proyectos" o desde la propia página del proyecto,
-  // ya no forma parte de este formulario.
   /* ============ PANTALLA DE CARGA → PROYECTO ============ */
   // Tras crear el proyecto se muestra la pantalla de carga y se consulta el
   // estado hasta que el motor termina. Sólo entonces se abre el proyecto: hasta
@@ -1299,6 +1306,7 @@ add_shortcode('crear_proyecto_v6', function () {
   // ya no forma parte de este formulario.
   function handleFinalSubmit() {
     if (!validateAll()) return;
+    if (!window.confirm('¿Confirmas que deseas realizar el proyecto? Una vez enviado, no podrás deshacer esta acción desde el formulario.')) return;
     btnNext.disabled = true;
     btnNext.textContent = 'Enviando...';
     var loading = showLoadingScreen();

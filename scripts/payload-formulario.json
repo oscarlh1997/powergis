@@ -1,5 +1,5 @@
 {
-  "_comentario": "Payload EXACTO que produce buildPayload() del shortcode [crear_proyecto_v6]. Sirve para probar el contrato sin abrir el navegador ni depender del tema. Si el formulario cambia, actualiza este fichero y las pruebas siguen siendo ciertas.",
+  "_comentario": "Payload EXACTO que produce buildPayload() del shortcode [crear_proyecto_v6] (versión del equipo de datos, 18/10/2026: sin NSE ni comentarios, con «peso de población extranjera» y los interruptores de datos_territoriales). Sirve para probar el contrato sin abrir el navegador ni depender del tema. Si el formulario cambia, actualiza este fichero y las pruebas siguen siendo ciertas.",
 
   "project_name": "Restaurantes - Madrid - prueba",
   "ultimo_paso": 5,
@@ -24,10 +24,10 @@
   "buyer_persona": {
     "edad": ["25-34", "35-44"],
     "genero": "Femenino",
-    "estado_civil": ["Nido Lleno"],
-    "academia": "Universitario / Grado Licenciatura",
-    "nacionalidad": ["España"],
-    "nse": ["A/B", "C+"],
+    "estado_civil": ["Pareja con hijos"],
+    "academia": "Estudios superiores (FP superior y universidad)",
+    "nacionalidad": [],
+    "peso_poblacion_extranjera": "Media",
     "renta_anual": ["Media-Alta"],
     "renta_mensual": "Renta Holgada"
   },
@@ -43,7 +43,17 @@
   "entorno": {
     "clima": ["Templado"],
     "trafico_peaton": ["Alta"],
-    "trafico_vehicular": ["Media"],
-    "comentarios": "Zona céntrica, prueba de integración"
+    "trafico_vehicular": ["Media"]
+  },
+
+  "datos_territoriales": {
+    "votaciones_politicas": "incluir",
+    "compra_venta_inmuebles": "incluir",
+    "viviendas_vacias_principales": "incluir",
+    "nivel_turistico": "excluir",
+    "precio_vivienda_historico": "incluir",
+    "traslados_entre_provincias": "excluir",
+    "catastro_locales_cartografia": "incluir",
+    "alquiler_vivienda_proxy": "incluir"
   }
 }
