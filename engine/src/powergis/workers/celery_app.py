@@ -67,7 +67,7 @@ app.conf.update(
             "args": ("ine_adrh",),
             "options": {"queue": "etl"},
         },
-        # Renta disponible, NSE, gasto… salen de la renta del Atlas. Después
+        # Renta disponible, resistencia económica, gasto… salen de la renta del Atlas. Después
         # del ADRH; la cola `etl` tiene concurrencia 1, así que va en orden.
         "derivados-economicos-mensual": {
             "task": "powergis.etl.refresh_source",

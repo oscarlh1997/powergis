@@ -20,7 +20,6 @@ def target() -> TargetProfile:
         "gender": "Indiferente",
         "family_status": "Nido lleno",
         "education_level": "Universitario",
-        "nse": ["A/B", "C+"],
         "annual_income": "45-75k",
         "climate": ["Templado"],
         "pedestrian_traffic": "Alto",
@@ -32,7 +31,6 @@ def target() -> TargetProfile:
 class TestTraduccionDelFormulario:
     def test_los_campos_del_formulario_se_leen_tal_cual(self, target):
         assert target.education_level == "Universitario"
-        assert target.nse == ("A/B", "C+")
         assert target.age_range == ("25-34", "35-44")
 
     def test_indiferente_no_genera_criterio(self, target):
@@ -176,7 +174,6 @@ class TestCriteriosQueNoSePuedenMedir:
 
         context.warnings.clear()
         perfil = TargetProfile.from_mapping({
-            "nse": ["a/b"],
             "family_status": "nido_lleno",
             "annual_income": "45-75k",
         })
@@ -202,7 +199,27 @@ class TestCriteriosQueNoSePuedenMedir:
         """El aviso se añade; la regla de no inventar no cambia."""
         from powergis.domain.target import TargetProfile, match_scores
 
-        perfil = TargetProfile.from_mapping({"nse": ["a/b"]})
+        perfil = TargetProfile.from_mapping({"family_status": "monoparental"})
         scores = match_scores(context, perfil)
 
         assert all(v is None or 0 <= v <= 100 for v in scores.values())
+
+
+class TestCriteriosNuevos:
+    """Respuestas del equipo de datos del 18/10/2026."""
+
+    def test_el_nse_ya_no_puntua(self):
+        perfil = TargetProfile.from_mapping({"nse": ["A/B"]})
+        assert all(c.label != "NSE" for c in perfil.criteria())
+
+    def test_una_nacionalidad_extranjera_pide_poblacion_extranjera(self):
+        perfil = TargetProfile.from_mapping({"nationality": "Marruecos"})
+        assert "dem.nat.foreign_pct" in [c.indicator for c in perfil.criteria()]
+
+    def test_la_nacionalidad_espanola_no_puntua(self):
+        perfil = TargetProfile.from_mapping({"nationality": "España"})
+        assert "dem.nat.foreign_pct" not in [c.indicator for c in perfil.criteria()]
+
+    def test_soltero_se_mide_con_el_censo(self):
+        perfil = TargetProfile.from_mapping({"family_status": "soltero"})
+        assert "dem.civil.single_pct" in [c.indicator for c in perfil.criteria()]

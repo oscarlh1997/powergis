@@ -19,7 +19,7 @@
  *     },
  *     ticket: [...],
  *     buyer_persona: { edad[], genero, estado_civil[], academia,
- *                      nacionalidad[], nse[], renta_anual[], renta_mensual },
+ *                      nacionalidad[], renta_anual[], renta_mensual },
  *     ecosistema:    { comp_directa, comp_indirecta_alta, comp_indirecta_media,
  *                      gen_trafico_alto, gen_trafico_medio },
  *     entorno:       { clima[], trafico_peaton[], trafico_vehicular[], comentarios }
@@ -111,14 +111,18 @@ final class Form_Mapper {
 			'sin estudios'     => 'sin_estudios',
 			'educacion basica' => 'sin_estudios',
 			'educacion secund' => 'secundaria',
+			'secundaria'       => 'secundaria',
 			'bachillerato'     => 'secundaria',
 			'tecnico superior' => 'tecnico_superior',
 			'grado medio'      => 'tecnico_superior',
 			'universitario'    => 'universitario',
+			'estudios superio' => 'universitario',
 			'postgrado'        => 'postgrado',
 		),
 		'family'       => array(
 			'soltero'           => 'soltero',
+			// Antes que 'pareja': gana el primer prefijo que encaja.
+			'pareja con hijos'  => 'nido_lleno',
 			'pareja'            => 'pareja_sin_hijos',
 			'casado'            => 'pareja_sin_hijos',
 			'nido lleno'        => 'nido_lleno',
@@ -244,7 +248,6 @@ final class Form_Mapper {
 			'family_status'             => self::vocab( 'family', self::first_of( $bp['estado_civil'] ?? null ) ),
 			'education_level'           => self::vocab( 'education', $bp['academia'] ?? null ),
 			'nationality'               => self::clean_one( self::first_of( $bp['nacionalidad'] ?? null ) ),
-			'nse'                       => array_map( 'strtolower', self::clean_list( $bp['nse'] ?? null ) ),
 			'annual_income'             => self::vocab( 'income_year', self::first_of( $bp['renta_anual'] ?? null ) ),
 			'monthly_available_income'  => self::vocab( 'income_month', $bp['renta_mensual'] ?? null ),
 			// De varios tramos marcados gana el más alto, igual que en

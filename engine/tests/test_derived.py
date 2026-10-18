@@ -220,16 +220,15 @@ class TestEconomicos:
         )
         assert out == {}
 
-    def test_el_indice_nse_necesita_la_mediana(self):
-        sin_mediana = coleccionar({"eco.gini": 0.32}, ["eco.nse.index"])
+    def test_la_resiliencia_necesita_la_mediana(self):
+        sin_mediana = coleccionar({"eco.gini": 0.32}, ["eco.resilience.index"])
         assert sin_mediana == {}
 
         con_mediana = coleccionar(
             {"eco.income.household.median": 28_000.0, "eco.gini": 0.32,
              "eco.nse.risk_pct": 18.0},
-            ["eco.nse.index", "eco.resilience.index"],
+            ["eco.resilience.index"],
         )
-        assert "eco.nse.index" in con_mediana
         assert "eco.resilience.index" in con_mediana
 
     def test_los_modelados_se_marcan_como_tales(self):
@@ -250,12 +249,12 @@ class TestEconomicos:
         assert hechos[0].source_ref == MODELLED_REF
         assert hechos[0].source_ref != "derivado"
 
-    def test_el_nse_se_calcula_aunque_falten_gini_y_riesgo(self):
+    def test_la_resiliencia_se_calcula_aunque_falten_gini_y_riesgo(self):
         """El almacén tiene huecos reales; el índice no debe exigirlo todo."""
         solo_mediana = coleccionar(
-            {"eco.income.household.median": 28_000.0}, ["eco.nse.index"]
+            {"eco.income.household.median": 28_000.0}, ["eco.resilience.index"]
         )
-        assert "eco.nse.index" in solo_mediana
+        assert "eco.resilience.index" in solo_mediana
 
     def test_mas_desigualdad_no_mejora_la_resiliencia(self):
         igual = coleccionar(

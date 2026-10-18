@@ -3,7 +3,7 @@
 Tres fallos silenciosos que nunca dieron un error:
 
 1. El registro creaba el colector de derivados SIN acceso al almacén, así que
-   `ingest derived` acababa «bien» con cero hechos. Renta disponible, NSE,
+   `ingest derived` acababa «bien» con cero hechos. Renta disponible, resistencia económica,
    gasto en el sector y ticket no existían en ningún informe.
 2. Los derivados se fechaban con el día de la carga: la renta de 2023 salía
    como dato de hoy, y cada ejecución añadía una fila nueva.
@@ -68,13 +68,13 @@ class TestElColectorVeElAlmacen:
         cargar, llamadas = _cargador(ALMACEN)
         c = DerivedCollector(facts_loader=cargar)
         hechos = c.collect(
-            ["eco.disposable.monthly", "eco.gross_monthly", "eco.nse.index"],
+            ["eco.disposable.monthly", "eco.gross_monthly", "eco.resilience.index"],
             [_geo()], Segments(),
         )
         por_codigo = {h.indicator: h for h in hechos}
         assert por_codigo["eco.disposable.monthly"].value == pytest.approx(2_500.0)
         assert por_codigo["eco.gross_monthly"].value == pytest.approx(3_000.0)
-        assert "eco.nse.index" in por_codigo
+        assert "eco.resilience.index" in por_codigo
         assert len(llamadas) == 1, "una lectura por lote, no una por municipio"
 
     def test_sin_acceso_no_inventa_nada(self):

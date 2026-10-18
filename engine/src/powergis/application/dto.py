@@ -99,6 +99,8 @@ class TargetIn(BaseModel):
     family_status: str | None = Field(default=None, max_length=48)
     education_level: str | None = Field(default=None, max_length=48)
     nationality: str | None = Field(default=None, max_length=64)
+    # Ya no se usa (el NSE salió del formulario el 18/10/2026). Se sigue
+    # aceptando para que un proyecto guardado con él no dé 422 al relanzarse.
     nse: list[str] = Field(default_factory=list, max_length=8)
     annual_income: str | None = Field(default=None, max_length=32)
     monthly_available_income: str | None = Field(default=None, max_length=32)

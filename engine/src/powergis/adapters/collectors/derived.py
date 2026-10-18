@@ -47,7 +47,7 @@ class DerivedCollector(BaseCollector):
         "dem.age.18_64_pct",
         "dem.sex.women_pct", "dem.pop.density", "dem.pop.segment_pct",
         "dem.edu.qualification_index",
-        "eco.nse.index", "eco.resilience.index", "eco.gross_monthly",
+        "eco.resilience.index", "eco.gross_monthly",
         "eco.disposable.monthly", "eco.gross_net_gap", "eco.saving.rate",
         "eco.financial_stress.index", "eco.sector_spend",
         "eco.consumer.ticket", "eco.consumer.frequency",
@@ -70,7 +70,7 @@ class DerivedCollector(BaseCollector):
         Sin ninguna de las dos el colector no ve nada y no escribe nada. Eso
         es lo que pasaba: el registro lo creaba sin acceso al almacén, así que
         `ingest derived` terminaba «bien» con cero hechos y la renta
-        disponible, el NSE y el gasto en el sector no existían en ningún
+        disponible, la resistencia económica y el gasto en el sector no existían en ningún
         informe.
         """
         self._lookup = facts_lookup
@@ -192,7 +192,6 @@ class DerivedCollector(BaseCollector):
         risk = v("eco.nse.risk_pct")
         median = v("eco.income.household.median")
         if median is not None:
-            modelled["eco.nse.index"] = _nse_index(median, gini, risk)
             modelled["eco.resilience.index"] = _resilience(median, gini, risk)
 
         out: list[Fact] = []
@@ -251,22 +250,7 @@ def _opportunity(demand: float | None, competitors: float | None) -> float | Non
     return demand / (1.0 + competitors)
 
 
-#: Mediana de la renta POR UNIDAD DE CONSUMO a partir de la cual el NSE es
-#: 100. Es lo que publica el Atlas (España ronda los 18.000 €; los municipios
-#: más ricos, 30.000–35.000). Estaba en 45.000 porque se pensó para renta por
-#: hogar: con la mediana por unidad de consumo, ninguna zona pasaba de ~70.
-TECHO_MEDIANA_NSE = 30_000.0
 TECHO_MEDIANA_RESILIENCIA = 25_000.0
-
-
-def _nse_index(median_income: float, gini: float | None, risk_pct: float | None) -> float:
-    """Índice NSE 0-100. Renta mediana como base, ajustada por desigualdad."""
-    base = min(median_income / TECHO_MEDIANA_NSE, 1.0) * 100.0
-    if gini is not None:
-        base *= 1.0 - min(max(gini, 0.0), 0.6) * 0.5
-    if risk_pct is not None:
-        base *= 1.0 - min(risk_pct / 100.0, 0.8) * 0.4
-    return round(min(max(base, 0.0), 100.0), 2)
 
 
 def _resilience(median_income: float, gini: float | None, risk_pct: float | None) -> float:

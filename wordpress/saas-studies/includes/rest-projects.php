@@ -327,7 +327,6 @@ function saas_send_project_to_engine($project_id, $user_id, $project_uuid, array
         'target' => [
             'family_status'            => $bp['estado_civil_y_estructura_familiar'] ?? null,
             'education_level'          => $bp['nivel_de_formacion_academica_br']    ?? null,
-            'nse'                      => $bp['nse']                                ?? [],
             'annual_income'            => $bp['renta_anual']                        ?? null,
             'monthly_available_income' => $bp['renta_mensual']                      ?? null,
             'climate'                  => $ent['clima']                            ?? [],

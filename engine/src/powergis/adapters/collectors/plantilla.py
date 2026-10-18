@@ -87,21 +87,16 @@ _TERR = (GeoLevel.PAIS, GeoLevel.CCAA, GeoLevel.PROVINCIA, GeoLevel.MUNICIPIO)
 #: Lo que la plantilla puede traer, en el orden de las columnas.
 COLUMNAS: tuple[Columna, ...] = (
     Columna("tra.vehicle.imd", "Tráfico vehicular · IMD (vehículos/día)", _LOCAL,
-            "Intensidad media diaria de la vía principal del ámbito (DGT, ayuntamiento o "
-            "mapa de tráfico autonómico)."),
+            "Intensidad media diaria de la vía principal del ámbito. Usad la fuente más "
+            "completa, reciente y detallada entre el mapa de tráfico (DGT/comunidad) y el "
+            "aforo municipal, e indicad cuál en «Indicadores»."),
     Columna("tra.pedestrian.aforo", "Tráfico peatonal · aforo (personas/día)", _LOCAL,
-            "Paso medio diario de peatones medido en la zona."),
+            "Paso medio diario de peatones medido en la zona. Misma regla: la fuente más "
+            "completa, reciente y detallada (aforo municipal, conteo propio…)."),
     Columna("eco.consumer.online_pct", "% compra online (16-74 años, últimos 3 meses)",
             (GeoLevel.PAIS, GeoLevel.CCAA),
             "SOLO comunidad autónoma y nacional. Provincias y municipios heredan el dato "
             "de su comunidad. Precargado con la TIC-H 2025."),
-    Columna("eco.class.high_pct", "NSE · % clase alta", _TODOS,
-            "Solo si tenéis un NSE por clases (AIMC u otro proveedor con licencia). "
-            "El índice NSE 0-100 lo calcula el motor con el Atlas de renta."),
-    Columna("eco.nse.upper_middle_pct", "NSE · % clase media-alta", _TODOS),
-    Columna("eco.class.mid_pct", "NSE · % clase media", _TODOS),
-    Columna("eco.class.lower_mid_pct", "NSE · % clase media-baja", _TODOS),
-    Columna("eco.class.low_pct", "NSE · % clase baja", _TODOS),
     Columna("dem.nat.diversity_index", "Índice de diversidad cultural (0-1)", _TODOS,
             "Recomendado Simpson/Blau: 1 − Σ pᵢ² con los grupos de nacionalidad del Censo."),
     Columna("dem.nat.foreign_pct", "% población extranjera", _TODOS,
@@ -113,7 +108,7 @@ COLUMNAS: tuple[Columna, ...] = (
     Columna("dem.birth.rate", "Tasa bruta de natalidad (‰)", _TERR,
             "Nacimientos por 1.000 habitantes. El motor la carga por provincia; aquí, municipal."),
     Columna("dem.children.mean", "Nº medio de hijos por hogar", _TODOS,
-            "Indicad en «Indicadores» la definición usada (hijos convivientes por hogar…)."),
+            "Todos los hijos del hogar, sin límite de edad: nº total de hijos / nº de hogares."),
     Columna("dem.household.with_children_pct", "% hogares con hijos", _TODOS),
     Columna("dem.household.monoparental_pct", "% hogares monoparentales", _TODOS),
     Columna("dem.edu.primary_or_less_pct", "% sin estudios o con estudios primarios (15+)", _TODOS,

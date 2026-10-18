@@ -33,41 +33,29 @@ class Socioeconomico(SectionBuilder):
 
     def subsections(self, ctx: SectionContext) -> list[Subsection | None]:
         return [
-            self._nse(ctx),
             self._renta(ctx),
+            self._desigualdad(ctx),
             self._disponible(ctx),
             self._consumo(ctx),
         ]
 
-    def _nse(self, ctx: SectionContext) -> Subsection | None:
-        codes = [
-            "eco.nse.index", "eco.nse.risk_pct", "eco.nse.upper_middle_pct",
-            "eco.gini", "eco.resilience.index",
-        ]
-        table_codes = [
-            "eco.class.high_pct", "eco.nse.upper_middle_pct", "eco.class.mid_pct",
-            "eco.class.lower_mid_pct", "eco.class.low_pct", "eco.nse.index",
-        ]
-        if not ctx.has_any(codes + table_codes):
-            ctx.warnings.append(f"Nivel socioeconómico: {_SECRETO}")
+    def _desigualdad(self, ctx: SectionContext) -> Subsection | None:
+        # Sin NSE (decisión del equipo de datos, 18/10/2026): no hay fuente de
+        # clases sociales por zona. El perfil se mide con la renta del Atlas y
+        # con su desigualdad.
+        codes = ["eco.gini", "eco.nse.risk_pct", "eco.resilience.index"]
+        if not ctx.has_any(codes):
+            ctx.warnings.append(f"Desigualdad de la renta: {_SECRETO}")
             return None
 
         return Subsection(
-            id="socioeconomico.nse",
-            title="Nivel socioeconómico (NSE)",
+            id="socioeconomico.desigualdad",
+            title="Desigualdad y riesgo de exclusión",
             kpis=[kpi_from(ctx, c) for c in codes],
-            charts=[
-                build_chart(
-                    ctx, "eco.clases", "Distribución por clase social",
-                    ["eco.class.high_pct", "eco.nse.upper_middle_pct", "eco.class.mid_pct",
-                     "eco.class.lower_mid_pct", "eco.class.low_pct"],
-                    chart_type="bar", stack=True,
-                )
-            ],
             tables=[
                 build_table(
-                    ctx, "eco.tabla_nse", "Estructura social por zona", table_codes,
-                    highlight_by="eco.nse.index",
+                    ctx, "eco.tabla_desigualdad", "Desigualdad por zona", codes,
+                    highlight_by="eco.resilience.index",
                     footnote=(
                         "Fuente: INE, Atlas de Distribución de Renta de los Hogares "
                         "(estadística experimental)."

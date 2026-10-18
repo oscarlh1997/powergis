@@ -24,7 +24,6 @@ ENTRADAS: dict[str, tuple[str, ...]] = {
     "dem.edu.qualification_index": ("dem.edu.university_pct", "dem.edu.postgrad_pct"),
     "cmp.opportunity.index": ("dem.pop.segment", "dem.pop.total", "cmp.count"),
     "sat.demand_supply": ("dem.pop.segment", "dem.pop.total", "cmp.count"),
-    "eco.nse.index": ("eco.income.household.median", "eco.gini", "eco.nse.risk_pct"),
     "eco.resilience.index": ("eco.income.household.median", "eco.gini", "eco.nse.risk_pct"),
 }
 

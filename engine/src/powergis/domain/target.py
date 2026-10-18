@@ -1,7 +1,7 @@
 """Perfil de cliente objetivo y cálculo del Match%.
 
 Esta es la pieza que faltaba. El formulario de powergis.es no pregunta solo
-*dónde*: pregunta *a quién* quieres vender —formación, NSE, renta, estructura
+*dónde*: pregunta *a quién* quieres vender —formación, renta, estructura
 familiar, clima, tráfico— y eso es exactamente la dimensión **Match** del
 PlaceRank («Match% perfil» en la tabla del informe de ejemplo).
 
@@ -91,8 +91,10 @@ EDUCATION: dict[str, tuple[str, str]] = {
 
 # estructura familiar → indicador
 FAMILY: dict[str, tuple[str, str]] = {
-    "soltero":            ("dem.household.single_pct", "higher"),
-    "soltero(a)":         ("dem.household.single_pct", "higher"),
+    # Personas solteras (Censo anual), no hogares unipersonales: éste sí
+    # tiene dato municipal.
+    "soltero":            ("dem.civil.single_pct", "higher"),
+    "soltero(a)":         ("dem.civil.single_pct", "higher"),
     "pareja_sin_hijos":   ("dem.civil.married_pct", "higher"),
     "nido_lleno":         ("dem.household.with_children_pct", "higher"),
     "nido_adolescentes":  ("dem.household.with_children_pct", "higher"),
@@ -102,18 +104,8 @@ FAMILY: dict[str, tuple[str, str]] = {
     "monoparental":       ("dem.household.monoparental_pct", "higher"),
 }
 
-# nivel socioeconómico declarado → clase que hay que maximizar
-NSE: dict[str, tuple[str, str]] = {
-    "a/b":  ("eco.class.high_pct", "higher"),
-    "a":    ("eco.class.high_pct", "higher"),
-    "b":    ("eco.class.high_pct", "higher"),
-    "c+":   ("eco.nse.upper_middle_pct", "higher"),
-    "c":    ("eco.class.mid_pct", "higher"),
-    "d+":   ("eco.class.lower_mid_pct", "higher"),
-    "d/e":  ("eco.class.low_pct", "higher"),
-    "d":    ("eco.class.low_pct", "higher"),
-    "e":    ("eco.class.low_pct", "higher"),
-}
+# nacionalidades que cuentan como público local: elegirlas no puntúa.
+NACIONALIDAD_LOCAL = {"espana", "españa", "espanola", "española", "local"}
 
 # tramos de renta bruta anual del hogar (€)
 INCOME_BRACKETS: dict[str, tuple[float | None, float | None]] = {
@@ -184,7 +176,6 @@ class TargetProfile:
     family_status: str | None = None
     education_level: str | None = None
     nationality: str | None = None
-    nse: tuple[str, ...] = ()
     annual_income: str | None = None
     monthly_available_income: str | None = None
     average_ticket: str | None = None
@@ -223,14 +214,17 @@ class TargetProfile:
             code, kind = FAMILY[family]
             out.append(Criterion(code, kind, 1.0, label="Estructura familiar"))
 
-        for level in self.nse:
-            key = _norm(level).replace("_", "/")
-            if key in INDIFERENTE:
-                continue
-            entry = NSE.get(key) or NSE.get(_norm(level))
-            if entry:
-                code, kind = entry
-                out.append(Criterion(code, kind, 1.5 / max(len(self.nse), 1), label="NSE"))
+        # El NSE se quitó del formulario y del motor (equipo de datos,
+        # 18/10/2026): no hay fuente de clases sociales por zona y la renta
+        # ya mide la capacidad de consumo. Si un proyecto antiguo lo trae, se
+        # ignora.
+
+        # Público extranjero: el Censo anual da el % de extranjeros por
+        # municipio, no por país de origen, así que cualquier nacionalidad
+        # no española pide zonas con más población extranjera.
+        nationality = _norm(self.nationality)
+        if nationality not in INDIFERENTE and nationality not in NACIONALIDAD_LOCAL:
+            out.append(Criterion("dem.nat.foreign_pct", "higher", 1.0, label="Población extranjera"))
 
         bracket = _bracket(self.annual_income, INCOME_BRACKETS)
         if bracket:
@@ -281,7 +275,6 @@ class TargetProfile:
             "family_status": self.family_status,
             "education_level": self.education_level,
             "nationality": self.nationality,
-            "nse": list(self.nse),
             "annual_income": self.annual_income,
             "monthly_available_income": self.monthly_available_income,
             "average_ticket": self.average_ticket,
@@ -313,7 +306,6 @@ class TargetProfile:
             family_status=one("family_status"),
             education_level=one("education_level"),
             nationality=one("nationality"),
-            nse=tup("nse"),
             annual_income=one("annual_income"),
             monthly_available_income=one("monthly_available_income"),
             average_ticket=one("average_ticket"),

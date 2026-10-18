@@ -146,7 +146,8 @@ _DEMO = [
        section=Section.DEMOGRAFIA, source=EQUIPO, tier=Tier.BASICO, decimals=2,
        description="No hay serie oficial anual para todos los municipios (la ECEPOV "
                    "2021 sólo cubre CCAA, provincias y municipios grandes). Lo aporta "
-                   "el equipo de datos con la definición que indique en la plantilla."),
+                   "el equipo de datos: todos los hijos del hogar, sin límite de edad "
+                   "(nº total de hijos / nº de hogares)."),
     _i("dem.household.size", "hogares", "Tamaño medio del hogar", Unit.RATIO,
        section=Section.DEMOGRAFIA, source="INE:Atlas de renta", tier=Tier.BASICO, decimals=2),
     _i("dem.household.single_pct", "hogares", "% hogares unipersonales", Unit.PORCENTAJE,
@@ -201,27 +202,14 @@ _DEMO = [
 # --------------------------------------------------------------------------- #
 
 _ECO = [
-    _i("eco.nse.index", "nse", "Índice NSE", Unit.INDICE, section=Section.SOCIOECONOMICO,
-       direction=_HB, source="derivado:ADRH+Censo", min_level=SEC, dimension=Dimension.ECONOMICO),
     _i("eco.nse.risk_pct", "nse", "% hogares en riesgo de exclusión", Unit.PORCENTAJE,
        section=Section.SOCIOECONOMICO, direction=_LB, source="INE:ADRH", min_level=SEC,
-       dimension=Dimension.ECONOMICO, decimals=1),
-    _i("eco.nse.upper_middle_pct", "nse", "% clase media-alta", Unit.PORCENTAJE,
-       section=Section.SOCIOECONOMICO, direction=_HB, source="INE:ADRH", min_level=SEC,
        dimension=Dimension.ECONOMICO, decimals=1),
     _i("eco.gini", "nse", "Índice de Gini", Unit.INDICE, section=Section.SOCIOECONOMICO,
        direction=_LB, source="INE:ADRH", min_level=SEC, decimals=3),
     _i("eco.resilience.index", "nse", "Índice de resistencia económica", Unit.INDICE,
        section=Section.SOCIOECONOMICO, direction=_HB, source="derivado", dimension=Dimension.ECONOMICO,
        formula="renta mediana normalizada × (1 - Gini) × (1 - riesgo exclusión)"),
-    _i("eco.class.high_pct", "nse", "% clase alta", Unit.PORCENTAJE, section=Section.SOCIOECONOMICO,
-       source="INE:ADRH", min_level=SEC, decimals=1),
-    _i("eco.class.mid_pct", "nse", "% clase media", Unit.PORCENTAJE, section=Section.SOCIOECONOMICO,
-       source="INE:ADRH", min_level=SEC, decimals=1),
-    _i("eco.class.lower_mid_pct", "nse", "% clase media-baja", Unit.PORCENTAJE,
-       section=Section.SOCIOECONOMICO, source="INE:ADRH", min_level=SEC, decimals=1),
-    _i("eco.class.low_pct", "nse", "% clase baja", Unit.PORCENTAJE, section=Section.SOCIOECONOMICO,
-       direction=_LB, source="INE:ADRH", min_level=SEC, decimals=1),
 
     _i("eco.income.household.mean", "renta", "Renta bruta media por hogar", Unit.EUROS,
        section=Section.SOCIOECONOMICO, direction=_HB, source="INE:ADRH", min_level=SEC,
