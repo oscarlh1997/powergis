@@ -753,7 +753,8 @@ add_shortcode('crear_proyecto_v6', function () {
       project_name: getVal('project_name'),
       ultimo_paso: state.step,
       definicion: {
-        tipo_estudio: getVal('tipo_estudio') || (form.querySelector('[name="tipo_estudio"]:checked') || {}).value || '',
+        // Son radios: getVal() leería el primero («nacional») aunque no esté marcado.
+        tipo_estudio: getTipoEstudio(),
         actividad_economica: { sector: getVal('sector'), actividad: getVal('actividad'), cnae: getVal('cnae') },
         delimitacion_geografica: { ccaa: getVal('ccaa'), provincia: getVal('provincia'), poblacion: getVal('poblacion') }
       },

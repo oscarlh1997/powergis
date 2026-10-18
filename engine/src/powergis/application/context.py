@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import itertools
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from ..domain import consumo
 from ..domain import indicators as catalog_mod
@@ -24,6 +24,10 @@ class ResolvedScope:
     parent: Geo
     children: list[Geo]
     children_level: GeoLevel
+    note: str | None = None
+    #: De quién cuelgan las filas. Es `parent`, salvo en el municipio
+    #: comparado con su provincia.
+    zones_parent: Geo | None = None
 
 
 def resolve_scope(uow: UnitOfWork, scope: Scope, max_children: int = 8500) -> ResolvedScope:
@@ -38,6 +42,21 @@ def resolve_scope(uow: UnitOfWork, scope: Scope, max_children: int = 8500) -> Re
 
     children_level = scope.resolve_children_level()
     children = uow.geos.descendants(parent.geo_id, children_level)
+    note: str | None = None
+    zones_parent = parent
+    if not children and scope.level is GeoLevel.MUNICIPIO and scope.children_level is None:
+        # Un municipio se desagregaría en distritos y secciones, pero el almacén
+        # no los tiene cargados. Antes esto cortaba el informe con un error; ahora
+        # el municipio se compara con los de su provincia, que es lo que sí hay.
+        province = uow.geos.get_by_id(parent.parent_id) if parent.parent_id else None
+        if province is not None:
+            children = uow.geos.descendants(province.geo_id, GeoLevel.MUNICIPIO)
+            children_level = GeoLevel.MUNICIPIO
+            zones_parent = province
+            note = (
+                f"No hay datos por distritos ni secciones de {parent.name}: "
+                f"se compara con los municipios de la provincia de {province.name}."
+            )
     if not children:
         raise ValidationError(
             "El ámbito no tiene zonas al nivel de desagregación pedido",
@@ -51,7 +70,13 @@ def resolve_scope(uow: UnitOfWork, scope: Scope, max_children: int = 8500) -> Re
             limit=max_children,
         )
     children.sort(key=lambda g: g.name)
-    return ResolvedScope(parent=parent, children=children, children_level=children_level)
+    return ResolvedScope(
+        parent=parent,
+        children=children,
+        children_level=children_level,
+        note=note,
+        zones_parent=zones_parent,
+    )
 
 
 def segment_combinations(segments: Segments) -> list[dict[str, str]]:
@@ -137,8 +162,14 @@ def build_context(
             if f.indicator in visibles
         ]
 
+    scope = project.scope
+    if scope.resolve_children_level() is not resolved.children_level:
+        # Las secciones leen el nivel de las filas de `ctx.scope`: tiene que ser
+        # el que se ha resuelto de verdad, no el pedido.
+        scope = replace(scope, children_level=resolved.children_level)
+
     ctx = SectionContext(
-        scope=project.scope,
+        scope=scope,
         parent=resolved.parent,
         children=resolved.children,
         segments=project.segments,
@@ -149,6 +180,8 @@ def build_context(
         target=project.target,
     )
 
+    if resolved.note:
+        ctx.warnings.append(resolved.note)
     if dropped:
         ctx.warnings.append(
             f"{len(dropped)} indicadores no se publican a nivel {level}; se omiten "

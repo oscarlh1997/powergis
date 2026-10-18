@@ -95,6 +95,10 @@ class SectionContext:
         direct = self.value(self.parent.geo_id, indicator, segment)
         if direct is not None:
             return direct
+        if any(g.geo_id == self.parent.geo_id for g in self.children):
+            # El ámbito es una de las filas (municipio comparado con su
+            # provincia): agregar las filas daría el dato de la provincia.
+            return None
         ind = self.catalog.get(indicator)
         vals = self.values(indicator, segment)
         if ind is not None and ind.unit in {Unit.PERSONAS, Unit.UNIDADES, Unit.MM}:

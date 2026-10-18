@@ -24,7 +24,7 @@ from ..domain.errors import PowerGisError, ProjectNotFound
 from ..domain.models import Project, Report, ReportRun
 from ..domain.ports import CachePort, NotifierPort, UnitOfWork
 from ..domain.report import ReportBuilder
-from .context import build_context, indicators_for
+from .context import build_context, indicators_for, resolve_scope
 
 log = logging.getLogger(__name__)
 
@@ -175,13 +175,10 @@ class BuildReport:
             return []
 
         try:
-            resolved = uow.geos.get(project.scope.level, project.scope.ine_code)
-            geo_ids = (
-                [g.geo_id for g in uow.geos.descendants(
-                    resolved.geo_id, project.scope.resolve_children_level()
-                )]
-                if resolved else []
-            )
+            # El mismo ámbito que usará el informe, con el municipio comparado
+            # con su provincia cuando no hay distritos cargados.
+            resolved = resolve_scope(uow, project.scope)
+            geo_ids = [g.geo_id for g in resolved.children]
         except Exception:
             return []
 
@@ -200,8 +197,8 @@ class BuildReport:
         if stale and self._request_ingest is not None:
             self._request_ingest(
                 stale,
-                str(project.scope.resolve_children_level()),
-                project.scope.ine_code,
+                str(resolved.children_level),
+                (resolved.zones_parent or resolved.parent).ine_code,
             )
         return stale
 

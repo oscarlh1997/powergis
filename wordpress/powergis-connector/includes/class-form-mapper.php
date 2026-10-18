@@ -74,8 +74,8 @@ final class Form_Mapper {
 		'provincia' => 'municipio',
 		// «poblacion» promete comparar zonas y barrios: eso es sección
 		// censal, y en la fase del INE no hay datos a ese nivel. Se deja sin
-		// declarar para que el motor avise en vez de devolver un ranking
-		// vacío con pinta de error.
+		// declarar: el motor usa distritos si los tiene y, si no, compara el
+		// municipio con los de su provincia y lo dice en los avisos.
 		'municipio' => null,
 	);
 
