@@ -104,7 +104,9 @@ def _semilla_online() -> dict[tuple[str, str], float]:
     for ruta in SEMILLAS:
         with ruta.open(encoding="utf-8") as fh:
             for fila in csv.DictReader(fh, delimiter=";"):
-                out[(fila["nivel"], fila["codigo_ine"])] = float(fila["valor"])
+                # Sólo la compra online: la semilla de la ECP no es una columna.
+                if fila["indicador"] == "eco.consumer.online_pct":
+                    out[(fila["nivel"], fila["codigo_ine"])] = float(fila["valor"])
     return out
 
 

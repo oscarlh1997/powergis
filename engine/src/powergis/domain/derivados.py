@@ -25,5 +25,10 @@ ENTRADAS: dict[str, tuple[str, ...]] = {
     "cmp.opportunity.index": ("dem.pop.segment", "dem.pop.total", "cmp.count"),
     "sat.demand_supply": ("dem.pop.segment", "dem.pop.total", "cmp.count"),
     "eco.resilience.index": ("eco.income.household.median", "eco.gini", "eco.poverty.risk_pct"),
+    "eco.poverty.risk_pct": ("eco.income.household.median", "eco.gini"),
+    "tur.hotel.foreign_pct": ("tur.hotel.travellers.foreign", "tur.hotel.travellers.resident",
+                              "tur.hotel.travellers"),
+    "inm.affordability.years": ("inm.price.m2", "eco.income.household.mean"),
+    "inm.rent.effort_pct": ("inm.rent.m2", "eco.income.household.mean"),
 }
 

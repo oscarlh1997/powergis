@@ -49,7 +49,24 @@ from .base import BaseCollector
 log = logging.getLogger(__name__)
 
 SEED_DIR = Path(__file__).resolve().parent.parent.parent / "seed"
-SEMILLAS = (SEED_DIR / "compra_online_ccaa_2025.csv",)
+SEMILLAS = (
+    SEED_DIR / "compra_online_ccaa_2025.csv",
+    # Población de España a 1-7-2026 (INE, ECP), que dio Aldo el 20/10/2026.
+    SEED_DIR / "poblacion_ecp_2026-07-01.csv",
+)
+
+#: Lo que traen las semillas y no es una columna de la plantilla.
+CODIGOS_SEMILLA: tuple[str, ...] = ("dem.pop.total", "dem.sex.men", "dem.sex.women")
+
+#: Indicadores en los que manda el dato MÁS RECIENTE, sea oficial o de la
+#: plantilla; a igualdad de año, el oficial (AEMET, INE). Decisión de Aldo del
+#: 20/10/2026 para las horas de sol; la población de la ECP (1 de julio) es
+#: más reciente que la del Padrón o el Censo (1 de enero).
+MAS_RECIENTE_MANDA = frozenset({"cli.sun.hours.annual", *CODIGOS_SEMILLA})
+
+#: Por debajo de esto, «horas de sol al año» es en realidad la media MENSUAL
+#: (España tiene 1.700–3.000 h al año; ningún mes pasa de ~380 h).
+HORAS_SOL_MENSUALES_MAX = 600.0
 
 #: Dónde busca la plantilla rellena. Se cambia con `POWERGIS_PLANTILLA`.
 RUTA_POR_DEFECTO = "/data/plantilla-equipo-datos.xlsx"
@@ -178,6 +195,28 @@ COLUMNAS: tuple[Columna, ...] = (
             _HASTA_PROVINCIA, "Puede ser negativa (−3,2)."),
     Columna("inm.rent.m2", "Vivienda · alquiler de referencia (€/m² al mes)", _TERR,
             "MIVAU, SERPAVI (tablas resumen). Es una referencia, no un contrato."),
+    # -- Turismo y vivienda ampliados (decisiones de Aldo, 20/10/2026) --------
+    Columna("tur.hotel.travellers.resident", "Turismo · viajeros residentes en España (año)",
+            _TERR, "INE, EOH por lugar de residencia: «Residentes en España». Turismo nacional."),
+    Columna("tur.hotel.travellers.foreign", "Turismo · viajeros residentes en el extranjero "
+            "(año)", _TERR, "INE, EOH: «Residentes en el extranjero». Turismo internacional."),
+    Columna("tur.mobile.domestic", "Turismo · turistas nacionales (móviles, año)", _TERR,
+            "INE, Medición del turismo a partir de teléfonos móviles (experimental): suma "
+            "anual de turistas residentes en España. Llega a municipio."),
+    Columna("tur.mobile.international", "Turismo · turistas internacionales (móviles, año)",
+            _TERR, "Misma estadística: turistas residentes en el extranjero."),
+    Columna("inm.ipv.index", "Vivienda · Índice de Precios de Vivienda (INE, base 2015)",
+            (GeoLevel.PAIS, GeoLevel.CCAA),
+            "INE, IPV, último trimestre, general. SOLO comunidad y nacional: el resto hereda."),
+    Columna("inm.ipv.yoy", "Vivienda · variación anual del IPV (%)",
+            (GeoLevel.PAIS, GeoLevel.CCAA), "Puede ser negativa."),
+    Columna("inm.rent.ipva_yoy", "Vivienda · variación anual del alquiler, IPVA (%)", _TERR,
+            "INE, Índice de Precios de Vivienda en Alquiler (experimental). Puede ser negativa."),
+    Columna("inm.cadastre.urban_units", "Catastro · inmuebles urbanos", _TERR,
+            "Dirección General del Catastro, estadística catastral: nº de bienes inmuebles "
+            "urbanos."),
+    Columna("inm.cadastre.value_mean", "Catastro · valor catastral medio (€)", _TERR,
+            "Valor catastral total / nº de inmuebles urbanos."),
 )
 
 #: Indicadores con serie anual (hoja «Series historicas», segmento {"year"}).
@@ -185,7 +224,8 @@ COLUMNAS: tuple[Columna, ...] = (
 COLUMNAS_HISTORICO: tuple[str, ...] = ("inm.price.m2", "inm.rent.m2")
 
 #: Indicadores que admiten valores negativos (el resto, no).
-ADMITEN_NEGATIVOS = frozenset({"mov.interprov.net_rate", "inm.price.yoy_change"})
+ADMITEN_NEGATIVOS = frozenset({"mov.interprov.net_rate", "inm.price.yoy_change",
+                               "inm.ipv.yoy", "inm.rent.ipva_yoy"})
 
 #: Columnas de la hoja de educación por tramo de edad (se guardan con segmento).
 COLUMNAS_EDAD: tuple[str, ...] = (
@@ -198,6 +238,9 @@ COLUMNAS_EDAD: tuple[str, ...] = (
 HEREDA: dict[str, tuple[GeoLevel, ...]] = {
     # INE TIC-H: sólo por comunidad autónoma.
     "eco.consumer.online_pct": (GeoLevel.CCAA,),
+    # INE IPV: por comunidad autónoma.
+    "inm.ipv.index": (GeoLevel.CCAA,),
+    "inm.ipv.yoy": (GeoLevel.CCAA,),
     # ETDP y valor tasado del MIVAU: por provincia.
     "inm.sales.per_1000hab": (GeoLevel.PROVINCIA,),
     "inm.price.m2": (GeoLevel.PROVINCIA,),
@@ -246,6 +289,7 @@ class PlantillaCollector(BaseCollector):
     TODAS_LAS_GEOS = True
     PROVIDES = tuple(dict.fromkeys(
         [c.code for c in COLUMNAS] + list(COLUMNAS_EDAD) + list(COLUMNAS_HISTORICO)
+        + list(CODIGOS_SEMILLA)
     ))
 
     def __init__(
@@ -297,8 +341,10 @@ class PlantillaCollector(BaseCollector):
                 suyos = propios.get((str(nivel), geo.ine_code, code), [])
                 for r in suyos:
                     # La API manda: sólo se rellenan huecos de lo oficial. Lo
-                    # segmentado (edad, año) no compite con lo oficial.
-                    if not r.segmento and (geo.geo_id, code) in ocupados:
+                    # segmentado (edad, año) no compite con lo oficial. Salvo
+                    # donde manda el más reciente y la plantilla lo es.
+                    if not r.segmento and not _gana(code, r.periodo,
+                                                     ocupados.get((geo.geo_id, code))):
                         continue
                     out.append(self.fact(
                         geo, code, r.valor, period or r.periodo,
@@ -349,14 +395,15 @@ class PlantillaCollector(BaseCollector):
         # que rellena el equipo lleva el prefijo para poder distinguirlo.
         return fuente if fuente.startswith("INE") else f"{PREFIJO} · {fuente}"
 
-    def _ocupados(self, geos: Sequence[Geo], codigos: set[str]) -> set[tuple[int, str]]:
-        """(geo, indicador) que ya tienen dato OFICIAL en el almacén."""
+    def _ocupados(self, geos: Sequence[Geo], codigos: set[str]) -> dict[tuple[int, str], date]:
+        """(geo, indicador) → periodo del dato OFICIAL que ya hay en el almacén."""
         if not codigos or self._loader is None:
-            return set()
+            return {}
         hechos = self._loader([g.geo_id for g in geos], sorted(codigos))
         return {
-            (h.geo_id, h.indicator) for h in hechos
+            (h.geo_id, h.indicator): h.period for h in hechos
             if h.value is not None and not (h.source_ref or "").startswith(PREFIJO)
+            and not (h.source_ref or "").startswith(_FUENTE_ECP)
         }
 
     # ------------------------------------------------------------------ #
@@ -542,6 +589,12 @@ class PlantillaCollector(BaseCollector):
         if numero < 0 and indicador not in ADMITEN_NEGATIVOS:
             self.fallos.append(f"{donde}: {indicador} = {numero} no puede ser negativo")
             return None
+        if indicador == "cli.sun.hours.annual" and numero < HORAS_SOL_MENSUALES_MAX:
+            # La plantilla del 18/10/2026 trae la media mensual (Madrid 221 h;
+            # AEMET, Retiro: ~2.700 h al año). Se pasa a anual y se dice.
+            numero = round(numero * 12)
+            fuente = (fuente or "sin fuente indicada") + (
+                " · anual estimado: la plantilla traía la media mensual × 12")
         fecha = _periodo(periodo)
         if fecha is None:
             self.fallos.append(
@@ -559,6 +612,16 @@ class PlantillaCollector(BaseCollector):
             anio=anio,
             hoja=donde.split("!")[0],
         )
+
+
+_FUENTE_ECP = "INE, Estadística Continua de Población"
+
+
+def _gana(code: str, periodo: date, oficial: date | None) -> bool:
+    """¿Se escribe el dato de la plantilla aunque haya uno oficial?"""
+    if oficial is None:
+        return True
+    return code in MAS_RECIENTE_MANDA and periodo.year > oficial.year
 
 
 # --------------------------------------------------------------------------- #

@@ -33,8 +33,13 @@ ANIOS_HISTORICO: tuple[str, ...] = tuple(str(a) for a in range(2005, 2031))
 
 _COMPRAVENTA = ["inm.sales.dwellings", "inm.sales.per_1000hab"]
 _VIVIENDAS = ["inm.dwellings.main_pct", "inm.dwellings.empty_pct"]
-_PRECIO = ["inm.price.m2", "inm.price.yoy_change"]
-_ALQUILER = ["inm.rent.m2"]
+_PRECIO = ["inm.price.m2", "inm.price.yoy_change", "inm.ipv.index", "inm.ipv.yoy",
+           "inm.affordability.years"]
+_ALQUILER = ["inm.rent.m2", "inm.rent.ipva_yoy", "inm.rent.effort_pct"]
+#: Catastro: inmuebles urbanos y locales comerciales (los locales también
+#: salen en Competencia, en la saturación comercial).
+_CATASTRO = ["inm.cadastre.urban_units", "inm.cadastre.value_mean",
+             "sat.available_units", "sat.occupancy", "sat.rent_m2"]
 
 _HEREDADO = ("Por provincia: el INE/MIVAU no lo publica por municipio, así que cada "
              "municipio lleva el dato de su provincia.")
@@ -52,6 +57,7 @@ class Inmobiliario(SectionBuilder):
             self._viviendas(ctx),
             self._precio(ctx),
             self._alquiler(ctx),
+            self._catastro(ctx),
         ]
 
     # ------------------------------------------------------------------ #
@@ -113,13 +119,15 @@ class Inmobiliario(SectionBuilder):
             id="inmobiliario.precio",
             title="Precio de la vivienda e histórico",
             layer="precio_vivienda_historico",
-            kpis=[kpi_from(ctx, c) for c in _PRECIO],
+            kpis=[kpi_from(ctx, c) for c in _PRECIO if c in ctx.catalog],
             charts=charts,
             tables=[build_table(
                 ctx, "inm.tabla_precio", "Precio de la vivienda por zona", _PRECIO,
                 footnote="Fuente: Ministerio de Vivienda y Agenda Urbana, valor tasado medio "
-                         "de la vivienda libre. Es valor de tasación, no precio de "
-                         "operaciones ni de anuncios. " + _HEREDADO,
+                         "de la vivienda libre (valor de tasación, no precio de operaciones "
+                         "ni de anuncios); INE, Índice de Precios de Vivienda (por comunidad "
+                         "autónoma). " + _HEREDADO + " «Años de renta para comprar 90 m²» "
+                         "es una estimación de PowerGIS.",
             )],
         )
 
@@ -137,13 +145,36 @@ class Inmobiliario(SectionBuilder):
             id="inmobiliario.alquiler",
             title="Alquiler de vivienda (aproximación)",
             layer="alquiler_vivienda_proxy",
-            kpis=[kpi_from(ctx, c) for c in _ALQUILER],
+            kpis=[kpi_from(ctx, c) for c in _ALQUILER if c in ctx.catalog],
             charts=charts,
             tables=[build_table(
                 ctx, "inm.tabla_alquiler", "Alquiler por zona", _ALQUILER,
                 footnote="Fuente: Ministerio de Vivienda y Agenda Urbana, Sistema Estatal de "
-                         "Referencia del Precio del Alquiler (SERPAVI). Es un índice de "
-                         "referencia, no la renta de un contrato concreto.",
+                         "Referencia del Precio del Alquiler (SERPAVI), índice de referencia y "
+                         "no la renta de un contrato concreto; INE, Índice de Precios de "
+                         "Vivienda en Alquiler (experimental). El esfuerzo del alquiler es una "
+                         "estimación de PowerGIS.",
+            )],
+        )
+
+    def _catastro(self, ctx: SectionContext) -> Subsection | None:
+        if not ctx.layer_on("catastro_locales_cartografia"):
+            return None
+        codes = [c for c in _CATASTRO if c in ctx.catalog]
+        if not codes or self._sin_datos(ctx, codes, "Catastro: inmuebles y locales"):
+            return None
+        return Subsection(
+            id="inmobiliario.catastro",
+            title="Catastro: inmuebles y locales",
+            layer="catastro_locales_cartografia",
+            kpis=[kpi_from(ctx, c) for c in codes],
+            charts=[build_chart(ctx, "inm.catastro", "Valor catastral medio por zona",
+                                ["inm.cadastre.value_mean"], chart_type="bar")],
+            tables=[build_table(
+                ctx, "inm.tabla_catastro", "Catastro por zona", codes,
+                footnote="Fuente: Dirección General del Catastro. El valor catastral es "
+                         "administrativo, no de mercado. El precio de alquiler de locales "
+                         "es una estimación de PowerGIS.",
             )],
         )
 

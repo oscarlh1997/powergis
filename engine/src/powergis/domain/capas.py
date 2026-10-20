@@ -37,9 +37,11 @@ CAPAS: tuple[Capa, ...] = (
     Capa("compra_venta_inmuebles", "Compraventa de viviendas", Section.INMOBILIARIO),
     Capa("viviendas_vacias_principales", "Viviendas vacías y principales", Section.INMOBILIARIO),
     Capa("precio_vivienda_historico", "Precio de la vivienda e histórico", Section.INMOBILIARIO),
-    # Los locales del Catastro viven en «Competencia» (saturación comercial):
-    # la capa los quita de allí.
-    Capa("catastro_locales_cartografia", "Catastro: locales y cartografía", Section.COMPETENCIA),
+    # Los locales del Catastro salen en «Mercado inmobiliario» (subsección
+    # Catastro) y en «Competencia» (saturación comercial): la capa los quita
+    # de las dos.
+    Capa("catastro_locales_cartografia", "Catastro: locales y cartografía",
+         Section.INMOBILIARIO),
     Capa("alquiler_vivienda_proxy", "Alquiler de vivienda", Section.INMOBILIARIO),
 )
 
@@ -61,6 +63,12 @@ INDICADOR_CAPA: dict[str, str] = {
     "tur.hotel.overnight": "nivel_turistico",
     "tur.hotel.stay_mean": "nivel_turistico",
     "tur.overnight_per_1000hab": "nivel_turistico",
+    "tur.index": "nivel_turistico",
+    "tur.hotel.travellers.resident": "nivel_turistico",
+    "tur.hotel.travellers.foreign": "nivel_turistico",
+    "tur.hotel.foreign_pct": "nivel_turistico",
+    "tur.mobile.domestic": "nivel_turistico",
+    "tur.mobile.international": "nivel_turistico",
     # Mercado inmobiliario
     "inm.sales.dwellings": "compra_venta_inmuebles",
     "inm.sales.per_1000hab": "compra_venta_inmuebles",
@@ -68,7 +76,14 @@ INDICADOR_CAPA: dict[str, str] = {
     "inm.dwellings.empty_pct": "viviendas_vacias_principales",
     "inm.price.m2": "precio_vivienda_historico",
     "inm.price.yoy_change": "precio_vivienda_historico",
+    "inm.ipv.index": "precio_vivienda_historico",
+    "inm.ipv.yoy": "precio_vivienda_historico",
+    "inm.affordability.years": "precio_vivienda_historico",
     "inm.rent.m2": "alquiler_vivienda_proxy",
+    "inm.rent.ipva_yoy": "alquiler_vivienda_proxy",
+    "inm.rent.effort_pct": "alquiler_vivienda_proxy",
+    "inm.cadastre.urban_units": "catastro_locales_cartografia",
+    "inm.cadastre.value_mean": "catastro_locales_cartografia",
     # Catastro: locales comerciales (ya existían, en Competencia)
     "sat.occupancy": "catastro_locales_cartografia",
     "sat.available_units": "catastro_locales_cartografia",

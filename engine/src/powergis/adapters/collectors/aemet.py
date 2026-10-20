@@ -48,6 +48,7 @@ class AemetCollector(BaseCollector):
     PROVIDES = (
         "cli.temp.annual", "cli.temp.month", "cli.precip.annual", "cli.precip.month",
         "cli.rain.days", "cli.sun.days", "cli.comfort.index", "cli.seasonality.index",
+        "cli.sun.hours.annual",
     )
 
     def __init__(
@@ -204,6 +205,10 @@ class AemetCollector(BaseCollector):
         if "cli.sun.days" in wanted:
             days = stats.total(self.to_float((normals.get(m) or {}).get("n_des")) for m in months)
             out.append(self.fact(geo, "cli.sun.days", days, when, None, ref))
+        if "cli.sun.hours.annual" in wanted:
+            horas = _horas_de_sol(normals)
+            if horas is not None:
+                out.append(self.fact(geo, "cli.sun.hours.annual", horas, when, None, ref))
         if "cli.comfort.index" in wanted:
             comfortable = sum(1 for t in temps if t is not None and 15.0 <= t <= 27.0)
             out.append(self.fact(
@@ -235,6 +240,34 @@ class AemetCollector(BaseCollector):
             return km + abs(altitude - station.altitude) / 100.0 * 5.0
 
         return min(stations, key=cost)
+
+
+_DIAS_MES = (31, 28.25, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31)
+
+
+def _horas_de_sol(normals: dict[str, Any]) -> float | None:
+    """Horas de sol al AÑO de las normales (`inso`).
+
+    AEMET da la insolación como media diaria (≤ 24 h) o como total mensual,
+    según el producto: se distingue por el valor. Si falta algún mes, no se
+    inventa: sin los doce no hay total anual.
+    """
+    def num(row: dict[str, Any] | None) -> float | None:
+        row = row or {}
+        for key in ("inso", "inso_md", "inso_mes"):
+            try:
+                return float(str(row[key]).replace(",", "."))
+            except (KeyError, TypeError, ValueError):
+                continue
+        return None
+
+    anual = num(normals.get("13"))
+    if anual is not None and anual > 600:
+        return round(anual)
+    meses = [num(normals.get(f"{m:02d}")) for m in range(1, 13)]
+    if any(v is None for v in meses):
+        return None
+    return round(sum(v * d if v <= 24 else v for v, d in zip(meses, _DIAS_MES, strict=True)))
 
 
 def _name_proxy(geo: Geo, station: Station) -> float:

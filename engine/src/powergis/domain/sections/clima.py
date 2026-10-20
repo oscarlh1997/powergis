@@ -60,10 +60,13 @@ class Clima(SectionBuilder):
                     build_table(
                         ctx, "cli.tabla", "Clima por zona", codes,
                         highlight_by="cli.comfort.index",
-                        footnote="Fuente: AEMET OpenData, normales climatológicas 1991-2020. "
-                                 "© AEMET. Asignación por estación más cercana ponderada por "
-                                 "altitud. Donde no hay AEMET, dato anual del equipo de datos "
-                                 "(AEMET vía datosespana.com); la humedad es una aproximación.",
+                        footnote="Fuente: AEMET OpenData, normales climatológicas 1991-2020 "
+                                 "(media de 30 años). © AEMET. Asignación por estación más "
+                                 "cercana ponderada por altitud. Donde no hay normales, el año "
+                                 "más reciente disponible del equipo de datos (AEMET vía "
+                                 "datosespana.com), que es un solo año y no una media; la "
+                                 "humedad es una aproximación. Horas de sol: manda el dato "
+                                 "más reciente y, si son del mismo año, AEMET.",
                     )
                 ],
             )
@@ -73,7 +76,9 @@ class Clima(SectionBuilder):
                  chart_type: str, unit: Unit) -> Chart:
         """Serie mensual del ámbito completo más las 3 zonas más pobladas."""
         geos = sorted(
-            ctx.children,
+            # El ámbito ya es la primera serie: un municipio comparado con su
+            # provincia salía dos veces.
+            (g for g in ctx.children if g.geo_id != ctx.parent.geo_id),
             key=lambda g: ctx.value(g.geo_id, "dem.pop.total") or 0,
             reverse=True,
         )[:3]

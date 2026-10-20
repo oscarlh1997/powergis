@@ -427,6 +427,29 @@ _TUR = [
     _i("tur.overnight_per_1000hab", "turismo", "Pernoctaciones hoteleras por 1.000 habitantes",
        Unit.POR_MIL, section=Section.TURISMO, source="INE:EOH", decimals=0,
        formula="pernoctaciones / población × 1.000"),
+    # Índice propio y desglose nacional / internacional (decisión de Aldo, 20/10/2026).
+    _i("tur.index", "turismo", "Índice de intensidad turística (España = 100)", Unit.INDICE,
+       section=Section.TURISMO, source="derivado:INE EOH", decimals=0,
+       formula="pernoctaciones por 1.000 hab. de la zona / las de España × 100",
+       description="Índice propio de PowerGIS: 100 es la media de España; 200, el doble de "
+                   "pernoctaciones por habitante. Se marca como estimado."),
+    _i("tur.hotel.travellers.resident", "turismo", "Viajeros residentes en España (turismo "
+       "nacional)", Unit.PERSONAS, section=Section.TURISMO, source="INE:EOH", decimals=0,
+       description="Encuesta de Ocupación Hotelera por lugar de residencia del viajero."),
+    _i("tur.hotel.travellers.foreign", "turismo", "Viajeros residentes en el extranjero "
+       "(turismo internacional)", Unit.PERSONAS, section=Section.TURISMO, source="INE:EOH",
+       decimals=0),
+    _i("tur.hotel.foreign_pct", "turismo", "% de viajeros internacionales", Unit.PORCENTAJE,
+       section=Section.TURISMO, source="derivado", decimals=1,
+       formula="viajeros residentes en el extranjero / viajeros totales × 100"),
+    _i("tur.mobile.domestic", "turismo", "Turistas nacionales (año, teléfonos móviles)",
+       Unit.PERSONAS, section=Section.TURISMO,
+       source="INE:Medición del turismo con teléfonos móviles", decimals=0,
+       description="Estadística experimental del INE. Llega a municipio (o agrupación de "
+                   "municipios) y cuenta también a quien no duerme en un hotel."),
+    _i("tur.mobile.international", "turismo", "Turistas internacionales (año, teléfonos "
+       "móviles)", Unit.PERSONAS, section=Section.TURISMO,
+       source="INE:Medición del turismo con teléfonos móviles", decimals=0),
 ]
 
 _INM = [
@@ -454,6 +477,34 @@ _INM = [
        section=Section.INMOBILIARIO, source="MIVAU:SERPAVI", decimals=2,
        description="Índice de referencia del alquiler (SERPAVI): una aproximación, no la "
                    "renta de un contrato concreto."),
+    # Todo lo inmobiliario que ofrece el formulario (decisión de Aldo, 20/10/2026).
+    _i("inm.ipv.index", "precio", "Índice de Precios de Vivienda (INE, base 2015)", Unit.INDICE,
+       section=Section.INMOBILIARIO, source="INE:IPV", decimals=1,
+       description="Precio de compraventa de vivienda libre. El INE lo publica por comunidad "
+                   "autónoma: provincias y municipios llevan el de su comunidad."),
+    _i("inm.ipv.yoy", "precio", "Variación anual del precio de la vivienda (INE IPV)",
+       Unit.PORCENTAJE, section=Section.INMOBILIARIO, source="INE:IPV",
+       decimals=1),
+    _i("inm.affordability.years", "precio", "Años de renta para comprar 90 m²", Unit.RATIO,
+       section=Section.INMOBILIARIO, source="derivado", decimals=1,
+       formula="valor tasado (€/m²) × 90 / renta bruta media por hogar",
+       description="Estimación de PowerGIS: años de renta bruta íntegra de un hogar medio "
+                   "para pagar una vivienda de 90 m² al valor tasado."),
+    _i("inm.rent.ipva_yoy", "alquiler", "Variación anual del alquiler (INE IPVA)",
+       Unit.PORCENTAJE, section=Section.INMOBILIARIO, source="INE:IPVA", decimals=1,
+       description="Índice de Precios de Vivienda en Alquiler (estadística experimental, "
+                   "datos de la AEAT). Llega a municipio."),
+    _i("inm.rent.effort_pct", "alquiler", "Esfuerzo del alquiler (% de la renta, 80 m²)",
+       Unit.PORCENTAJE, section=Section.INMOBILIARIO, source="derivado", decimals=1,
+       formula="alquiler (€/m² al mes) × 80 × 12 / renta bruta media por hogar × 100",
+       description="Estimación de PowerGIS: parte de la renta de un hogar medio que se iría "
+                   "en alquilar 80 m² al precio de referencia."),
+    _i("inm.cadastre.urban_units", "catastro", "Inmuebles urbanos (Catastro)", Unit.UNIDADES,
+       section=Section.INMOBILIARIO, source="Catastro", decimals=0,
+       description="Bienes inmuebles urbanos de la estadística catastral (todos los usos)."),
+    _i("inm.cadastre.value_mean", "catastro", "Valor catastral medio por inmueble urbano",
+       Unit.EUROS, section=Section.INMOBILIARIO, source="Catastro", decimals=0,
+       description="Valor catastral (administrativo), no de mercado."),
 ]
 
 # --------------------------------------------------------------------------- #

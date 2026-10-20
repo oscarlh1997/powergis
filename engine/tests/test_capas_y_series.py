@@ -50,7 +50,13 @@ from powergis.domain.sections.inmobiliario import SERIES_HISTORICAS
 from powergis.domain.target import TargetProfile
 
 TODAS_APAGADAS = dict.fromkeys(capas.CLAVES, "excluir")
-CODIGOS_NUEVOS = [c for c in capas.INDICADOR_CAPA if not c.startswith("sat.")]
+# Los derivados (índice turístico, esfuerzo del alquiler…) los calcula el motor.
+from powergis.domain.indicators import BY_CODE  # noqa: E402
+
+CODIGOS_NUEVOS = [
+    c for c in capas.INDICADOR_CAPA
+    if not c.startswith("sat.") and not BY_CODE[c].source.startswith("derivado")
+]
 
 
 # --------------------------------------------------------------------------- #
@@ -283,10 +289,10 @@ class TestInformeConCapas:
         report = informe(uow_capas, proyecto(CCAA))
         assert subsecciones(report, Section.CONTEXTO) == ["contexto.electoral",
                                                          "contexto.traslados"]
-        assert subsecciones(report, Section.TURISMO) == ["turismo.hotelero"]
+        assert subsecciones(report, Section.TURISMO) == ["turismo.indice", "turismo.hotelero"]
         assert subsecciones(report, Section.INMOBILIARIO) == [
             "inmobiliario.compraventa", "inmobiliario.viviendas", "inmobiliario.precio",
-            "inmobiliario.alquiler",
+            "inmobiliario.alquiler", "inmobiliario.catastro",
         ]
         assert "competencia.saturacion" in subsecciones(report, Section.COMPETENCIA)
 
@@ -432,7 +438,7 @@ def test_cada_ambito_respeta_los_interruptores(uow_capas, ambito, encendidas, ti
             assert any("Nivel turístico: la fuente no se publica por sección censal" in w
                        for w in report.warnings)
         else:
-            assert subsecciones(report, Section.TURISMO) == ["turismo.hotelero"]
+            assert subsecciones(report, Section.TURISMO) == ["turismo.indice", "turismo.hotelero"]
             assert "inmobiliario.precio" in subsecciones(report, Section.INMOBILIARIO)
 
 

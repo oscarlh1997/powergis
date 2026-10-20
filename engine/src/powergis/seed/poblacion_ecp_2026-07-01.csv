@@ -1,0 +1,4 @@
+nivel;codigo_ine;territorio;indicador;valor;periodo;fuente
+pais;ES;España;dem.pop.total;49801559;2026-07-01;INE, Estadística Continua de Población (ECP), población residente a 1 de julio de 2026
+pais;ES;España;dem.sex.men;24462607;2026-07-01;INE, Estadística Continua de Población (ECP), población residente a 1 de julio de 2026
+pais;ES;España;dem.sex.women;25338952;2026-07-01;INE, Estadística Continua de Población (ECP), población residente a 1 de julio de 2026

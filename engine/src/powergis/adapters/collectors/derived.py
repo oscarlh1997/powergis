@@ -53,6 +53,8 @@ class DerivedCollector(BaseCollector):
         "eco.consumer.ticket", "eco.consumer.frequency",
         "cmp.hhi", "cmp.opportunity.index",
         "sat.isc", "sat.demand_supply", "sat.opportunity.index",
+        "eco.poverty.risk_pct", "tur.hotel.foreign_pct",
+        "inm.affordability.years", "inm.rent.effort_pct",
     )
 
     def __init__(
@@ -116,6 +118,15 @@ class DerivedCollector(BaseCollector):
                 return hecho.value if hecho else None
             return self._lookup(geo.geo_id, code) if self._lookup else None
 
+        def oficial(code: str) -> float | None:
+            """El valor sólo si NO lo calculó este mismo colector antes."""
+            if indice is not None:
+                hecho = indice.get((geo.geo_id, code))
+                if hecho is None or hecho.source_ref == MODELLED_REF:
+                    return None
+                return hecho.value
+            return v(code)
+
         def fecha(codes: Sequence[str]) -> date:
             """El periodo más reciente de los datos de los que sale."""
             if period is not None:
@@ -151,6 +162,10 @@ class DerivedCollector(BaseCollector):
             ),
             "sat.demand_supply": stats.safe_div(
                 v("dem.pop.segment") or v("dem.pop.total"), v("cmp.count")
+            ),
+            "tur.hotel.foreign_pct": _foreign_share(
+                v("tur.hotel.travellers.foreign"), v("tur.hotel.travellers.resident"),
+                v("tur.hotel.travellers"),
             ),
         }
 
@@ -189,8 +204,19 @@ class DerivedCollector(BaseCollector):
             modelled.update(consumo_del_sector(disposable, self.sector))
 
         gini = v("eco.gini")
-        risk = v("eco.poverty.risk_pct")
         median = v("eco.income.household.median")
+        risk = oficial("eco.poverty.risk_pct")
+        if risk is None and median is not None:
+            # Sin dato publicado, se estima (decisión de Aldo del 20/10/2026:
+            # se enseña con la etiqueta «Estimado»).
+            risk = poverty_risk_estimate(median, gini)
+            modelled["eco.poverty.risk_pct"] = risk
+        precio, alquiler = v("inm.price.m2"), v("inm.rent.m2")
+        if precio is not None:
+            modelled["inm.affordability.years"] = stats.safe_div(precio * VIVIENDA_M2, annual)
+        if alquiler is not None:
+            modelled["inm.rent.effort_pct"] = stats.safe_div(
+                alquiler * ALQUILER_M2 * 12, annual, 100.0)
         if median is not None:
             modelled["eco.resilience.index"] = _resilience(median, gini, risk)
 
@@ -259,6 +285,47 @@ def _resilience(median_income: float, gini: float | None, risk_pct: float | None
     equality = 1.0 - min(max(gini or 0.30, 0.0), 0.6)
     stability = 1.0 - min((risk_pct or 20.0) / 100.0, 0.8)
     return round(min(income_score * equality * stability * 100.0, 100.0), 2)
+
+
+#: Superficies de referencia de los indicadores de accesibilidad a la vivienda.
+VIVIENDA_M2 = 90
+ALQUILER_M2 = 80
+
+#: Umbral de riesgo de pobreza: 60 % de la mediana nacional de la renta por
+#: unidad de consumo. INE, ADRH 2023: mediana España 19.250 € → 11.550 €.
+UMBRAL_POBREZA = 0.6 * 19_250.0
+#: Dispersión del logaritmo de la renta sin Gini de la zona: la que reproduce
+#: la tasa nacional de riesgo de pobreza (INE, ECV 2024: 19,7 %) con la
+#: mediana nacional. Φ(ln 0,6 / σ) = 0,197 → σ ≈ 0,60.
+SIGMA_NACIONAL = 0.5995
+
+
+def poverty_risk_estimate(median_uc: float, gini: float | None = None) -> float | None:
+    """% de población bajo el umbral de riesgo de pobreza, modelo log-normal.
+
+    Con renta log-normal, Gini = 2Φ(σ/√2) − 1, así que σ = √2·Φ⁻¹((G+1)/2).
+    La tasa es Φ((ln umbral − ln mediana) / σ). Es una ESTIMACIÓN: el informe
+    la etiqueta como tal.
+    """
+    from math import log, sqrt
+    from statistics import NormalDist
+
+    if median_uc is None or median_uc <= 0:
+        return None
+    normal = NormalDist()
+    sigma = SIGMA_NACIONAL
+    if gini is not None and 0.05 < gini < 0.8:
+        sigma = sqrt(2) * normal.inv_cdf((gini + 1) / 2)
+    return round(normal.cdf((log(UMBRAL_POBREZA) - log(median_uc)) / sigma) * 100.0, 1)
+
+
+def _foreign_share(foreign: float | None, resident: float | None,
+                   total: float | None) -> float | None:
+    """% de viajeros internacionales con el total publicado o la suma."""
+    if foreign is None:
+        return None
+    base = total if total else (foreign + resident if resident is not None else None)
+    return stats.safe_div(foreign, base, 100.0)
 
 
 def competitive_hhi(shares: Sequence[float]) -> float | None:
