@@ -164,7 +164,8 @@ return ob_get_clean();
  * La URL sale, por este orden, de la constante POWERGIS_LOADING_ANIMATION_URL
  * (wp-config.php), de la opción `powergis_loading_animation_url` o del filtro
  * del mismo nombre. Admite Lottie (.json), vídeo (.mp4/.webm) e imagen
- * (.gif/.webp/.svg/.png). Sin URL se queda el logo y el spinner provisionales.
+ * (.gif/.webp/.svg/.png). Sin URL (lo normal) se usa la animación «Órbita» de
+ * Aldo, en línea en la plantilla; la URL sólo sirve para sustituirla.
  */
 function saas_pg_loading_animation_markup() {
     $url = defined('POWERGIS_LOADING_ANIMATION_URL') ? (string) POWERGIS_LOADING_ANIMATION_URL
@@ -743,7 +744,9 @@ add_shortcode('crear_proyecto_v6', function () {
   La animación definitiva se enlaza SIN tocar este fichero: define en
   wp-config.php `define('POWERGIS_LOADING_ANIMATION_URL', 'https://…/carga.json');`
   (o la opción / el filtro `powergis_loading_animation_url`). Lottie .json,
-  .mp4/.webm o .gif/.webp/.svg/.png. Sin URL, logo y spinner provisionales.
+  .mp4/.webm o .gif/.webp/.svg/.png. Sin URL se usa la animación «Órbita» de
+  Aldo (abajo, SVG en línea animado por JS; el SVG en reposo es el logo final,
+  que es lo que se ve sin JS o con «reducir movimiento»).
 -->
 <div class="pg-loading-screen" id="pgLoadingScreen" role="status" aria-live="polite" hidden>
   <div class="pg-loading-screen__anim" data-pg-anim-slot>
@@ -751,8 +754,21 @@ add_shortcode('crear_proyecto_v6', function () {
     <?php if ($pg_anim !== ''): ?>
       <?php echo $pg_anim; // phpcs:ignore WordPress.Security.EscapeOutput -- URL escapada en el helper ?>
     <?php else: ?>
-    <div class="pg-loading-screen__logo">Power GIS <span>Data</span></div>
-    <div class="pg-loading-screen__spinner" aria-hidden="true"></div>
+    <svg class="pg-loader" data-pg-anim data-pg-loader viewBox="132 503 1600 800" aria-hidden="true" focusable="false">
+      <g data-pg-part="cam">
+        <path data-pg-part="P" fill="#0B0B0C" d="M183.4 797V682.9H215Q226.1 682.9 234 687.5Q241.9 692.1 246.2 700.6Q250.4 709.2 250.4 721.3Q250.4 733.3 246.2 741.9Q241.9 750.5 234 755.1Q226.1 759.7 215 759.7H186.9L189.8 755.8V797ZM189.8 756.2 186.9 752.2H215Q229.1 752.2 236.5 744.1Q243.9 736 243.9 721.3Q243.9 706.5 236.5 698.4Q229.1 690.3 215 690.3H186.9L189.8 686.4Z"/>
+        <path data-pg-part="O" fill="#0B0B0C" d="M346 797.8Q335 797.8 325.6 793.5Q316.2 789.1 309.3 781.3Q302.4 773.4 298.5 762.9Q294.7 752.4 294.7 740Q294.7 727.5 298.5 717Q302.4 706.5 309.3 698.6Q316.3 690.8 325.6 686.4Q335 682.1 346 682.1Q357 682.1 366.4 686.4Q375.7 690.7 382.6 698.6Q389.6 706.4 393.4 716.9Q397.3 727.5 397.3 740Q397.3 752.4 393.4 763Q389.6 773.5 382.6 781.3Q375.7 789.2 366.4 793.5Q357 797.8 346 797.8ZM346 790.2Q355.4 790.2 363.4 786.5Q371.4 782.7 377.4 775.9Q383.4 769 386.7 759.9Q390 750.8 390 739.9Q390 729.1 386.7 720Q383.4 710.9 377.4 704.1Q371.5 697.2 363.4 693.5Q355.4 689.7 346 689.7Q336.6 689.7 328.6 693.5Q320.5 697.2 314.6 704.1Q308.6 710.9 305.3 720Q302 729.1 302 739.9Q302 750.8 305.3 759.9Q308.6 769 314.5 775.9Q320.5 782.7 328.6 786.5Q336.6 790.2 346 790.2Z"/>
+        <path data-pg-part="W" fill="#0B0B0C" d="M473.7 797 437.2 682.9H445.5L480.3 791.9H476.1L512 682.9H519.5L555.1 791.9H551.1L586.1 682.9H593.9L557.3 797H549.1L514.6 691.6H516.6L482 797Z"/>
+        <path data-pg-part="E" fill="#0B0B0C" d="M650.1 797V682.9H708.2V690.3H656.5V789.6H710V797ZM655.7 742.7V735.4H702.7V742.7Z"/>
+        <path data-pg-part="R" fill="#0B0B0C" d="M769.9 797V682.9H800.6Q816.7 682.9 825.9 693Q835.1 703.2 835.1 721.3Q835.1 733.3 830.9 741.9Q826.8 750.4 819.1 755Q811.4 759.6 800.6 759.6H773.4L776.2 755.8V797ZM829.3 797 807.1 755.6H814.2L836.4 797ZM776.2 756.2 773.4 752.3H800.6Q814.4 752.3 821.5 744.1Q828.7 736 828.7 721.3Q828.7 706.5 821.5 698.4Q814.4 690.3 800.6 690.3H773.4L776.2 686.4Z"/>
+        <path data-pg-part="G" fill="#0B0B0C" d="M171 845 A337 337 0 1 0 839 845 L468 845 L468 975 L684 975 A198 198 0 0 1 312 845 Z"/>
+        <rect data-pg-part="stem" fill="#0B0B0C" x="947" y="845" width="132" height="382"/>
+        <path data-pg-part="Sb" fill="#0B0B0C" d="M1599.7 722.4 A310 310 0 0 1 1174.3 1173.6 L1261.5 1081.2 A183 183 0 0 0 1512.5 814.8 Z"/>
+        <path data-pg-part="St" fill="#0B0B0C" d="M1684.7 632.4 A310 310 0 0 0 1259.3 1083.6 L1346.5 991.2 A183 183 0 0 1 1597.5 724.8 Z"/>
+        <circle data-pg-part="halo" cx="1009" cy="740" r="66" fill="none" stroke="#FF7417" stroke-width="6" opacity="0"/>
+        <circle data-pg-part="dot" cx="1009" cy="740" r="66" fill="#FF7417"/>
+      </g>
+    </svg>
     <?php endif; ?>
   </div>
   <p class="pg-loading-screen__text" id="pgLoadingText">Preparando tu análisis…</p>
@@ -763,30 +779,32 @@ add_shortcode('crear_proyecto_v6', function () {
 </div>
 <style>
   .pg-loading-screen {
-    position: fixed; inset: 0; z-index: 100000;
-    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    position: fixed; inset: 0; z-index: 100000;    display: flex; flex-direction: column; align-items: center; justify-content: center;
     gap: 22px; padding: 24px; text-align: center;
-    background: #FFFFFF; color: #505050; font-family: 'Roboto', sans-serif;
+    background: #FAFAF8; color: #0B0B0C; font-family: 'Montserrat', 'Roboto', sans-serif;
   }
   .pg-loading-screen[hidden] { display: none; }
   .pg-loading-screen__anim { display: flex; flex-direction: column; align-items: center; gap: 22px; }
   .pg-loading-screen__media { width: min(320px, 70vw); height: auto; aspect-ratio: auto; }
   div.pg-loading-screen__media { height: min(320px, 70vw); }
-  .pg-loading-screen__logo { font-family: 'Raleway', sans-serif; font-weight: 700; font-size: 30px; letter-spacing: .5px; }
-  .pg-loading-screen__logo span { color: #FF7124; }
-  .pg-loading-screen__spinner {
-    width: 44px; height: 44px; border-radius: 50%;
-    border: 4px solid #FFF1E7; border-top-color: #FF7124;
-    animation: pg-loading-spin 0.9s linear infinite;
+  /* Selectores con #id: el tema no puede pisar tamaño ni recorte del SVG. */
+  #pgLoadingScreen .pg-loader {
+    display: block; width: min(560px, 86vw); max-width: none; height: auto;
+    aspect-ratio: 2 / 1; overflow: visible; margin: 0; padding: 0; border: 0; background: none;
   }
-  .pg-loading-screen__text { margin: 0; font-size: 15px; color: #888888; min-height: 1.4em; }
+  #pgLoadingScreen .pg-loader[hidden] { display: none; }
+  .pg-loading-screen__text {
+    margin: 0; min-height: 1.6em; font-size: clamp(17px, 1.6vw, 24px); font-weight: 400;
+    letter-spacing: .04em; color: #0B0B0C;
+  }
+  .pg-loading-screen__text.is-new { animation: pg-loading-in .5s cubic-bezier(.2,.8,.2,1) both; }
   .pg-loading-screen__error p { margin: 0 0 14px; }
   .pg-loading-screen__error .pg-btn {
     display: inline-flex; font-weight: 600; font-size: 13.5px; border-radius: 999px;
-    padding: 12px 22px; text-decoration: none; background: #FF7124; color: #fff;
+    padding: 12px 22px; text-decoration: none; background: #0B0B0C; color: #fff;   /* blanco sobre naranja no llega a 4,5:1 */
   }
-  @keyframes pg-loading-spin { to { transform: rotate(360deg); } }
-  @media (prefers-reduced-motion: reduce) { .pg-loading-screen__spinner { animation-duration: 3s; } }
+  @keyframes pg-loading-in { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+  @media (prefers-reduced-motion: reduce) { .pg-loading-screen__text.is-new { animation: none; } }
 </style>
 
 
@@ -1275,6 +1293,79 @@ add_shortcode('crear_proyecto_v6', function () {
   var POLL_EVERY_MS = 3000;
   var POLL_MAX_MS = 5 * 60 * 1000;   // pasado esto se abre igualmente: la página del proyecto se actualiza sola
 
+  /*
+   * Animación «Órbita» de Aldo (Claude Design, PieceC de pg-loaders.jsx),
+   * pasada a JS sin dependencias. Ciclo de 5 s: Giro 1,6 · Despliegue 1,0 ·
+   * Logo 1,4 · Repliegue 1,0. Las S giran como spinner con el punto en órbita,
+   * se despliegan en el logo y se repliegan. Devuelve la función que la para.
+   */
+  function startLoaderAnimation(svg) {
+    if (!svg || !window.requestAnimationFrame) return function () {};
+    if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return function () {};
+    var GIRO = 0, DESP = 1.6, LOGO = 2.6, REPL = 4.0, TOTAL = 5.0;
+    var CENTER = [932, 903];
+    var PIV = { P: [213, 740], O: [346, 740], W: [515, 740], E: [676, 740], R: [799, 740],
+      G: [505, 890], dot: [1009, 740], St: [1472, 858], Sb: [1387, 948], stem: [1013, 1227], cam: CENTER };
+    var LETTERS = ['P', 'O', 'W', 'E', 'R'];
+    var el = {};
+    Array.prototype.forEach.call(svg.querySelectorAll('[data-pg-part]'), function (n) { el[n.getAttribute('data-pg-part')] = n; });
+    var clamp = function (v) { return Math.max(0, Math.min(1, v)); };
+    var prog = function (T, a, b) { return clamp((T - a) / (b - a)); };
+    var lerp = function (a, b, k) { return a + (b - a) * k; };
+    var outQuad = function (t) { return t * (2 - t); };
+    var outCubic = function (t) { return (--t) * t * t + 1; };
+    var inCubic = function (t) { return t * t * t; };
+    var inOutCubic = function (t) { return t < 0.5 ? 4 * t * t * t : (t - 1) * (2 * t - 2) * (2 * t - 2) + 1; };
+    var outBack = function (t) { return 1 + 2.70158 * Math.pow(t - 1, 3) + 1.70158 * Math.pow(t - 1, 2); };
+    var enter = function (T, a, b) { return outCubic(prog(T, a, b)); };
+    var exit = function (T, a, b) { return inCubic(prog(T, a, b)); };
+    var pop = function (T, a, b) { return outBack(prog(T, a, b)); };
+    var glide = function (T, a, b) { return inOutCubic(prog(T, a, b)); };
+    function set(id, q) {
+      var c = PIV[id], sx = q.sx != null ? q.sx : (q.s != null ? q.s : 1), sy = q.sy != null ? q.sy : (q.s != null ? q.s : 1);
+      el[id].setAttribute('transform', 'translate(' + (c[0] + (q.dx || 0)) + ' ' + (c[1] + (q.dy || 0)) + ') rotate(' + (q.r || 0)
+        + ') scale(' + sx + ' ' + sy + ') translate(' + (-c[0]) + ' ' + (-c[1]) + ')');
+      el[id].setAttribute('opacity', q.o != null ? q.o : 1);
+    }
+    function frame(T) {
+      var theta;
+      if (T < DESP) theta = 540 * prog(T, GIRO, DESP);
+      else if (T < LOGO) theta = 540 + 180 * outQuad(prog(T, DESP, LOGO));
+      else if (T < REPL) theta = 0;
+      else theta = 180 * Math.pow(prog(T, REPL, TOTAL), 2);
+      var k = T < LOGO ? glide(T, DESP, DESP + 0.95) : 1 - glide(T, REPL + 0.05, TOTAL);
+      var rad = theta * Math.PI / 180, cos = Math.cos(rad), sin = Math.sin(rad);
+      [['St', -1], ['Sb', 1]].forEach(function (h) {
+        var x = h[1] * 0.728 * 26, y = h[1] * 0.686 * 26, c = PIV[h[0]];
+        set(h[0], { dx: lerp(CENTER[0] + x * cos - y * sin - c[0], 0, k), dy: lerp(CENTER[1] + x * sin + y * cos - c[1], 0, k), r: theta, s: lerp(0.42, 1, k) });
+      });
+      var phi = (2 * theta - 90) * Math.PI / 180;
+      var kd = T < LOGO ? glide(T, DESP + 0.12, DESP + 0.9) : 1 - glide(T, REPL, REPL + 0.8);
+      var ddx = lerp(CENTER[0] + 250 * Math.cos(phi) - 1009, 0, kd), ddy = lerp(CENTER[1] + 250 * Math.sin(phi) - 740, 0, kd);
+      set('dot', { dx: ddx, dy: ddy, s: lerp(0.5, 1, kd) });
+      set('stem', { sy: Math.max(0, T < LOGO ? pop(T, DESP + 0.4, DESP + 0.95) : 1 - exit(T, REPL, REPL + 0.45)) });
+      var kg = T < LOGO ? enter(T, DESP + 0.3, DESP + 1.0) : 1 - exit(T, REPL, REPL + 0.5);
+      set('G', { r: -150 * (1 - kg), o: kg, s: lerp(0.85, 1, kg) });
+      LETTERS.forEach(function (id, i) {
+        var kl = T < LOGO ? enter(T, DESP + 0.45 + i * 0.06, DESP + 0.9 + i * 0.06) : 1 - exit(T, REPL + i * 0.03, REPL + 0.32 + i * 0.03);
+        set(id, { dy: 34 * (1 - kl), o: kl });
+      });
+      var h = prog(T, LOGO + 0.1, LOGO + 1.2);
+      el.halo.setAttribute('cx', 1009 + ddx);
+      el.halo.setAttribute('cy', 740 + ddy);
+      el.halo.setAttribute('r', 66 + 110 * outCubic(h));
+      el.halo.setAttribute('opacity', h > 0 && h < 1 ? 0.5 * (1 - h) : 0);
+      set('cam', { s: lerp(1, 1.02, prog(T, DESP, REPL)) });
+    }
+    var t0 = null, raf = 0;
+    (function loop(now) {
+      if (t0 === null) t0 = now;
+      frame(((now - t0) / 1000) % TOTAL);
+      raf = window.requestAnimationFrame(loop);
+    })(window.performance ? performance.now() : Date.now());
+    return function () { window.cancelAnimationFrame(raf); };
+  }
+
   function showLoadingScreen() {
     var screen = document.getElementById('pgLoadingScreen');
     var text = document.getElementById('pgLoadingText');
@@ -1283,24 +1374,29 @@ add_shortcode('crear_proyecto_v6', function () {
     document.body.appendChild(screen);
     screen.hidden = false;
     document.documentElement.style.overflow = 'hidden';
+    var stopAnim = startLoaderAnimation(screen.querySelector('[data-pg-loader]'));
     var i = 0;
     var timer = setInterval(function () {
       i = (i + 1) % LOADING_PHRASES.length;
       text.textContent = LOADING_PHRASES[i];
+      text.classList.remove('is-new');
+      void text.offsetWidth;   // reinicia la animación de entrada de la frase
+      text.classList.add('is-new');
     }, 3500);
     return {
       hide: function () {
         clearInterval(timer);
+        stopAnim();
         screen.hidden = true;
         document.documentElement.style.overflow = '';
       },
       fail: function (href) {
         clearInterval(timer);
+        stopAnim();
         text.hidden = true;
-        var spinner = screen.querySelector('.pg-loading-screen__spinner');
-        if (spinner) spinner.hidden = true;
         var anim = screen.querySelector('[data-pg-anim]');
-        if (anim) anim.hidden = true;
+        // setAttribute: en un <svg> la propiedad .hidden no existe.
+        if (anim) anim.setAttribute('hidden', '');
         document.getElementById('pgLoadingErrorLink').href = href;
         document.getElementById('pgLoadingError').hidden = false;
       }
