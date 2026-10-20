@@ -1,0 +1,27 @@
+Recintos del mapa del informe (GeoJSON, WGS84, propiedades `ine_code` y `name`).
+
+Origen: es-atlas 0.6.0 (MIT), generado a partir de las Líneas Límite del
+Instituto Geográfico Nacional / CNIG (CC BY 4.0). Atribución obligatoria:
+«© Instituto Geográfico Nacional». La muestra el propio mapa.
+
+Ficheros
+  ccaa.json            comunidades y ciudades autónomas (sin Gibraltar)
+  provincias.json      provincias
+  municipios-XX.json   municipios de la provincia XX (código INE)
+En ccaa.json y provincias.json Canarias va desplazada (+6°, +6°) para que el
+mapa nacional no quede casi vacío; en municipios-35/38 está en su sitio.
+
+Regenerar (mapshaper 0.6.x, desde una carpeta con `npm i es-atlas mapshaper`):
+  A=node_modules/es-atlas/es
+  mapshaper -i $A/autonomous_regions.json id-field=ine_code -target autonomous_regions \
+    -filter "ine_code != '20'" -simplify 8% keep-shapes \
+    -affine shift=6,6 where="ine_code=='05'" -o ccaa.json format=geojson precision=0.001
+  mapshaper -i $A/provinces.json id-field=ine_code -target provinces -simplify 8% keep-shapes \
+    -affine shift=6,6 where="ine_code=='35'||ine_code=='38'" -o provincias.json format=geojson precision=0.001
+  mapshaper -i $A/municipalities.json id-field=ine_code -target municipalities \
+    -each "prov=String(ine_code).slice(0,2)" -simplify 12% keep-shapes -split prov \
+    -o ./ format=geojson precision=0.0005
+  for f in [0-9][0-9].json; do mv "$f" "municipios-$f"; done
+
+Para recintos más finos (o distritos/secciones censales del INE), sustituir
+estos ficheros por otros con las mismas propiedades; el informe no cambia.

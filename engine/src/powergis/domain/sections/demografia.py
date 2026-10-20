@@ -6,7 +6,7 @@ almacén: si los indicadores del ámbito ya están frescos, no se toca el INE.
 
 from __future__ import annotations
 
-from .. import stats
+from .. import estado, stats
 from ..enums import Direction, Section, Tier, Unit
 from ..models import Chart, Kpi, Subsection
 from .base import (
@@ -64,6 +64,9 @@ class Demografia(SectionBuilder):
         segment_total = ctx.parent_value("dem.pop.segment")
         pop_total = ctx.parent_value("dem.pop.total")
         share = stats.relative_share(segment_total, pop_total)
+        # Se calcula aquí y no sale de un hecho: la valoración se le pone a mano
+        # con la misma referencia que la columna de la tabla.
+        ref = ctx.reference("dem.pop.segment_pct")
         kpis.append(
             Kpi(
                 code="dem.pop.segment_pct",
@@ -73,6 +76,8 @@ class Demografia(SectionBuilder):
                 direction=Direction.HIGHER_IS_BETTER,
                 decimals=1,
                 note="Sobre la población total del ámbito analizado",
+                reference=ref,
+                rating=estado.clase(share, ref, int(Direction.HIGHER_IS_BETTER)),
             )
         )
 

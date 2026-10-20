@@ -1,0 +1,3 @@
+{"type":"FeatureCollection", "features": [
+{"type":"Feature","geometry":{"type":"Polygon","coordinates":[[[-2.9525,35.32],[-2.9705,35.2895],[-2.9505,35.265],[-2.928,35.275],[-2.9525,35.32]]]},"properties":{"name":"Melilla","ine_code":"52001","prov":"52"}}
+]}

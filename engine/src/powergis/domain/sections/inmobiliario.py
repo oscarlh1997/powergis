@@ -136,8 +136,9 @@ class Inmobiliario(SectionBuilder):
             ctx, _ALQUILER, "Alquiler de vivienda"
         ):
             return None
+        # Sólo el €/m²: la variación (%) y el esfuerzo (%) no comparten eje.
         charts = [build_chart(ctx, "inm.alquiler", "Alquiler de referencia (€/m² al mes)",
-                              _ALQUILER, chart_type="bar")]
+                              ["inm.rent.m2"], chart_type="bar")]
         historico = _historico(ctx, "inm.rent.m2", "Evolución del alquiler de referencia")
         if historico is not None:
             charts.insert(0, historico)

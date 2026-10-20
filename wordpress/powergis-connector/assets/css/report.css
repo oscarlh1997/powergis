@@ -5,8 +5,42 @@
  * en un tema de bloques o dentro de un iframe de Elementor.
  */
 
-.pg-report { --pg-ink:#0f172a; --pg-muted:#64748b; --pg-line:#e2e8f0; --pg-accent:#1e293b;
-	color:var(--pg-ink); font-size:15px; line-height:1.6; }
+/* -- marca: TODOS los colores y tipografías -------------------------------
+   La marca está sin decidir (líneas A, B o C). Se cambia aquí, o desde el
+   tema con una regla `:root { --pg-brand: … }` cargada después de este CSS.
+   Valores por defecto: línea A (tinta #121D27, azul #1B5A82, magenta #A3307E).
+   Valoración y mapas usan azul/naranja (seguros para daltonismo) y nunca van
+   sin icono y texto. */
+:root {
+	--pg-font-body: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+	--pg-font-head: var(--pg-font-body);
+	--pg-ink: #121D27;
+	--pg-muted: #56616d;
+	--pg-line: #dde3ea;
+	--pg-surface: #ffffff;
+	--pg-soft: #f4f6f8;
+	--pg-brand: #1B5A82;
+	--pg-brand-2: #A3307E;
+	--pg-accent: var(--pg-brand);
+	--pg-focus: #1B5A82;
+	/* valoración P25/P75: color + icono + texto */
+	--pg-fav: #1f6fb2;   --pg-fav-ink: #144a78;   --pg-fav-bg: #e6f0f9;
+	--pg-mid: #8a8984;   --pg-mid-ink: #4a4a46;   --pg-mid-bg: #efefed;
+	--pg-unfav: #d0631f; --pg-unfav-ink: #8a3a0c; --pg-unfav-bg: #fbeee5;
+	--pg-nodata: #e6e8eb;
+	/* marcas del dato */
+	--pg-flag-ink: #3d4752; --pg-flag-bg: #eef1f4;
+	--pg-flag-est-ink: #6e2456; --pg-flag-est-bg: #f6e9f2;
+	/* mapa: secuencial (5 clases) y divergente (RdBu) */
+	--pg-seq-1: #c6dbef; --pg-seq-2: #86b6ef; --pg-seq-3: #4f8fdb; --pg-seq-4: #1c5cab; --pg-seq-5: #0d366b;
+	--pg-div-1: #ca0020; --pg-div-2: #f4a582; --pg-div-3: #f7f7f7; --pg-div-4: #92c5de; --pg-div-5: #0571b0;
+	/* series de los gráficos */
+	--pg-cat-1: #1B5A82; --pg-cat-2: #d0631f; --pg-cat-3: #7aa6c8; --pg-cat-4: #A3307E; --pg-cat-5: #8a8984; --pg-cat-6: #3c8d5a;
+}
+
+.pg-report { color:var(--pg-ink); font-family:var(--pg-font-body); font-size:15px; line-height:1.6; }
+.pg-report h2, .pg-report h3 { font-family:var(--pg-font-head); color:var(--pg-ink); }
+.pg-report :focus-visible { outline:2px solid var(--pg-focus); outline-offset:2px; }
 
 .pg-report__header { border-bottom:2px solid var(--pg-accent); padding-bottom:16px; margin-bottom:24px; }
 .pg-report__meta { display:flex; gap:12px; align-items:center; margin-top:8px; }
@@ -48,7 +82,6 @@
 .pg-kpi__pct { font-size:11.5px; color:var(--pg-muted); margin-top:2px; }
 .pg-kpi--missing .pg-kpi__value { font-size:14px; font-style:italic; color:#94a3b8; font-weight:400; }
 
-.pg-chart { margin:18px 0; }
 
 .pg-table { margin:22px 0 30px; }
 .pg-table__title { margin:0 0 8px; font-size:15px; }
@@ -56,8 +89,8 @@
 .pg-table__search { padding:7px 11px; border:1px solid var(--pg-line); border-radius:8px; width:240px; max-width:100%; }
 .pg-table__scroll { overflow-x:auto; border:1px solid var(--pg-line); border-radius:10px; }
 .pg-table table { width:100%; border-collapse:collapse; font-size:13.5px; }
-.pg-table th { background:var(--pg-accent); color:#fff; padding:9px 12px; text-align:left;
-	cursor:pointer; user-select:none; white-space:nowrap; position:sticky; top:0; }
+.pg-table th { background:var(--pg-accent); color:#fff; padding:0; text-align:left;
+	white-space:nowrap; position:sticky; top:0; }
 .pg-table th.pg-num { text-align:right; }
 .pg-table td { padding:7px 12px; border-bottom:1px solid #f1f5f9; }
 .pg-row--top td { background:#f0fdf4; }
@@ -102,22 +135,6 @@
 	.pg-upgrade { padding:22px 18px; }
 }
 
-.pg-geolens__layout { display:grid; grid-template-columns:250px 1fr; gap:16px; }
-.pg-geolens__panel { border:1px solid var(--pg-line); border-radius:11px; padding:12px; overflow-y:auto; max-height:520px; }
-.pg-geolens__group { font-size:11.5px; text-transform:uppercase; color:var(--pg-muted);
-	margin:14px 0 6px; letter-spacing:.04em; }
-.pg-switch { display:block; width:100%; text-align:left; padding:7px 10px; border:1px solid transparent;
-	border-radius:8px; background:none; cursor:pointer; font-size:13px; }
-.pg-switch:hover { background:#f1f5f9; }
-.pg-switch.is-active { background:var(--pg-accent); color:#fff; }
-.pg-geolens__map { border-radius:11px; overflow:hidden; position:relative; }
-.pg-geolens__legend { margin-top:18px; border-top:1px solid var(--pg-line); padding-top:12px; }
-.pg-legend__title { font-size:12.5px; font-weight:600; margin-bottom:6px; }
-.pg-legend__item { display:flex; align-items:center; gap:7px; font-size:12px; margin:3px 0; }
-.pg-legend__swatch { width:15px; height:15px; border-radius:3px; border:1px solid #cbd5e1; }
-.pg-map-tip { position:absolute; background:rgba(15,23,42,.92); color:#fff; padding:5px 9px;
-	border-radius:6px; font-size:12px; pointer-events:none; display:none; z-index:5; }
-
 .pg-weights { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:10px; margin:14px 0 20px; }
 .pg-weight { display:flex; align-items:center; gap:9px; font-size:13px; }
 .pg-weight__label { width:96px; text-transform:capitalize; color:var(--pg-muted); }
@@ -130,11 +147,6 @@
 .pg-projects__table { width:100%; border-collapse:collapse; }
 .pg-projects__table th { text-align:left; padding:9px 12px; border-bottom:2px solid var(--pg-line); }
 .pg-projects__table td { padding:11px 12px; border-bottom:1px solid #f1f5f9; }
-
-@media (max-width:860px) {
-	.pg-geolens__layout { grid-template-columns:1fr; }
-	.pg-geolens__panel { max-height:none; }
-}
 
 /* -- formulario de creación de proyecto ---------------------------------- */
 .pg-form { max-width:820px; }
@@ -158,15 +170,9 @@
 .pg-form__status { font-size:13.5px; color:#64748b; }
 .pg-form__status--error { color:#dc2626; }
 
-/* -- respaldo de GeoLens sin teselas -------------------------------------- */
-.pg-layer-table { margin-top:14px; }
-.pg-layer-table table { width:100%; border-collapse:collapse; font-size:13px; }
-.pg-layer-table td { padding:5px 10px; border-bottom:1px solid #f1f5f9; }
-
 /* -- navegación flotante y panel de control ------------------------------ */
 /* Fuera de `.pg-report` también: la barra y el panel son `position:fixed` y
    algunos temas meten el contenido en contenedores con `transform`. */
-.pg-dock, .pg-panel { --pg-ink:#0f172a; --pg-muted:#64748b; --pg-line:#e2e8f0; --pg-accent:#1e293b; }
 
 .pg-report [id] { scroll-margin-top:84px; }
 
@@ -182,7 +188,7 @@
 	outline:2px solid #2563eb; outline-offset:2px; }
 .pg-dock__close { width:40px; padding:0; justify-content:center; background:var(--pg-accent);
 	color:#fff; border-color:var(--pg-accent); }
-.pg-dock__close:hover { color:#fff; background:#0f172a; }
+.pg-dock__close:hover { color:#fff; background:var(--pg-ink); }
 .pg-dock__chevron { transition:transform .15s ease; }
 .pg-projects-menu.is-open .pg-dock__chevron { transform:rotate(180deg); }
 
@@ -225,7 +231,7 @@ html.pg-panel-open { overflow:hidden; }
 .pg-jump { display:flex; align-items:center; justify-content:center; text-align:center; min-height:44px;
 	padding:8px 10px; border-radius:10px; background:var(--pg-accent); color:#fff;
 	font-weight:600; text-decoration:none; font-size:13.5px; }
-.pg-jump:hover { background:#0f172a; color:#fff; }
+.pg-jump:hover { background:var(--pg-ink); color:#fff; }
 .pg-jump.is-locked { background:#f1f5f9; color:#64748b; }
 .pg-jump.is-locked::after { content:'Avanzado'; margin-left:6px; font-size:10px; text-transform:uppercase;
 	letter-spacing:.04em; border:1px solid currentColor; border-radius:999px; padding:0 6px; }
@@ -273,9 +279,8 @@ html.pg-panel-open { overflow:hidden; }
 
 /* -- compartir ----------------------------------------------------------- */
 /* El diálogo cuelga de <body>, fuera de `.pg-report`: necesita sus variables. */
-.pg-share { --pg-ink:#0f172a; --pg-muted:#64748b; --pg-line:#e2e8f0; --pg-accent:#1e293b;
-	box-sizing:border-box; width:min(520px, calc(100vw - 32px)); max-height:calc(100dvh - 32px); overflow-y:auto; border:0; border-radius:14px; padding:22px 24px;
-	color:#0f172a; font-size:15px; line-height:1.5; box-shadow:0 20px 50px rgba(15,23,42,.25); }
+.pg-share { box-sizing:border-box; width:min(520px, calc(100vw - 32px)); max-height:calc(100dvh - 32px); overflow-y:auto; border:0; border-radius:14px; padding:22px 24px;
+	color:var(--pg-ink); font-size:15px; line-height:1.5; box-shadow:0 20px 50px rgba(15,23,42,.25); }
 .pg-share::backdrop { background:rgba(15,23,42,.45); }
 .pg-share__head { display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; }
 .pg-share__head h2 { margin:0; font-size:19px; }
@@ -299,3 +304,129 @@ html.pg-panel-open { overflow:hidden; }
 .pg-shared { max-width:1100px; margin:0 auto; padding:24px 16px 48px; font-family:system-ui, -apple-system, "Segoe UI", sans-serif; }
 .pg-shared__brand { margin:0 0 4px; font-size:13px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:#64748b; }
 .pg-share-open { cursor:pointer; font:inherit; font-size:13px; }
+
+/* ======================================================================== */
+/* Visualización v2 (20/10/2026): valoración, marcas, figuras, mapa, acordeón */
+/* ======================================================================== */
+
+.pg-sr { position:absolute !important; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden;
+	clip:rect(0,0,0,0); white-space:nowrap; border:0; }
+.pg-icon { display:inline-flex; vertical-align:-2px; flex:none; }
+.pg-lead { font-size:16px; margin:6px 0 14px; max-width:72ch; }
+.pg-sub__text { margin:4px 0 10px; max-width:75ch; color:var(--pg-ink); }
+.pg-section h3 { margin:28px 0 4px; font-size:17px; }
+
+/* valoración: color + icono + texto */
+.pg-rating { display:inline-flex; align-items:center; gap:4px; font-size:12px; font-weight:600;
+	padding:2px 8px; border-radius:999px; line-height:1.5; }
+.pg-rating--favorable { color:var(--pg-fav-ink); background:var(--pg-fav-bg); }
+.pg-rating--media { color:var(--pg-mid-ink); background:var(--pg-mid-bg); }
+.pg-rating--desfavorable { color:var(--pg-unfav-ink); background:var(--pg-unfav-bg); }
+.pg-rating-legend { display:flex; flex-wrap:wrap; align-items:center; gap:6px 8px; margin:10px 0 2px; font-size:12px; }
+
+/* marcas del dato */
+.pg-flags { display:inline-flex; flex-wrap:wrap; gap:4px; }
+.pg-flag { display:inline-flex; align-items:center; gap:4px; font-size:11.5px; padding:1px 7px;
+	border-radius:4px; color:var(--pg-flag-ink); background:var(--pg-flag-bg); border:1px solid var(--pg-line); cursor:help; }
+.pg-flag--estimado { color:var(--pg-flag-est-ink); background:var(--pg-flag-est-bg); }
+.pg-flag-legend ul { list-style:none; padding:0; margin:8px 0 16px; }
+.pg-flag-legend li { margin:6px 0; font-size:13.5px; display:flex; flex-wrap:wrap; gap:6px; align-items:center; }
+
+/* tarjetas */
+.pg-kpi { min-width:0; display:flex; flex-direction:column; gap:2px; border-top:3px solid var(--pg-line); }
+.pg-kpi--favorable { border-top-color:var(--pg-fav); }
+.pg-kpi--media { border-top-color:var(--pg-mid); }
+.pg-kpi--desfavorable { border-top-color:var(--pg-unfav); }
+.pg-kpi__value { font-variant-numeric:tabular-nums; }
+.pg-kpi__meta { display:flex; flex-wrap:wrap; gap:4px; margin-top:6px; }
+.pg-kpi__ref { font-size:11.5px; color:var(--pg-muted); margin-top:4px; line-height:1.4; }
+.pg-kpi--missing .pg-kpi__value { display:flex; align-items:center; gap:6px; color:var(--pg-muted); }
+
+/* figuras (ECharts) */
+.pg-figure { margin:18px 0 22px; }
+.pg-figure__title { font-weight:600; font-size:14.5px; margin-bottom:6px; }
+.pg-chart { width:100%; }
+.pg-figure__text { font-size:12.5px; color:var(--pg-muted); margin:6px 0 0; }
+
+/* «Datos avanzados» */
+.pg-advanced { margin:14px 0 22px; border:1px solid var(--pg-line); border-radius:10px; background:var(--pg-surface); }
+.pg-advanced > summary { cursor:pointer; padding:10px 14px; font-weight:600; font-size:13.5px; color:var(--pg-brand);
+	list-style:none; display:flex; align-items:center; gap:8px; min-height:44px; box-sizing:border-box; }
+.pg-advanced > summary::-webkit-details-marker { display:none; }
+.pg-advanced > summary::before { content:''; width:7px; height:7px; border-right:2px solid currentColor;
+	border-bottom:2px solid currentColor; transform:rotate(-45deg); transition:transform .15s; flex:none; }
+.pg-advanced[open] > summary::before { transform:rotate(45deg); }
+.pg-advanced[open] > summary { border-bottom:1px solid var(--pg-line); }
+.pg-advanced > :not(summary) { margin-left:14px; margin-right:14px; }
+.pg-quality .pg-warning { margin:10px 14px; }
+.pg-quality__list { font-size:13px; }
+.pg-glossary { font-size:13px; }
+.pg-glossary dt { font-weight:600; margin-top:8px; }
+.pg-glossary dd { margin:0 0 4px; color:var(--pg-muted); }
+
+/* tablas */
+.pg-table__controls { display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+.pg-btn--ghost { display:inline-flex; align-items:center; gap:6px; cursor:pointer; min-height:36px; }
+.pg-th { all:unset; display:block; box-sizing:border-box; width:100%; padding:9px 12px; cursor:pointer; color:inherit; }
+.pg-num .pg-th { text-align:right; }
+.pg-th:focus-visible { outline:2px solid #fff; outline-offset:-3px; }
+th[aria-sort=descending] .pg-th::after { content:' ▼'; font-size:10px; }
+th[aria-sort=ascending] .pg-th::after { content:' ▲'; font-size:10px; }
+.pg-table__more { margin-top:8px; cursor:pointer; }
+.pg-table__more[hidden] { display:none; }
+.pg-cell-rating { margin-right:4px; }
+.pg-cell-rating--favorable { color:var(--pg-fav-ink); }
+.pg-cell-rating--media { color:var(--pg-mid-ink); }
+.pg-cell-rating--desfavorable { color:var(--pg-unfav-ink); }
+.pg-cell-flag { margin-left:4px; color:var(--pg-flag-ink); }
+.pg-na { color:var(--pg-muted); }
+.pg-tag { display:inline-block; margin-left:6px; font-size:10.5px; padding:0 6px; border-radius:999px;
+	border:1px solid var(--pg-line); color:var(--pg-muted); vertical-align:1px; }
+.pg-tag--top { color:var(--pg-fav-ink); border-color:currentColor; }
+
+/* mapa */
+.pg-geolens { margin:36px 0; }
+.pg-geolens h2 { border-bottom:1px solid var(--pg-line); padding-bottom:8px; }
+.pg-geolens__bar { display:flex; flex-wrap:wrap; gap:8px 12px; align-items:center; margin:10px 0; }
+.pg-geolens__label { font-size:13px; font-weight:600; }
+.pg-select { padding:8px 10px; border:1px solid var(--pg-line); border-radius:8px; font:inherit; font-size:14px;
+	background:var(--pg-surface); color:var(--pg-ink); max-width:100%; min-height:40px; }
+.pg-geolens__map { width:100%; border:1px solid var(--pg-line); border-radius:11px; overflow:hidden; background:var(--pg-soft); }
+.pg-legend { display:flex; flex-wrap:wrap; gap:4px 14px; align-items:center; margin:6px 0 10px; }
+.pg-legend__title { flex-basis:100%; font-size:12.5px; font-weight:600; }
+.pg-legend__item { display:inline-flex; align-items:center; gap:6px; font-size:12px; }
+.pg-legend__swatch { display:inline-block; width:15px; height:15px; border-radius:3px; border:1px solid #9aa5b1; flex:none; }
+.pg-legend__swatch--na { background:repeating-linear-gradient(135deg, var(--pg-nodata) 0 3px, #c4c9cf 3px 5px); }
+.pg-geolens__attr { font-size:11.5px; color:var(--pg-muted); margin:6px 0; }
+
+.pg-cross { margin:36px 0; }
+.pg-cross h2 { border-bottom:1px solid var(--pg-line); padding-bottom:8px; }
+.pg-placerank { margin:36px 0; }
+.pg-placerank h2 { border-bottom:1px solid var(--pg-line); padding-bottom:8px; }
+.pg-rank th { font-weight:600; }
+.pg-summary { margin:8px 0 32px; }
+.pg-sources { margin:36px 0; font-size:14px; }
+
+@media (max-width:640px) {
+	.pg-report { font-size:14.5px; }
+	.pg-kpis { grid-template-columns:repeat(2, minmax(0, 1fr)); gap:8px; }
+	.pg-kpi__unit { display:block; margin-left:0; }
+	.pg-kpi { padding:10px 11px; }
+	.pg-kpi__value { font-size:19px; }
+	.pg-table__search { width:100%; }
+	.pg-weight { flex-wrap:wrap; }
+}
+@media (max-width:360px) { .pg-kpis { grid-template-columns:1fr; } }
+
+/* -- impresión / PDF: mismo contenido que en pantalla ------------------- */
+@media print {
+	.pg-dock, .pg-panel, .pg-panel-backdrop, .pg-table__controls, .pg-table__more, .pg-weights,
+	.pg-cta, .pg-upgrade, .pg-locked__link, .pg-geolens__bar, .pg-share-open { display:none !important; }
+	.pg-report { padding-top:0; font-size:11pt; }
+	.pg-advanced > summary::before { display:none; }
+	.pg-figure, .pg-kpi, .pg-legend, .pg-geolens__map { break-inside:avoid; }
+	.pg-section h2, .pg-geolens h2, .pg-placerank h2 { break-after:avoid; }
+	.pg-table__scroll { overflow:visible; border:0; }
+	.pg-table th { position:static; }
+	.pg-report * { -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+}

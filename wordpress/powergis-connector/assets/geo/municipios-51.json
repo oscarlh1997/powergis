@@ -1,0 +1,3 @@
+{"type":"FeatureCollection", "features": [
+{"type":"Feature","geometry":{"type":"Polygon","coordinates":[[[-5.3815,35.913],[-5.3725,35.8805],[-5.321,35.887],[-5.366,35.918],[-5.3815,35.913]]]},"properties":{"name":"Ceuta","ine_code":"51001","prov":"51"}}
+]}

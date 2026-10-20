@@ -15,6 +15,7 @@ import html
 import logging
 from typing import Any
 
+from ...domain import estado
 from ...domain.models import Report
 from .charts import bar_svg, line_svg
 
@@ -42,6 +43,10 @@ h3 { font-size: 11pt; margin: 5mm 0 1.5mm; color: #334155; page-break-after: avo
 .kpi .value { font-size: 13pt; font-weight: 700; }
 .kpi .unit { font-size: 8pt; color: #64748b; font-weight: 400; }
 .kpi.missing .value { color: #94a3b8; font-size: 10pt; font-style: italic; }
+.kpi .meta { font-size: 7.5pt; margin-top: 1mm; color: #334155; }
+.kpi .meta b.favorable { color: #144a78; } .kpi .meta b.media { color: #4a4a46; }
+.kpi .meta b.desfavorable { color: #8a3a0c; }
+.flag { font-size: 6.5pt; color: #475569; }
 table { width: 100%; border-collapse: collapse; margin: 2mm 0 3mm; font-size: 7.8pt; }
 th { background: #1e293b; color: #fff; text-align: left; padding: 1.5mm 2mm; font-weight: 600; }
 td { border-bottom: 0.4pt solid #e2e8f0; padding: 1.2mm 2mm; }
@@ -166,10 +171,14 @@ class PdfExporter:
                     f"<div class='value'>no disponible</div></div>"
                 )
             else:
+                # Lo mismo que en pantalla: valoración en texto y etiquetas del dato.
+                meta = [f"<b class='{kpi.rating}'>{_VALORACION[kpi.rating]}</b>"] if kpi.rating else []
+                meta += [esc(estado.ETIQUETAS[f]) for f in kpi.flags if f in estado.ETIQUETAS]
+                meta_html = f"<div class='meta'>{' · '.join(meta)}</div>" if meta else ""
                 cards.append(
                     f"<div class='kpi'><div class='label'>{esc(kpi.label)}</div>"
                     f"<div class='value'>{fmt(kpi.value, kpi.decimals)} "
-                    f"<span class='unit'>{esc(str(kpi.unit))}</span></div></div>"
+                    f"<span class='unit'>{esc(str(kpi.unit))}</span></div>{meta_html}</div>"
                 )
         return f"<div class='kpis'>{''.join(cards)}</div>"
 
@@ -196,12 +205,22 @@ class PdfExporter:
                 if value is None:
                     cells.append("<td class='na'>n. d.</td>")
                 elif isinstance(value, (int, float)):
-                    cells.append(f"<td class='num'>{fmt(value, column.decimals)}</td>")
+                    marcas = "".join(
+                        f" <span class='flag'>{_ABREVIATURA[f]}</span>"
+                        for f in (row.get("_flags") or {}).get(column.key, []) if f in _ABREVIATURA
+                    )
+                    cells.append(f"<td class='num'>{fmt(value, column.decimals)}{marcas}</td>")
                 else:
                     cells.append(f"<td>{esc(value)}</td>")
             body.append(f"<tr class='{css}'>{''.join(cells)}</tr>")
 
-        note = f"<p class='footnote'>{esc(table.footnote)}</p>" if table.footnote else ""
+        leyenda = "(est.) estimado · (prov.) dato de su provincia o comunidad · " \
+                  "(ant.) dato antiguo · (act.) en actualización"
+        if any(row.get("_flags") for row in table.rows):
+            table_note = f"{table.footnote} " if table.footnote else ""
+            note = f"<p class='footnote'>{esc(table_note)}{leyenda}</p>"
+        else:
+            note = f"<p class='footnote'>{esc(table.footnote)}</p>" if table.footnote else ""
         return (
             f"<table><thead><tr>{head}</tr></thead>"
             f"<tbody>{''.join(body)}</tbody></table>{note}"
@@ -252,3 +271,8 @@ def fmt(value: Any, decimals: int = 2) -> str:
         # Formato español: 1.234,56
         return text.replace(",", " ").replace(".", ",").replace(" ", ".")
     return esc(value)
+
+
+_VALORACION = {"favorable": "Favorable", "media": "En la media", "desfavorable": "Desfavorable"}
+_ABREVIATURA = {estado.ESTIMADO: "(est.)", estado.HEREDADO: "(prov.)",
+                estado.ANTIGUO: "(ant.)", estado.PROVISIONAL: "(act.)"}

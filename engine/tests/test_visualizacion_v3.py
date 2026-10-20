@@ -389,3 +389,43 @@ class TestIncidencias:
         from powergis.adapters.db.orm import FactRow
 
         assert isinstance(FactRow.__table__.c.source_ref.type, Text)
+
+
+def test_los_graficos_mensuales_del_clima_traen_sus_datos(geos, facts):
+    """Incidencia: las normales mensuales (segmento «month») no se pedían."""
+    extra = [Fact(geo_id=g, indicator=code, period=PERIOD, value=10.0 + i,
+                  segment={"month": f"{i + 1:02d}"}, source_ref="AEMET:normales")
+             for g in (2, 3, 4, 5, 6) for code in ("cli.temp.month", "cli.precip.month")
+             for i in range(12)]
+    uow = FakeUnitOfWork(geos, [*facts, *extra])
+    ctx = build_context(uow, _proyecto(Scope(GeoLevel.CCAA, "13", GeoLevel.PROVINCIA)),
+                        tier=Tier.AVANZADO)
+    report = ReportBuilder("t").build(_proyecto(Scope(GeoLevel.CCAA, "13", GeoLevel.PROVINCIA)),
+                                      ctx, version=1, tier=Tier.AVANZADO)
+    clima = next(s for s in report.as_dict()["sections"] if s["id"] == "clima")
+    ids = [c["id"] for sub in clima["subsections"] for c in sub["charts"]]
+    assert ids == ["cli.temp.month.chart", "cli.precip.month.chart"]
+
+
+def test_el_peso_del_publico_objetivo_lleva_valoracion(geos, facts, project):
+    from powergis.domain.sections.demografia import Demografia
+
+    # 4 provincias: menos de 5 zonas, se compara con España (20 %).
+    uow = FakeUnitOfWork(geos, [*facts, _f(1, "dem.pop.segment_pct", 20.0)])
+    ctx = build_context(uow, project, tier=Tier.AVANZADO)
+    kpis = [k for sub in Demografia().subsections(ctx) if sub for k in sub.kpis]
+    peso = next(k for k in kpis if k.code == "dem.pop.segment_pct")
+    assert peso.reference["base"] == "nacional"
+    assert peso.rating == "favorable"   # 24 % > 20 % + 5 %
+
+
+def test_el_pdf_lleva_valoracion_y_etiquetas(advanced_project, uow):
+    from powergis.adapters.exports import get_exporter
+
+    uow.facts.upsert_many([_f(3, "eco.poverty.risk_pct", 18.0, ref="estimación PowerGIS"),
+                           _f(1, "eco.income.household.mean", 30_000.0)])
+    ctx = build_context(uow, advanced_project, tier=Tier.AVANZADO)
+    report = ReportBuilder("t").build(advanced_project, ctx, version=1, tier=Tier.AVANZADO)
+    html = get_exporter("pdf").to_html(report)
+    assert "(est.)" in html and "Estimado" in html
+    assert any(r in html for r in ("Favorable", "En la media", "Desfavorable"))

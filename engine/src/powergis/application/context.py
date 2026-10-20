@@ -17,7 +17,7 @@ from ..domain.enums import GeoLevel, Section, Tier
 from ..domain.errors import GeoNotFound, ValidationError
 from ..domain.models import Geo, Indicator, Project, Scope, Segments
 from ..domain.ports import UnitOfWork
-from ..domain.sections import demografia, inmobiliario
+from ..domain.sections import clima, demografia, inmobiliario
 from ..domain.sections.base import SectionContext
 
 
@@ -179,6 +179,11 @@ def build_context(
         facts += uow.facts.fetch(
             geo_ids, historicas, [{"year": a} for a in inmobiliario.ANIOS_HISTORICO]
         )
+    # Las normales mensuales de AEMET van con segmento de mes. Sin pedirlas
+    # aparte los gráficos mensuales del clima salían siempre vacíos.
+    mensuales = [c for c in ("cli.temp.month", "cli.precip.month") if c in codigos]
+    if mensuales:
+        facts += uow.facts.fetch(geo_ids, mensuales, [{"month": m} for m, _ in clima.MONTHS])
     if por_sector:
         visibles = set(codigos)
         facts = [

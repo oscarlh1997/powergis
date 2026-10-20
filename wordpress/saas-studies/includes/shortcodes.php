@@ -159,6 +159,35 @@ return ob_get_clean();
 
 
 /**
+ * Animación de la pantalla de carga de «Realizar proyecto».
+ *
+ * La URL sale, por este orden, de la constante POWERGIS_LOADING_ANIMATION_URL
+ * (wp-config.php), de la opción `powergis_loading_animation_url` o del filtro
+ * del mismo nombre. Admite Lottie (.json), vídeo (.mp4/.webm) e imagen
+ * (.gif/.webp/.svg/.png). Sin URL se queda el logo y el spinner provisionales.
+ */
+function saas_pg_loading_animation_markup() {
+    $url = defined('POWERGIS_LOADING_ANIMATION_URL') ? (string) POWERGIS_LOADING_ANIMATION_URL
+        : (string) get_option('powergis_loading_animation_url', '');
+    $url = (string) apply_filters('powergis_loading_animation_url', $url);
+    if ($url === '') {
+        return '';
+    }
+    $ext = strtolower(pathinfo((string) wp_parse_url($url, PHP_URL_PATH), PATHINFO_EXTENSION));
+    $src = esc_url($url);
+    if ($ext === 'json') {
+        return '<div class="pg-loading-screen__media" data-pg-anim data-pg-lottie="' . $src . '" aria-hidden="true"></div>'
+            . '<script src="https://cdnjs.cloudflare.com/ajax/libs/lottie-web/5.12.2/lottie.min.js" defer></script>'
+            . '<script>window.addEventListener("load",function(){var n=document.querySelector("[data-pg-lottie]");'
+            . 'if(n&&window.lottie){window.lottie.loadAnimation({container:n,renderer:"svg",loop:true,autoplay:true,path:n.getAttribute("data-pg-lottie")});}});</script>';
+    }
+    if ($ext === 'mp4' || $ext === 'webm') {
+        return '<video class="pg-loading-screen__media" data-pg-anim src="' . $src . '" autoplay loop muted playsinline aria-hidden="true"></video>';
+    }
+    return '<img class="pg-loading-screen__media" data-pg-anim src="' . $src . '" alt="" aria-hidden="true">';
+}
+
+/**
  * Shortcode: Crear Proyecto V6 (perfil de cliente y capas territoriales)
  * Reescrito 16 ago 2026: mismo mecanismo de datos/nonce que la versión original
  * (probada y funcionando), con nuevo diseño de marca PowerGIS, formulario en pasos,
@@ -711,15 +740,20 @@ add_shortcode('crear_proyecto_v6', function () {
   Pantalla de carga tras «Realizar proyecto». Se queda hasta que el motor
   termina y entonces abre el proyecto recién creado.
 
-  La animación definitiva (logo Power GIS Data, versión C con textos) va dentro
-  de `.pg-loading-screen__anim`: sustituye el contenido de ese div por el
-  marcado de la animación y pega su CSS al final del <style> de abajo. El
-  logo y las frases de ahora son un marcador provisional.
+  La animación definitiva se enlaza SIN tocar este fichero: define en
+  wp-config.php `define('POWERGIS_LOADING_ANIMATION_URL', 'https://…/carga.json');`
+  (o la opción / el filtro `powergis_loading_animation_url`). Lottie .json,
+  .mp4/.webm o .gif/.webp/.svg/.png. Sin URL, logo y spinner provisionales.
 -->
 <div class="pg-loading-screen" id="pgLoadingScreen" role="status" aria-live="polite" hidden>
   <div class="pg-loading-screen__anim" data-pg-anim-slot>
+    <?php $pg_anim = saas_pg_loading_animation_markup(); ?>
+    <?php if ($pg_anim !== ''): ?>
+      <?php echo $pg_anim; // phpcs:ignore WordPress.Security.EscapeOutput -- URL escapada en el helper ?>
+    <?php else: ?>
     <div class="pg-loading-screen__logo">Power GIS <span>Data</span></div>
     <div class="pg-loading-screen__spinner" aria-hidden="true"></div>
+    <?php endif; ?>
   </div>
   <p class="pg-loading-screen__text" id="pgLoadingText">Preparando tu análisis…</p>
   <div class="pg-loading-screen__error" id="pgLoadingError" hidden>
@@ -736,6 +770,8 @@ add_shortcode('crear_proyecto_v6', function () {
   }
   .pg-loading-screen[hidden] { display: none; }
   .pg-loading-screen__anim { display: flex; flex-direction: column; align-items: center; gap: 22px; }
+  .pg-loading-screen__media { width: min(320px, 70vw); height: auto; aspect-ratio: auto; }
+  div.pg-loading-screen__media { height: min(320px, 70vw); }
   .pg-loading-screen__logo { font-family: 'Raleway', sans-serif; font-weight: 700; font-size: 30px; letter-spacing: .5px; }
   .pg-loading-screen__logo span { color: #FF7124; }
   .pg-loading-screen__spinner {
@@ -1263,6 +1299,8 @@ add_shortcode('crear_proyecto_v6', function () {
         text.hidden = true;
         var spinner = screen.querySelector('.pg-loading-screen__spinner');
         if (spinner) spinner.hidden = true;
+        var anim = screen.querySelector('[data-pg-anim]');
+        if (anim) anim.hidden = true;
         document.getElementById('pgLoadingErrorLink').href = href;
         document.getElementById('pgLoadingError').hidden = false;
       }

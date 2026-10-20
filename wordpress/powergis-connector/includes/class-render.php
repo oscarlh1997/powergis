@@ -60,12 +60,6 @@ final class Render {
 			POWERGIS_VERSION
 		);
 
-		// ECharts y MapLibre desde CDN. Si prefieres servirlos tú, cambia la URL:
-		// el bundle solo espera `window.echarts` y `window.maplibregl`.
-		wp_enqueue_script( 'echarts', 'https://cdnjs.cloudflare.com/ajax/libs/echarts/5.5.1/echarts.min.js', array(), '5.5.1', true );
-		wp_enqueue_script( 'maplibre-gl', 'https://cdnjs.cloudflare.com/ajax/libs/maplibre-gl/4.7.1/maplibre-gl.js', array(), '4.7.1', true );
-		wp_enqueue_style( 'maplibre-gl', 'https://cdnjs.cloudflare.com/ajax/libs/maplibre-gl/4.7.1/maplibre-gl.css', array(), '4.7.1' );
-
 		// El diálogo de compartir va en su propio fichero para que el panel de
 		// control pueda llevarse el botón a donde quiera: basta con poner un
 		// `[data-pg-share-open]` en cualquier parte de la página.
@@ -80,7 +74,11 @@ final class Render {
 				'restUrl'  => esc_url_raw( rest_url( REST_Projects::NAMESPACE ) ),
 				'nonce'    => wp_create_nonce( 'wp_rest' ),
 				'postId'   => (int) $post_id,
-				'tilesUrl' => esc_url_raw( apply_filters( 'powergis_tiles_url', POWERGIS_URL . 'tiles/' ) ),
+				// ECharts lo carga report.js después de pintar el informe (no compite
+				// con el JSON). Para servirlo desde tu dominio, cambia la URL.
+				'echartsUrl' => esc_url_raw( apply_filters( 'powergis_echarts_url', 'https://cdnjs.cloudflare.com/ajax/libs/echarts/5.5.1/echarts.min.js' ) ),
+				// Recintos del mapa (GeoJSON simplificado del IGN vía es-atlas).
+				'geoUrl'   => esc_url_raw( apply_filters( 'powergis_geo_url', POWERGIS_URL . 'assets/geo/' ) ),
 				'i18n'     => array(
 					'loading'      => __( 'Preparando tu informe…', 'powergis' ),
 					'error'        => __( 'No se pudo cargar el informe.', 'powergis' ),
