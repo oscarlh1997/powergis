@@ -31,8 +31,9 @@ PALETTES: dict[str, str] = {
 }
 
 # Capas que se muestran encendidas al abrir el mapa, en orden.
+# Siempre una TASA: un recuento (personas) sólo pinta dónde hay más gente.
 DEFAULT_LAYERS: list[str] = [
-    "dem.pop.segment",
+    "dem.pop.segment_pct",
     "eco.income.household.median",
     "cmp.opportunity.index",
 ]

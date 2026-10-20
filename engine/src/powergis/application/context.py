@@ -148,7 +148,11 @@ def build_context(
     usable = [i for i in indicators if i.available_at(level)]
     dropped = [i.code for i in indicators if i not in usable]
 
+    # España va siempre: es la referencia del color cuando hay menos de 5 zonas.
+    national = uow.geos.get(GeoLevel.PAIS, "ES")
     geo_ids = [g.geo_id for g in resolved.children] + [resolved.parent.geo_id]
+    if national is not None and national.geo_id not in geo_ids:
+        geo_ids.append(national.geo_id)
     combos = segment_combinations(project.segments)
     codigos = [i.code for i in usable]
     # Gasto, frecuencia y ticket dependen del sector del proyecto, y el
@@ -199,6 +203,7 @@ def build_context(
         business=project.business.as_dict(),
         target=project.target,
         hidden_layers=hidden,
+        national=national,
     )
 
     if resolved.note:

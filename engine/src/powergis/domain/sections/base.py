@@ -22,7 +22,7 @@ from dataclasses import dataclass, field
 from datetime import date
 from typing import Any
 
-from .. import stats
+from .. import estado, stats
 from ..enums import Direction, GeoLevel, Section, Tier, Unit
 from ..models import (
     Chart,
@@ -61,6 +61,8 @@ class SectionContext:
     #: indicadores ya no están en `catalog`; las secciones lo usan para no
     #: avisar de «sin datos» de algo que el cliente no pidió.
     hidden_layers: frozenset[str] = frozenset()
+    #: España, para la referencia del color cuando hay menos de 5 zonas.
+    national: Geo | None = None
 
     # -- capas ---------------------------------------------------------------
 
@@ -84,6 +86,30 @@ class SectionContext:
     @classmethod
     def index(cls, facts: Iterable[Fact]) -> dict[tuple[int, str, str], Fact]:
         return {(f.geo_id, f.indicator, cls.segment_key(f.segment)): f for f in facts}
+
+    def fact(
+        self,
+        geo_id: int,
+        indicator: str,
+        segment: dict[str, str] | None = None,
+    ) -> Fact | None:
+        return self.facts.get((geo_id, indicator, self.segment_key(segment)))
+
+    def flags(self, geo_id: int, indicator: str,
+              segment: dict[str, str] | None = None) -> list[str]:
+        return estado.de_hecho(self.fact(geo_id, indicator, segment), indicator)
+
+    def national_value(self, indicator: str) -> float | None:
+        return self.value(self.national.geo_id, indicator) if self.national else None
+
+    def reference(self, indicator: str, segment: dict[str, str] | None = None) -> dict | None:
+        """Cortes P25/P75 de las zonas (o el nacional ±5 %) para colorear."""
+        heredados = sum(
+            1 for g in self.children
+            if estado.HEREDADO in self.flags(g.geo_id, indicator, segment)
+        )
+        return estado.referencia(self.values(indicator, segment),
+                                 self.national_value(indicator), heredados=heredados)
 
     def value(
         self,
@@ -198,21 +224,41 @@ def kpi_from(
     label: str | None = None,
     note: str | None = None,
 ) -> Kpi:
-    """KPI del ámbito completo, con su delta y percentil contra las zonas hijas."""
+    """KPI del ámbito completo, con su percentil, sus marcas y sus cortes de color."""
     ind = ctx.catalog.get(code)
     value = ctx.parent_value(code, segment)
     unit = ind.unit if ind else Unit.INDICE
+    direction = ind.direction if ind else Direction.NEUTRAL
     child_values = ctx.values(code, segment)
+    direct = ctx.fact(ctx.parent.geo_id, code, segment)
+    if direct is not None and direct.value is not None:
+        flags = estado.de_hecho(direct, code)
+    else:
+        # Agregado desde las zonas: lleva las marcas de lo que suma (menos
+        # «heredado», que es de cada zona, no del total).
+        flags = sorted({f for g in ctx.children for f in ctx.flags(g.geo_id, code, segment)}
+                       - {estado.HEREDADO}, key=list(estado.ETIQUETAS).index)
+    # Un total (personas, unidades) no se compara con sus partes: el
+    # percentil saldría siempre 100 y el color no diría nada.
+    es_total = unit in {Unit.PERSONAS, Unit.UNIDADES}
+    reference = None if es_total else ctx.reference(code, segment)
+    hecho = direct or next((ctx.fact(g.geo_id, code, segment) for g in ctx.children
+                            if ctx.fact(g.geo_id, code, segment) is not None), None)
     return Kpi(
         code=code,
         label=label or (ind.label if ind else code),
         value=value,
         unit=unit,
-        direction=ind.direction if ind else Direction.NEUTRAL,
+        direction=direction,
         delta_vs_parent=None,
-        percentile=stats.percentile_of(value, child_values) if child_values else None,
+        percentile=(stats.percentile_of(value, child_values)
+                    if child_values and not es_total else None),
         decimals=ind.decimals if ind else 2,
         note=note or (_missing_note(child_values) if value is None else None),
+        flags=flags,
+        reference=reference,
+        rating=estado.clase(value, reference, int(direction)),
+        period=hecho.period.isoformat() if hecho and hecho.period else None,
     )
 
 
@@ -239,7 +285,12 @@ def build_table(
     indicador elegido. Es lo que alimenta el bloque de conclusiones.
     """
     columns: list[Column] = [Column(key="zona", label="Zona", type="text")]
-    columns += [column_for(ctx.catalog[c]) for c in codes if c in ctx.catalog]
+    for c in codes:
+        if c in ctx.catalog:
+            col = column_for(ctx.catalog[c])
+            if ctx.catalog[c].unit not in {Unit.PERSONAS, Unit.UNIDADES}:
+                col.reference = ctx.reference(c, segment)
+            columns.append(col)
     columns += [col for col, _ in extra_columns]
 
     rows: list[dict[str, Any]] = []
@@ -249,9 +300,14 @@ def build_table(
             "geo_id": geo.geo_id,
             "zona": geo.name,
         }
+        marcas: dict[str, list[str]] = {}
         for code in codes:
             if code in ctx.catalog:
                 row[code] = ctx.value(geo.geo_id, code, segment)
+                if f := ctx.flags(geo.geo_id, code, segment):
+                    marcas[code] = f
+        if marcas:
+            row["_flags"] = marcas
         for col, fn in extra_columns:
             row[col.key] = fn(geo)
         rows.append(row)
@@ -274,11 +330,23 @@ def build_chart(
     *,
     chart_type: str = "bar",
     stack: bool = False,
-    limit: int = 25,
+    limit: int | None = None,
     segment: dict[str, str] | None = None,
 ) -> Chart:
-    """Gráfico con una serie por indicador y una categoría por zona."""
-    geos = ctx.children[:limit]
+    """Gráfico con una serie por indicador y una categoría por zona.
+
+    Las zonas van ordenadas por el valor de la primera serie, de mayor a menor
+    y los huecos al final. Antes eran las 25 primeras por orden alfabético: el
+    gráfico enseñaba las zonas que empiezan por A, no las que importan. El
+    recorte (top 15 + la zona analizada) lo hace el front.
+    """
+    primera = codes[0] if codes else None
+    geos = sorted(
+        ctx.children,
+        key=lambda g: (ctx.value(g.geo_id, primera, segment) is None,
+                       -(ctx.value(g.geo_id, primera, segment) or 0.0)),
+    ) if primera else list(ctx.children)
+    geos = geos[:limit] if limit else geos
     x = [g.name for g in geos]
     series: list[dict[str, Any]] = []
     for code in codes:

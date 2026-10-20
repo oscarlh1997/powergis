@@ -107,6 +107,10 @@ class LocalPostgisSource:
     def __init__(self, session: Session) -> None:
         self._s = session
 
+    def has_data(self) -> bool:
+        """¿Hay POIs cargados? Sin extracto, contar daría 0 en todas partes."""
+        return bool(self._s.execute(text("SELECT EXISTS (SELECT 1 FROM osm_poi)")).scalar())
+
     @staticmethod
     def _where(tags: Sequence[str]) -> tuple[str, dict[str, Any]]:
         clauses: list[str] = []
@@ -248,6 +252,13 @@ class OsmCollector(BaseCollector):
     ) -> list[Fact]:
         wanted = set(indicators) & set(self.PROVIDES)
         if not wanted or not geos:
+            return []
+
+        # Sin extracto de OSM cargado, los recuentos saldrían 0 en todas las
+        # zonas y el informe diría «cero competidores». No hay dato: null.
+        has_data = getattr(self._source, "has_data", None)
+        if has_data is not None and not has_data():
+            log.warning("OSM: no hay POIs cargados (osm_poi vacía); no se escribe nada")
             return []
 
         when = period or date.today()

@@ -200,6 +200,14 @@ class Kpi:
     percentile: float | None = None
     decimals: int = 2
     note: str | None = None
+    #: Marcas del valor (`domain.estado`): heredado, provisional, antiguo, estimado.
+    flags: list[str] = field(default_factory=list)
+    #: Cortes del color: {base: zonas|nacional, n, p25, p75[, valor]}.
+    reference: dict[str, Any] | None = None
+    #: favorable | media | desfavorable | None (sin valoración).
+    rating: str | None = None
+    #: Periodo de referencia del dato (ISO), si se conoce.
+    period: str | None = None
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -213,6 +221,10 @@ class Kpi:
             "decimals": self.decimals,
             "note": self.note,
             "missing": self.value is None,
+            "flags": list(self.flags),
+            "reference": self.reference,
+            "rating": self.rating,
+            "period": self.period,
         }
 
 
@@ -223,15 +235,20 @@ class Column:
     type: str = "float"  # text | int | float | pct | eur | index
     decimals: int = 2
     direction: Direction = Direction.NEUTRAL
+    #: Cortes del color de la columna (ver `Kpi.reference`).
+    reference: dict[str, Any] | None = None
 
     def as_dict(self) -> dict[str, Any]:
-        return {
+        out = {
             "key": self.key,
             "label": self.label,
             "type": self.type,
             "decimals": self.decimals,
             "direction": int(self.direction),
         }
+        if self.reference is not None:
+            out["reference"] = self.reference
+        return out
 
 
 @dataclass(slots=True)
@@ -266,6 +283,9 @@ class Chart:
     unit: Unit | None = None
     stack: bool = False
 
+    def has_data(self) -> bool:
+        return any(v is not None for s in self.series for v in s.get("data", []))
+
     def as_dict(self) -> dict[str, Any]:
         return {
             "id": self.id,
@@ -296,7 +316,9 @@ class Subsection:
             "id": self.id,
             "title": self.title,
             "kpis": [k.as_dict() for k in self.kpis],
-            "charts": [c.as_dict() for c in self.charts],
+            # Un gráfico sin un solo valor no se emite (incidencia «gráficos
+            # vacíos»): el front no tiene que adivinar qué ocultar.
+            "charts": [c.as_dict() for c in self.charts if c.has_data()],
             "tables": [t.as_dict() for t in self.tables],
             "narrative": self.narrative,
         }

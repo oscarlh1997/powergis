@@ -119,7 +119,7 @@ class FactRow(Base):
     segment_key: Mapped[str] = mapped_column(String(200), primary_key=True, default="{}")
     segment: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
     value: Mapped[float | None] = mapped_column(Float)
-    source_ref: Mapped[str | None] = mapped_column(String(200))
+    source_ref: Mapped[str | None] = mapped_column(Text)
     ingested_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )

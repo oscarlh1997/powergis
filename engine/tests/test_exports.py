@@ -85,7 +85,10 @@ def basic_report(project, context):
 
 class TestGraficosSvg:
     def test_barras_produce_svg(self, report):
-        chart = report.sections[0].subsections[0].charts[0]
+        # El primero CON datos: los de % de la demografía no tienen fuente en
+        # el fixture (sólo trae personas).
+        chart = next(c for s in report.sections for sub in s.subsections
+                     for c in sub.charts if c.has_data() and c.type == "bar")
         svg = bar_svg(chart)
         assert svg.startswith("<svg")
         assert "</svg>" in svg

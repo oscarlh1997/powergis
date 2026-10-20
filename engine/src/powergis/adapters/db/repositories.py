@@ -397,7 +397,12 @@ class SqlProjectRepository:
             scope={
                 "level": str(project.scope.level),
                 "ine_code": project.scope.ine_code,
-                "children_level": str(project.scope.resolve_children_level()),
+                # Sólo si se pidió: guardar el nivel resuelto («distrito» para
+                # un municipio) impedía al recargar compararlo con los
+                # municipios de su provincia (incidencia del ámbito municipal).
+                "children_level": (
+                    str(project.scope.children_level) if project.scope.children_level else None
+                ),
             },
             segments=project.segments.as_dict(),
             business=project.business.as_dict(),

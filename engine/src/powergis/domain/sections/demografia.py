@@ -81,20 +81,18 @@ class Demografia(SectionBuilder):
                 ctx,
                 "dem.piramide",
                 "Estructura de edad por zona",
-                # Primero los tramos en porcentaje, que son los que tienen
-                # fuente municipal; los de personas detrás, para cuando la
-                # tengan. `build_chart` descarta las series sin datos, así que
-                # declarar los dos juegos no ensucia el gráfico.
-                ["dem.age.u18_pct", "dem.age.18_64_pct", "dem.age.65p_pct",
-                 "dem.age.0_15", "dem.age.16_64", "dem.age.65p"],
+                # Sólo los tramos en %: mezclar personas y porcentajes en la
+                # misma pila sumaba cosas que no se suman (incidencia de la
+                # especificación de visualización).
+                ["dem.age.u18_pct", "dem.age.18_64_pct", "dem.age.65p_pct"],
                 chart_type="bar",
                 stack=True,
             ),
             build_chart(
                 ctx,
                 "dem.segmento",
-                "Público objetivo por zona",
-                ["dem.pop.segment"],
+                "Peso del público objetivo por zona (%)",
+                ["dem.pop.segment_pct"],
                 chart_type="bar",
             ),
         ]
@@ -147,10 +145,9 @@ class Demografia(SectionBuilder):
             build_chart(
                 ctx,
                 "dem.genero",
-                "Distribución por género",
-                ["dem.sex.women", "dem.sex.men"],
+                "% de mujeres por zona",
+                ["dem.sex.women_pct"],
                 chart_type="bar",
-                stack=True,
             )
         ]
 
