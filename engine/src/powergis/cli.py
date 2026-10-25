@@ -79,6 +79,14 @@ def seed(
     """Carga geografías, perfiles de sector y (opcional) datos de demostración."""
     result = load_geographies(path)
     typer.secho(f"{result['geos']} geografías cargadas", fg=typer.colors.GREEN)
+    if result["municipios_con_un_distrito"]:
+        uno = result["municipios_con_un_distrito"]
+        typer.secho(
+            f"{len(uno)} municipios con un solo distrito en el fichero "
+            f"({', '.join(uno[:10])}{'…' if len(uno) > 10 else ''}): su informe compara "
+            "secciones censales. Comprueba con `powergis distritos <municipio>`.",
+            fg=typer.colors.YELLOW,
+        )
 
     load_sector_profiles()
     typer.secho("Perfiles de sector cargados", fg=typer.colors.GREEN)
@@ -486,6 +494,34 @@ def ine_buscar(
             fg=typer.colors.YELLOW,
         )
         raise typer.Exit(1)
+
+
+@app.command("distritos")
+def distritos(municipio: str = typer.Argument(..., help="Código INE de 5 cifras, p. ej. 28134")) -> None:
+    """Distritos y secciones censales cargados de un municipio.
+
+    Con un solo distrito el informe por distritos no compara nada (proyecto
+    8071): el motor pasa a secciones censales si las hay. Compáralo con el
+    seccionado del INE para saber si la carga de geografías está completa.
+    """
+    from .adapters.db.session import uow_factory
+    from .domain.enums import GeoLevel
+
+    with uow_factory() as uow:
+        mun = uow.geos.get(GeoLevel.MUNICIPIO, municipio)
+        if mun is None:
+            typer.secho(f"No existe el municipio {municipio} en dim_geo", fg=typer.colors.RED)
+            raise typer.Exit(1)
+        lista = uow.geos.descendants(mun.geo_id, GeoLevel.DISTRITO)
+        secciones = uow.geos.descendants(mun.geo_id, GeoLevel.SECCION)
+    typer.secho(f"{mun.name} ({municipio}): {len(lista)} distritos, {len(secciones)} secciones",
+                bold=True)
+    for d in lista:
+        n = sum(1 for sec in secciones if sec.parent_id == d.geo_id)
+        typer.echo(f"  {d.ine_code}  {d.name:<30} {n} secciones")
+    if len(lista) < 2:
+        typer.secho("Un solo distrito: el informe compara secciones censales "
+                    "(o, sin ellas, no hay zonas que comparar).", fg=typer.colors.YELLOW)
 
 
 @app.command("almacen-estado")
@@ -1402,7 +1438,16 @@ def load_geographies(path: str | None = None) -> dict[str, Any]:
             written += len(geos)
         uow.commit()
 
-    return {"geos": written, "source": str(source)}
+    # Un municipio con un solo distrito no sirve para un informe por distritos
+    # (proyecto 8071): se avisa al cargar, para saber si el fichero está
+    # incompleto o el municipio es así.
+    distritos: dict[str, int] = {}
+    for row in data:
+        if row.get("level") == str(GeoLevel.DISTRITO):
+            mun = str(row.get("parent_code") or row["ine_code"][:5])
+            distritos[mun] = distritos.get(mun, 0) + 1
+    return {"geos": written, "source": str(source),
+            "municipios_con_un_distrito": sorted(m for m, n in distritos.items() if n == 1)}
 
 
 def load_sector_profiles() -> int:

@@ -231,3 +231,36 @@ class TestSeccionesConMotivo:
         demo = next(s for s in report.sections if s.id == Section.DEMOGRAFIA)
         assert "INE:Padrón continuo" not in demo.sources
         assert all(g["code"] != "inm.dwellings.empty_pct" for g in report.glossary)
+
+
+class TestUnSoloDistrito:
+    def test_con_un_distrito_se_comparan_sus_secciones(self):
+        from powergis.application.context import resolve_scope
+
+        solo = [g for g in geos() if g.geo_id not in (12, 23)]
+        r = resolve_scope(FakeUnitOfWork(solo, []), Scope(GeoLevel.MUNICIPIO, "28134"))
+        assert r.children_level is GeoLevel.SECCION
+        assert [g.geo_id for g in r.children] == [21, 22]
+        assert "un solo distrito" in r.note
+
+    def test_con_un_distrito_y_sin_secciones_lo_dice(self):
+        from powergis.application.context import resolve_scope
+
+        solo = [g for g in geos() if g.geo_id in (1, 2, 3, MUN, 11)]
+        r = resolve_scope(FakeUnitOfWork(solo, []), Scope(GeoLevel.MUNICIPIO, "28134"))
+        assert r.children_level is GeoLevel.DISTRITO and len(r.children) == 1
+        assert "no hay zonas con las que compararlo" in r.note
+
+    def test_si_el_cliente_pide_distritos_se_respetan(self):
+        from powergis.application.context import resolve_scope
+
+        solo = [g for g in geos() if g.geo_id not in (12, 23)]
+        r = resolve_scope(FakeUnitOfWork(solo, []),
+                          Scope(GeoLevel.MUNICIPIO, "28134", GeoLevel.DISTRITO))
+        assert r.children_level is GeoLevel.DISTRITO
+
+    def test_dos_distritos_no_cambian(self):
+        from powergis.application.context import resolve_scope
+
+        r = resolve_scope(uow([]), Scope(GeoLevel.MUNICIPIO, "28134"))
+        assert r.children_level is GeoLevel.DISTRITO and len(r.children) == 2

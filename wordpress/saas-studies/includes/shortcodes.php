@@ -455,6 +455,7 @@ add_shortcode('crear_proyecto_v6', function () {
         <div class="pg-field">
           <label class="pg-label" for="f-poblacion">Población<span class="req">*</span></label>
           <select class="pg-select" id="f-poblacion" name="poblacion" disabled><option value="">Elige antes la provincia...</option></select>
+          <p class="pg-hint" id="poblacion-distritos-hint">Compararemos los distritos de la población. Si solo tiene un distrito censal, compararemos sus secciones censales; si tampoco hay secciones, no habrá zonas con las que comparar y el informe lo indicará.</p>
           <p class="pg-error-msg">Selecciona la población.</p>
         </div>
       </div>
@@ -1129,7 +1130,7 @@ add_shortcode('crear_proyecto_v6', function () {
     nacional: 'Compararemos entre sí las Comunidades Autónomas de España, para encontrar las mejores regiones del país para tu negocio.',
     ccaa: 'Compararemos entre sí las provincias dentro de la comunidad autónoma que elijas, para encontrar la mejor provincia.',
     provincia: 'Compararemos entre sí las poblaciones dentro de la provincia que elijas, para encontrar la mejor población.',
-    poblacion: 'Compararemos entre sí las zonas y barrios dentro de la población que elijas, para encontrar la ubicación exacta más adecuada.'
+    poblacion: 'Compararemos entre sí las zonas y barrios dentro de la población que elijas, para encontrar la ubicación exacta más adecuada. Si la población tiene un solo distrito censal, la comparación se hace por secciones censales.'
   };
   function updateTipoExplainer() {
     var tipo = getTipoEstudio();

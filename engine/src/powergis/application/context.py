@@ -60,6 +60,19 @@ def resolve_scope(uow: UnitOfWork, scope: Scope, max_children: int = 8500) -> Re
                 f"No hay datos por distritos ni secciones de {parent.name}: "
                 f"se compara con los municipios de la provincia de {province.name}."
             )
+    if (len(children) == 1 and children_level is GeoLevel.DISTRITO
+            and scope.children_level is None):
+        # Un municipio con un solo distrito no tiene nada que comparar (el
+        # informe 8071 salía con «Distrito 01» como mejor y peor zona). Si hay
+        # secciones censales, se comparan ésas.
+        secciones = uow.geos.descendants(parent.geo_id, GeoLevel.SECCION)
+        if len(secciones) > 1:
+            children, children_level = secciones, GeoLevel.SECCION
+            note = (f"{parent.name} tiene un solo distrito censal: se comparan sus "
+                    f"{len(secciones)} secciones censales.")
+        else:
+            note = (f"{parent.name} tiene un solo distrito censal y no hay secciones "
+                    "cargadas: no hay zonas con las que compararlo.")
     if not children:
         raise ValidationError(
             "El ámbito no tiene zonas al nivel de desagregación pedido",
