@@ -215,7 +215,7 @@ class PdfExporter:
             body.append(f"<tr class='{css}'>{''.join(cells)}</tr>")
 
         leyenda = "(est.) estimado · (prov.) dato de su provincia o comunidad · " \
-                  "(ant.) dato antiguo · (act.) en actualización"
+                  "(mun.) dato de su municipio · (ant.) dato antiguo · (act.) en actualización"
         if any(row.get("_flags") for row in table.rows):
             table_note = f"{table.footnote} " if table.footnote else ""
             note = f"<p class='footnote'>{esc(table_note)}{leyenda}</p>"
@@ -275,4 +275,5 @@ def fmt(value: Any, decimals: int = 2) -> str:
 
 _VALORACION = {"favorable": "Favorable", "media": "En la media", "desfavorable": "Desfavorable"}
 _ABREVIATURA = {estado.ESTIMADO: "(est.)", estado.HEREDADO: "(prov.)",
+                estado.HEREDADO_MUNICIPIO: "(mun.)",
                 estado.ANTIGUO: "(ant.)", estado.PROVISIONAL: "(act.)"}

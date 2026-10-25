@@ -42,7 +42,8 @@ _CATASTRO = ["inm.cadastre.urban_units", "inm.cadastre.value_mean",
              "sat.available_units", "sat.occupancy", "sat.rent_m2"]
 
 _HEREDADO = ("Por provincia: el INE/MIVAU no lo publica por municipio, así que cada "
-             "municipio lleva el dato de su provincia.")
+             "municipio lleva el dato de su provincia; los distritos y secciones "
+             "llevan el de su municipio, con su etiqueta.")
 
 
 @register

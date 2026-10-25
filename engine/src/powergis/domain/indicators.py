@@ -545,6 +545,24 @@ CATALOG: list[Indicator] = [*_DEMO, *_ECO, *_CTX, *_INM, *_CMP, *_TUR, *_CLI, *_
 BY_CODE: dict[str, Indicator] = {i.code: i for i in CATALOG}
 
 
+#: Lo que no varía dentro de un municipio, o que su fuente sólo publica por
+#: municipio o por encima: los distritos y secciones llevan el valor de su
+#: municipio, con la etiqueta «Dato de su municipio» (`domain.estado`).
+HEREDABLES_DEL_MUNICIPIO: tuple[str, ...] = (
+    "cli.", "mov.", "tur.", "inm.price.", "inm.ipv.", "inm.sales.", "inm.rent.",
+    "eco.consumer.online_pct", "sat.turnover", "sat.survival3y", "dem.birth.rate",
+)
+
+
+def heredable(ind: Indicator) -> bool:
+    """¿Lo puede llevar un distrito o una sección del valor de su municipio?
+
+    Nunca un total (personas, unidades): el del municipio no es el de la zona.
+    """
+    return ind.code.startswith(HEREDABLES_DEL_MUNICIPIO) and ind.unit not in {
+        Unit.PERSONAS, Unit.UNIDADES}
+
+
 def by_section(section: Section, tier: Tier | None = None) -> list[Indicator]:
     out = [i for i in CATALOG if i.section is section]
     if tier is not None:

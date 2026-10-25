@@ -71,3 +71,71 @@ class TestEtiquetasYAvisos:
         ctx = ctx_de([], [])
         assert sin_datos_de_capa(ctx, ["inm.rent.m2"], "Alquiler de vivienda")
         assert "por distrito;" in ctx.warnings[-1]
+
+
+def proyecto(children_level: GeoLevel = GeoLevel.DISTRITO):
+    from uuid import uuid4
+
+    from powergis.domain.models import BusinessProfile, Project
+
+    return Project(
+        project_uuid=uuid4(), wp_user_id=1, wp_post_id=8071,
+        scope=Scope(GeoLevel.MUNICIPIO, "28134", children_level),
+        segments=Segments(), business=BusinessProfile(sector="generico"),
+        tier=Tier.AVANZADO,
+    )
+
+
+def contexto(facts: list[Fact], children_level: GeoLevel = GeoLevel.DISTRITO):
+    from powergis.application.context import build_context
+
+    return build_context(uow(facts), proyecto(children_level), tier=Tier.AVANZADO)
+
+
+class TestHerenciaDelMunicipio:
+    def test_el_distrito_lleva_el_precio_de_su_municipio_con_etiqueta(self):
+        ctx = contexto([f(MUN, "inm.price.m2", 3100.0, "MIVAU:1")])
+        assert ctx.value(11, "inm.price.m2") == 3100.0
+        assert ctx.flags(11, "inm.price.m2") == ["heredado_municipio"]
+        # El ámbito es el propio municipio: su dato no lleva la marca.
+        assert ctx.flags(MUN, "inm.price.m2") == []
+
+    def test_lo_que_el_municipio_hereda_de_la_provincia_sigue_siendo_provincial(self):
+        ctx = contexto([f(MUN, "inm.price.m2", 2900.0, "Equipo de datos · dato de la provincia")])
+        assert ctx.flags(12, "inm.price.m2") == ["heredado"]
+
+    def test_un_dato_propio_del_distrito_no_se_pisa(self):
+        ctx = contexto([f(MUN, "cli.temp.annual", 14.0), f(11, "cli.temp.annual", 13.5)])
+        assert ctx.value(11, "cli.temp.annual") == 13.5
+        assert ctx.flags(11, "cli.temp.annual") == []
+        assert ctx.value(12, "cli.temp.annual") == 14.0
+
+    def test_las_secciones_suben_hasta_el_municipio(self):
+        ctx = contexto([f(MUN, "mov.interprov.net_rate", 2.5)], GeoLevel.SECCION)
+        assert {ctx.value(g.geo_id, "mov.interprov.net_rate") for g in ctx.children} == {2.5}
+
+    def test_un_total_no_se_hereda(self):
+        ctx = contexto([f(MUN, "tur.hotel.travellers", 50_000.0)])
+        assert ctx.value(11, "tur.hotel.travellers") is None
+
+    def test_los_meses_del_clima_tambien(self):
+        ctx = contexto([f(MUN, "cli.temp.month", 5.0, "AEMET:3195", month="01")])
+        assert ctx.value(11, "cli.temp.month", {"month": "01"}) == 5.0
+
+    def test_el_heredado_no_colorea(self):
+        ctx = contexto([f(MUN, "inm.price.m2", 3100.0)])
+        ctx.national = None
+        assert ctx.reference("inm.price.m2") is None
+
+
+class TestDatoDelAmbito:
+    def test_la_poblacion_del_municipio_llega_al_resumen_aunque_no_haya_por_distrito(self):
+        from powergis.domain.report import ReportBuilder
+
+        facts = [f(MUN, "dem.pop.total", 92_000.0), f(MUN, "dem.pop.segment", 20_000.0)]
+        ctx = contexto(facts)
+        assert ctx.parent_value("dem.pop.total") == 92_000.0
+        report = ReportBuilder("test").build(proyecto(), ctx, version=1, tier=Tier.AVANZADO)
+        head = {h["label"]: h["value"] for h in report.executive_summary["headline"]}
+        assert head["Población analizada"] == 92_000.0
+        assert head["Público objetivo"] == 20_000.0

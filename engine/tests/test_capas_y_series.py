@@ -431,12 +431,11 @@ def test_cada_ambito_respeta_los_interruptores(uow_capas, ambito, encendidas, ti
         assert not nuevas & set(ids)
     if tier is Tier.AVANZADO and encendidas:
         if ambito == "municipio":
-            # Por sección censal sólo llega el Censo 2021 (viviendas); el
-            # turismo y el precio no se publican a ese nivel y se dice así.
-            assert subsecciones(report, Section.TURISMO) == []
-            assert subsecciones(report, Section.INMOBILIARIO) == ["inmobiliario.viviendas"]
-            assert any("Nivel turístico: la fuente no se publica por sección censal" in w
-                       for w in report.warnings)
+            # Por sección censal el turismo y el precio ya no se omiten: lo
+            # que la sección no tiene lo lleva de su municipio, con «Dato de
+            # su municipio» (análisis 8071; ver test_distrito.py).
+            assert "turismo.indice" in subsecciones(report, Section.TURISMO)
+            assert "inmobiliario.precio" in subsecciones(report, Section.INMOBILIARIO)
         else:
             assert subsecciones(report, Section.TURISMO) == ["turismo.indice", "turismo.hotelero"]
             assert "inmobiliario.precio" in subsecciones(report, Section.INMOBILIARIO)

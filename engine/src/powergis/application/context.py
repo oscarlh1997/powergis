@@ -12,6 +12,7 @@ from dataclasses import dataclass, replace
 
 from ..domain import capas as capas_mod
 from ..domain import consumo
+from ..domain import estado as estado_mod
 from ..domain import indicators as catalog_mod
 from ..domain.enums import GeoLevel, Section, Tier
 from ..domain.errors import GeoNotFound, ValidationError
@@ -81,6 +82,25 @@ def resolve_scope(uow: UnitOfWork, scope: Scope, max_children: int = 8500) -> Re
     )
 
 
+def _municipios_de(uow: UnitOfWork, zonas: Sequence[Geo]) -> dict[int, int]:
+    """Zona (distrito o sección) → geo_id de su municipio, subiendo por `parent_id`."""
+    padres: dict[int, Geo | None] = {}
+    out: dict[int, int] = {}
+    for zona in zonas:
+        geo: Geo | None = zona
+        while geo is not None and geo.level is not GeoLevel.MUNICIPIO:
+            pid = geo.parent_id
+            if pid is None:
+                geo = None
+                break
+            if pid not in padres:
+                padres[pid] = uow.geos.get_by_id(pid)
+            geo = padres[pid]
+        if geo is not None:
+            out[zona.geo_id] = geo.geo_id
+    return out
+
+
 def segment_combinations(segments: Segments) -> list[dict[str, str]]:
     """Producto cartesiano de los segmentos pedidos, más el agregado `{}`.
 
@@ -146,6 +166,14 @@ def build_context(
     # solo se publica por municipio devolvería una tabla vacía y sin explicación.
     level = resolved.children_level
     usable = [i for i in indicators if i.available_at(level)]
+    # Por distrito o sección, lo que no varía dentro del municipio (precio de
+    # la vivienda, turismo, clima, traslados…) se hereda de él con su
+    # etiqueta, en vez de dejar la sección vacía.
+    heredables = [
+        i for i in indicators
+        if level in (GeoLevel.DISTRITO, GeoLevel.SECCION) and catalog_mod.heredable(i)
+    ]
+    usable += [i for i in heredables if i not in usable]
     dropped = [i.code for i in indicators if i not in usable]
 
     # España va siempre: es la referencia del color cuando hay menos de 5 zonas.
@@ -153,6 +181,8 @@ def build_context(
     geo_ids = [g.geo_id for g in resolved.children] + [resolved.parent.geo_id]
     if national is not None and national.geo_id not in geo_ids:
         geo_ids.append(national.geo_id)
+    municipio_de = _municipios_de(uow, resolved.children) if heredables else {}
+    geo_ids += sorted(set(municipio_de.values()) - set(geo_ids))
     combos = segment_combinations(project.segments)
     codigos = [i.code for i in usable]
     # Gasto, frecuencia y ticket dependen del sector del proyecto, y el
@@ -164,6 +194,11 @@ def build_context(
         if por_sector and "eco.disposable.monthly" not in codigos else []
     )
     facts = uow.facts.fetch(geo_ids, pedir, combos)
+    # Lo que no se publica por zona se pide igual para el ámbito: es su propio
+    # dato (la población del municipio, en un informe por distritos) y sin él
+    # el resumen salía «n. d.» con la cifra cargada.
+    if dropped:
+        facts += uow.facts.fetch([resolved.parent.geo_id], dropped, combos)
     # El nivel educativo por tramo de edad se guarda segmentado por edad, y
     # esos tramos no tienen nada que ver con el público objetivo del
     # proyecto: se piden aparte, todos los posibles.
@@ -184,8 +219,11 @@ def build_context(
     mensuales = [c for c in ("cli.temp.month", "cli.precip.month") if c in codigos]
     if mensuales:
         facts += uow.facts.fetch(geo_ids, mensuales, [{"month": m} for m, _ in clima.MONTHS])
+    if municipio_de:
+        facts += estado_mod.heredar_del_municipio(
+            facts, municipio_de, [i.code for i in heredables])
     if por_sector:
-        visibles = set(codigos)
+        visibles = set(codigos) | set(dropped)
         facts = [
             f for f in consumo.con_el_sector_del_proyecto(facts, project.business.sector)
             if f.indicator in visibles

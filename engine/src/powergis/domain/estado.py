@@ -4,6 +4,9 @@ Todo dato se enseña, con su etiqueta. Nunca se dice «dudoso»: el cliente ve
 
 * «Dato de su provincia» / «Dato de su comunidad» (`heredado`): la fuente no
   baja a ese nivel y la zona lleva el valor de arriba;
+* «Dato de su municipio» (`heredado_municipio`): igual, para los distritos y
+  secciones censales que llevan el valor de su municipio (precio de la
+  vivienda, turismo, clima, traslados…);
 * «En actualización» (`provisional`): la tabla oficial está pendiente de
   verificar o de publicarse con el detalle que pide el informe;
 * «Dato antiguo» (`antiguo`): el periodo tiene más de `ANIOS_ANTIGUO` años;
@@ -17,13 +20,19 @@ nacional con una banda de ±`BANDA_NACIONAL`.
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Iterable, Sequence
+from dataclasses import replace
 from datetime import date
 
 from . import stats
 from .models import Fact
 
 HEREDADO = "heredado"
+HEREDADO_MUNICIPIO = "heredado_municipio"
+#: Las dos marcas de «valor de arriba»: no cuentan en los cortes del color.
+HEREDADOS = frozenset({HEREDADO, HEREDADO_MUNICIPIO})
+#: Lo que se añade a la fuente del hecho que un distrito o sección hereda.
+REF_MUNICIPIO = "dato del municipio"
 PROVISIONAL = "provisional"
 ANTIGUO = "antiguo"
 ESTIMADO = "estimado"
@@ -31,6 +40,7 @@ ESTIMADO = "estimado"
 #: Texto que ve el cliente. El front usa estas mismas claves.
 ETIQUETAS: dict[str, str] = {
     HEREDADO: "Dato de su provincia o comunidad",
+    HEREDADO_MUNICIPIO: "Dato de su municipio",
     PROVISIONAL: "En actualización",
     ANTIGUO: "Dato antiguo",
     ESTIMADO: "Estimado",
@@ -66,6 +76,8 @@ def de_hecho(fact: Fact | None, code: str, *, hoy: date | None = None) -> list[s
     marcas: list[str] = []
     if "dato de la provincia" in ref or "dato de la comunidad" in ref:
         marcas.append(HEREDADO)
+    elif REF_MUNICIPIO in ref:
+        marcas.append(HEREDADO_MUNICIPIO)
     if code in EN_ACTUALIZACION or "provisional" in ref:
         marcas.append(PROVISIONAL)
     # Las normales climatológicas son una media de 30 años: no envejecen.
@@ -84,7 +96,40 @@ def nivel_heredado(fact: Fact | None) -> str | None:
         return "provincia"
     if "dato de la comunidad" in ref:
         return "comunidad"
+    if REF_MUNICIPIO in ref:
+        return "municipio"
     return None
+
+
+def heredar_del_municipio(
+    facts: Sequence[Fact],
+    municipio_de: dict[int, int],
+    codigos: Iterable[str],
+) -> list[Fact]:
+    """Copias de los hechos del municipio para sus distritos o secciones.
+
+    `municipio_de` es zona → geo_id de su municipio. Sólo se hereda lo que la
+    zona no tiene, y la copia lleva «dato del municipio» en la fuente para que
+    salga con su etiqueta. Si el municipio ya lo tenía heredado de su
+    provincia o comunidad, se copia tal cual: sigue siendo «Dato de su
+    provincia», no del municipio.
+    """
+    codigos = set(codigos)
+    propios = {(x.geo_id, x.indicator, x.segment_key()) for x in facts}
+    por_municipio: dict[int, list[Fact]] = {}
+    for x in facts:
+        if x.indicator in codigos and x.value is not None:
+            por_municipio.setdefault(x.geo_id, []).append(x)
+    out: list[Fact] = []
+    for zona, municipio in municipio_de.items():
+        for x in por_municipio.get(municipio, ()):
+            if (zona, x.indicator, x.segment_key()) in propios:
+                continue
+            ref = x.source_ref or ""
+            if HEREDADO not in de_hecho(x, x.indicator):
+                ref = f"{ref} · {REF_MUNICIPIO}" if ref else REF_MUNICIPIO
+            out.append(replace(x, geo_id=zona, source_ref=ref))
+    return out
 
 
 def referencia(

@@ -106,7 +106,7 @@ class SectionContext:
         """Cortes P25/P75 de las zonas (o el nacional ±5 %) para colorear."""
         heredados = sum(
             1 for g in self.children
-            if estado.HEREDADO in self.flags(g.geo_id, indicator, segment)
+            if estado.HEREDADOS & set(self.flags(g.geo_id, indicator, segment))
         )
         return estado.referencia(self.values(indicator, segment),
                                  self.national_value(indicator), heredados=heredados)
@@ -241,7 +241,7 @@ def kpi_from(
         # Agregado desde las zonas: lleva las marcas de lo que suma (menos
         # «heredado», que es de cada zona, no del total).
         flags = sorted({f for g in ctx.children for f in ctx.flags(g.geo_id, code, segment)}
-                       - {estado.HEREDADO}, key=list(estado.ETIQUETAS).index)
+                       - estado.HEREDADOS, key=list(estado.ETIQUETAS).index)
     # Un total (personas, unidades) no se compara con sus partes: el
     # percentil saldría siempre 100 y el color no diría nada.
     es_total = unit in {Unit.PERSONAS, Unit.UNIDADES}

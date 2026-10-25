@@ -161,6 +161,8 @@
 	const FLAGS = {
 		heredado: { icon: 'up', text: 'Dato de su provincia o comunidad',
 			tip: 'La fuente no publica este dato para la zona: lleva el valor de su provincia o comunidad. No se compara entre zonas.' },
+		heredado_municipio: { icon: 'up', text: 'Dato de su municipio',
+			tip: 'La fuente no publica este dato por distrito ni por sección censal: la zona lleva el valor de su municipio. No se compara entre zonas.' },
 		provisional: { icon: 'hourglass', text: 'En actualización',
 			tip: 'La fuente oficial está pendiente de verificar o de publicarse con este detalle. Puede cambiar en la próxima actualización.' },
 		antiguo: { icon: 'clock', text: 'Dato antiguo',
@@ -249,6 +251,7 @@
 		const flags = new Set(kpis.flatMap((k) => k.flags || []));
 		if (flags.has('estimado')) parts.push('Algunas cifras son estimaciones de PowerGIS y lo indican con la etiqueta «Estimado».');
 		if (flags.has('heredado')) parts.push('Los datos que la fuente sólo publica por provincia o comunidad llevan su etiqueta y no se comparan entre zonas.');
+		if (flags.has('heredado_municipio')) parts.push('Los datos que la fuente sólo publica por municipio llevan la etiqueta «Dato de su municipio» y no se comparan entre zonas.');
 		return parts.join(' ');
 	}
 
@@ -638,7 +641,7 @@
 						td.appendChild(el('span', 'pg-sr', 'Sin dato'));
 					} else {
 						const flags = (row._flags || {})[column.key] || [];
-						const r = flags.includes('heredado') ? null : rate(value, column.reference, column.direction);
+						const r = (flags.includes('heredado') || flags.includes('heredado_municipio')) ? null : rate(value, column.reference, column.direction);
 						if (r) {
 							const ic = icon(RATING[r].icon);
 							ic.className += ' pg-cell-rating pg-cell-rating--' + r;
