@@ -215,8 +215,8 @@ def sin_datos_de_capa(ctx: SectionContext, codes: Sequence[str], que: str) -> bo
         ctx.warnings.append(f"{que}: la fuente no se publica por {nivel}; no se muestra en "
                             "este ámbito.")
     else:
-        ctx.warnings.append(f"{que}: todavía no hay datos cargados para este ámbito "
-                            "(plantilla del equipo de datos).")
+        # Ya no sólo la plantilla: el Atlas, el Censo, Infoelectoral u OSM.
+        ctx.warnings.append(f"{que}: todavía no hay datos cargados para este ámbito.")
     return True
 
 
