@@ -95,7 +95,8 @@ PEQUENA = Font(color="7F7F7F", size=8, italic=True)
 
 NOMBRE_NIVEL = {
     GeoLevel.PAIS: "nacional", GeoLevel.CCAA: "comunidad", GeoLevel.PROVINCIA: "provincia",
-    GeoLevel.MUNICIPIO: "municipio", GeoLevel.SECCION: "sección censal",
+    GeoLevel.MUNICIPIO: "municipio", GeoLevel.DISTRITO: "distrito",
+    GeoLevel.SECCION: "sección censal",
 }
 
 

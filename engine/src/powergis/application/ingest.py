@@ -308,6 +308,8 @@ class AggregateUp:
                     "los avisos de la carga)", sin_nada, len(municipios),
                 )
 
+            escritos[str(GeoLevel.DISTRITO)] = self._distritos(uow, root)
+
             for nivel in self.NIVELES:
                 padres = [root] if nivel == GeoLevel.PAIS else uow.geos.descendants(
                     root.geo_id, nivel
@@ -345,6 +347,43 @@ class AggregateUp:
                 escritos[str(nivel)] = uow.facts.upsert_many(nuevos)
             uow.commit()
         return escritos
+
+
+    @staticmethod
+    def _distritos(uow: UnitOfWork, root: Geo) -> int:
+        """Distritos a partir de sus secciones censales (análisis 8071).
+
+        El Censo 2021 y el Padrón por sección no publican distrito: se suma
+        o se pondera con las mismas reglas que de municipio a provincia. Lo
+        que el distrito ya tiene de su fuente (el Atlas) manda.
+        """
+        from ..domain import agregacion
+
+        distritos = uow.geos.descendants(root.geo_id, GeoLevel.DISTRITO)
+        if not distritos:
+            return 0
+        secciones = uow.geos.descendants(root.geo_id, GeoLevel.SECCION)
+        por_distrito: dict[int, list[int]] = {}
+        for sec in secciones:
+            if sec.parent_id is not None:
+                por_distrito.setdefault(sec.parent_id, []).append(sec.geo_id)
+        codigos = agregacion.codigos_necesarios()
+        hechos = uow.facts.fetch([s.geo_id for s in secciones], codigos, [{}])
+        por_seccion: dict[int, dict[str, tuple[float | None, date]]] = {}
+        for x in hechos:
+            por_seccion.setdefault(x.geo_id, {})[x.indicator] = (x.value, x.period)
+        existentes = uow.facts.fetch([d.geo_id for d in distritos], list(agregacion.REGLAS), [{}])
+        propios = {(x.geo_id, x.indicator) for x in existentes
+                   if x.value is not None and not (x.source_ref or "").startswith("agregado de")}
+        nuevos: list[Fact] = []
+        for d in distritos:
+            hijos = [por_seccion.get(i, {}) for i in por_distrito.get(d.geo_id, [])]
+            for codigo, (valor, periodo, fuente) in agregacion.agregar(hijos, "secciones").items():
+                if (d.geo_id, codigo) in propios or codigo not in catalog_mod.BY_CODE:
+                    continue
+                nuevos.append(Fact(geo_id=d.geo_id, indicator=codigo, period=periodo, value=valor,
+                                   segment={}, source_ref=fuente, ingested_at=datetime.now(UTC)))
+        return uow.facts.upsert_many(nuevos)
 
 
 def _first_match(uow: UnitOfWork, code: str) -> Geo | None:

@@ -1,4 +1,4 @@
-"""Del municipio a la provincia, la comunidad y el país.
+"""Del municipio a la provincia, la comunidad y el país; de la sección al distrito.
 
 El INE publica casi todo lo que usamos POR MUNICIPIO, y el formulario ofrece
 informes que comparan provincias («ccaa») y comunidades («nacional»). Sin este
@@ -67,6 +67,17 @@ REGLAS: dict[str, Regla] = {
     "dem.edu.primary_or_less_pct": Regla(MEDIA, "dem.pop.total"),
     "dem.edu.secondary_pct": Regla(MEDIA, "dem.pop.total"),
     "dem.edu.university_pct": Regla(MEDIA, "dem.pop.total"),
+    # Censo 2021 y Atlas por sección, para subirlos a distrito (análisis
+    # 8071). Lo que se mide por hogar o por vivienda se pondera por hogares,
+    # que es lo más cercano al nº de viviendas principales que hay por zona.
+    "dem.household.with_children_pct": Regla(MEDIA, HOGARES),
+    "dem.household.monoparental_pct": Regla(MEDIA, HOGARES),
+    "inm.dwellings.main_pct": Regla(MEDIA, HOGARES),
+    "inm.dwellings.empty_pct": Regla(MEDIA, HOGARES),
+    "eco.income.under15k_pct": Regla(MEDIA, HOGARES),
+    "eco.income.over30k_pct": Regla(MEDIA, HOGARES),
+    "eco.income.over60k_pct": Regla(MEDIA, HOGARES),
+    "eco.poverty.risk_pct": Regla(MEDIA, "dem.pop.total"),
 }
 
 Valor = tuple[float | None, date]
@@ -90,8 +101,8 @@ def _peso(hijo: Hijo, regla: Regla) -> float | None:
     return hijo.get(regla.peso, (None, date.min))[0]
 
 
-def agregar(hijos: Sequence[Hijo]) -> dict[str, tuple[float, date, str]]:
-    """Valores del padre a partir de los de sus municipios.
+def agregar(hijos: Sequence[Hijo], de: str = "municipios") -> dict[str, tuple[float, date, str]]:
+    """Valores del padre a partir de los de sus municipios (o secciones, `de`).
 
     Sólo cuentan los municipios «vivos», los que tienen algún dato: el
     nomenclátor arrastra municipios fusionados o desaparecidos que ya no
@@ -111,7 +122,7 @@ def agregar(hijos: Sequence[Hijo]) -> dict[str, tuple[float, date, str]]:
             if len(periodos) != 1:
                 continue
             total = sum(v[0] for v in valores if v is not None and v[0] is not None)
-            out[codigo] = (float(total), periodos.pop(), FUENTE_SUMA)
+            out[codigo] = (float(total), periodos.pop(), FUENTE_SUMA.replace("municipios", de))
             continue
 
         # La cobertura se mide SIEMPRE en población, aunque el peso sea de
@@ -138,5 +149,6 @@ def agregar(hijos: Sequence[Hijo]) -> dict[str, tuple[float, date, str]]:
             periodos_media.append(valor[1])
         if poblacion_total <= 0 or poblacion_con_dato / poblacion_total < COBERTURA_MEDIA:
             continue
-        out[codigo] = (acumulado / peso_con_dato, max(periodos_media), FUENTE_MEDIA)
+        out[codigo] = (acumulado / peso_con_dato, max(periodos_media),
+                       FUENTE_MEDIA.replace("municipios", de))
     return out

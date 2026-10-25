@@ -263,3 +263,69 @@ class TestUnSoloDistrito:
 
         r = resolve_scope(uow([]), Scope(GeoLevel.MUNICIPIO, "28134"))
         assert r.children_level is GeoLevel.DISTRITO and len(r.children) == 2
+
+
+class TestAgregacionSeccionDistrito:
+    def test_las_secciones_suben_a_su_distrito(self):
+        from powergis.application.ingest import AggregateUp
+
+        u = uow([
+            f(21, "dem.pop.total", 1000.0), f(22, "dem.pop.total", 1500.0),
+            f(21, "dem.household.size", 2.5), f(22, "dem.household.size", 2.5),
+            f(21, "inm.dwellings.empty_pct", 10.0), f(22, "inm.dwellings.empty_pct", 20.0),
+            f(23, "dem.pop.total", 800.0),
+            # El distrito 02 ya trae su población del Atlas: manda.
+            f(12, "dem.pop.total", 820.0, "INE:30896"),
+        ])
+        escritos = AggregateUp(lambda: u)()
+        assert escritos["distrito"] >= 2
+        d1 = {x.indicator: x for x in u.facts.fetch([11], ["dem.pop.total",
+                                                          "inm.dwellings.empty_pct"], [{}])}
+        assert d1["dem.pop.total"].value == 2500.0
+        assert d1["dem.pop.total"].source_ref == "agregado de secciones · suma"
+        assert d1["inm.dwellings.empty_pct"].value == 16.0   # ponderado por hogares
+        d2 = u.facts.fetch([12], ["dem.pop.total"], [{}])[0]
+        assert d2.value == 820.0 and d2.source_ref == "INE:30896"
+
+
+class TestPlantillaConDistritos:
+    def test_la_plantilla_tiene_hoja_de_distritos(self):
+        from powergis.adapters.collectors.plantilla import COLUMNAS, HOJAS
+
+        assert HOJAS["Distritos"] is GeoLevel.DISTRITO
+        por_distrito = {c.code for c in COLUMNAS if GeoLevel.DISTRITO in c.niveles}
+        assert {"tra.vehicle.imd", "inm.dwellings.empty_pct", "pol.turnout_pct",
+                "inm.rent.m2"} <= por_distrito
+
+    def test_lee_un_distrito(self, tmp_path):
+        import importlib.util
+        from pathlib import Path
+
+        import openpyxl
+
+        from powergis.adapters.collectors.plantilla import PlantillaCollector
+
+        ruta_tool = Path(__file__).resolve().parents[1] / "tools" / "build_plantilla.py"
+        spec = importlib.util.spec_from_file_location("build_plantilla", ruta_tool)
+        modulo = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(modulo)
+        ruta = tmp_path / "plantilla.xlsx"
+        modulo.construir(ruta)
+        libro = openpyxl.load_workbook(ruta)
+        hoja = libro["Distritos"]
+        codigos = [c.value for c in hoja[2]]
+        hoja.cell(row=3, column=1, value="2813401")
+        hoja.cell(row=3, column=2, value="Distrito 01")
+        hoja.cell(row=3, column=codigos.index("tra.vehicle.imd") + 1, value=21000)
+        ind = libro["Indicadores"]
+        cab = [c.value for c in ind[1]]
+        for fila in ind.iter_rows(min_row=2):
+            if fila[0].value == "tra.vehicle.imd":
+                fila[cab.index("Periodo de referencia")].value = "2025"
+                fila[cab.index("Fuente / bibliografía")].value = "Ayuntamiento de San Sebastián"
+        libro.save(ruta)
+
+        distrito = next(g for g in geos() if g.geo_id == 11)
+        col = PlantillaCollector(ruta=ruta, semillas=())
+        hechos = col.collect(["tra.vehicle.imd"], [distrito], Segments())
+        assert [(h.geo_id, h.value) for h in hechos] == [(11, 21000.0)]

@@ -80,6 +80,10 @@ HOJAS: dict[str, GeoLevel] = {
     "Comunidades": GeoLevel.CCAA,
     "Provincias": GeoLevel.PROVINCIA,
     "Municipios": GeoLevel.MUNICIPIO,
+    # Datos propios de distrito (aforos, alquiler del ayuntamiento, Censo
+    # 2021 ya agregado…). Antes no había hoja y el distrito sólo podía tener
+    # lo que llegara por API (análisis 8071).
+    "Distritos": GeoLevel.DISTRITO,
     "Secciones censales": GeoLevel.SECCION,
 }
 HOJA_EDAD = "Educacion por edad"
@@ -103,8 +107,12 @@ class Columna:
 
 
 _TODOS = (GeoLevel.PAIS, GeoLevel.CCAA, GeoLevel.PROVINCIA, GeoLevel.MUNICIPIO,
-          GeoLevel.SECCION)
-_LOCAL = (GeoLevel.MUNICIPIO, GeoLevel.SECCION)
+          GeoLevel.DISTRITO, GeoLevel.SECCION)
+_LOCAL = (GeoLevel.MUNICIPIO, GeoLevel.DISTRITO, GeoLevel.SECCION)
+#: Lo que también se publica por distrito y sección: electoral (por mesa) y
+#: alquiler (SERPAVI e IPVA).
+_TERR_Y_LOCAL = (GeoLevel.PAIS, GeoLevel.CCAA, GeoLevel.PROVINCIA, GeoLevel.MUNICIPIO,
+                 GeoLevel.DISTRITO, GeoLevel.SECCION)
 _TERR = (GeoLevel.PAIS, GeoLevel.CCAA, GeoLevel.PROVINCIA, GeoLevel.MUNICIPIO)
 _HASTA_PROVINCIA = (GeoLevel.PAIS, GeoLevel.CCAA, GeoLevel.PROVINCIA)
 _SIN_PAIS = (GeoLevel.CCAA, GeoLevel.PROVINCIA, GeoLevel.MUNICIPIO)
@@ -154,13 +162,13 @@ COLUMNAS: tuple[Columna, ...] = (
     Columna("cli.sun.hours.annual", "Clima · horas de sol anuales (h)", _TERR,
             "Horas de sol al año, NO días: no confundir con «días de sol»."),
     # -- Capas complementarias del formulario (interruptores) -----------------
-    Columna("pol.turnout_pct", "Elecciones · participación (%)", _TERR,
+    Columna("pol.turnout_pct", "Elecciones · participación (%)", _TERR_Y_LOCAL,
             "Votantes / censo electoral de la última convocatoria. En «Indicadores», "
             "Periodo = fecha de la elección y Fuente = tipo de elección (generales, "
             "municipales…) e Infoelectoral. Una sola convocatoria para todas las filas."),
-    Columna("pol.winner_share_pct", "Elecciones · voto a la candidatura más votada (%)", _TERR,
+    Columna("pol.winner_share_pct", "Elecciones · voto a la candidatura más votada (%)", _TERR_Y_LOCAL,
             "Porcentaje de votos válidos de la candidatura más votada. Misma convocatoria."),
-    Columna("pol.effective_parties", "Elecciones · nº efectivo de partidos", _TERR,
+    Columna("pol.effective_parties", "Elecciones · nº efectivo de partidos", _TERR_Y_LOCAL,
             "1 / Σ pᵢ² con las cuotas de voto válido de cada candidatura. Misma convocatoria."),
     Columna("mov.interprov.in_rate", "Traslados · llegadas desde otras provincias (‰)", _SIN_PAIS,
             "Altas por cambio de residencia con origen en otra provincia por 1.000 hab. "
@@ -193,7 +201,7 @@ COLUMNAS: tuple[Columna, ...] = (
             "municipios heredan el de su provincia. El histórico va en «Series historicas»."),
     Columna("inm.price.yoy_change", "Vivienda · variación interanual del valor tasado (%)",
             _HASTA_PROVINCIA, "Puede ser negativa (−3,2)."),
-    Columna("inm.rent.m2", "Vivienda · alquiler de referencia (€/m² al mes)", _TERR,
+    Columna("inm.rent.m2", "Vivienda · alquiler de referencia (€/m² al mes)", _TERR_Y_LOCAL,
             "MIVAU, SERPAVI (tablas resumen). Es una referencia, no un contrato."),
     # -- Turismo y vivienda ampliados (decisiones de Aldo, 20/10/2026) --------
     Columna("tur.hotel.travellers.resident", "Turismo · viajeros residentes en España (año)",
@@ -210,7 +218,7 @@ COLUMNAS: tuple[Columna, ...] = (
             "INE, IPV, último trimestre, general. SOLO comunidad y nacional: el resto hereda."),
     Columna("inm.ipv.yoy", "Vivienda · variación anual del IPV (%)",
             (GeoLevel.PAIS, GeoLevel.CCAA), "Puede ser negativa."),
-    Columna("inm.rent.ipva_yoy", "Vivienda · variación anual del alquiler, IPVA (%)", _TERR,
+    Columna("inm.rent.ipva_yoy", "Vivienda · variación anual del alquiler, IPVA (%)", _TERR_Y_LOCAL,
             "INE, Índice de Precios de Vivienda en Alquiler (experimental). Puede ser negativa."),
     Columna("inm.cadastre.urban_units", "Catastro · inmuebles urbanos", _TERR,
             "Dirección General del Catastro, estadística catastral: nº de bienes inmuebles "
