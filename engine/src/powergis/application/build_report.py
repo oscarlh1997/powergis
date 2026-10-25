@@ -135,7 +135,7 @@ class BuildReport:
                 project, ctx, version=version, tier=run.tier,
                 only=wanted, previous=reusable,
             )
-            if missing:
+            if missing and self._request_ingest is not None:
                 report.warnings.append(
                     f"{len(missing)} indicadores estaban caducos y se han encolado para "
                     "recarga; el informe se actualizará automáticamente."
@@ -184,6 +184,11 @@ class BuildReport:
 
         if not geo_ids:
             return []
+        # Sólo lo que se publica al nivel de las zonas. Encolar la recarga de
+        # un indicador municipal para unos distritos no trae nada nunca, y el
+        # aviso prometía una actualización que no iba a llegar (análisis 8071).
+        wanted = [i for i in wanted if i.available_at(resolved.children_level)]
+        codes = [i.code for i in wanted]
 
         freshness = uow.facts.freshness(codes, geo_ids)
         today = date.today()

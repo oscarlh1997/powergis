@@ -156,3 +156,21 @@ class TestGranularidad:
                      "dem.pop.total", "dem.dependency.total", "pol.turnout_pct", "cmp.count",
                      "tra.transit.stops", "dem.edu.university_pct", "dem.nat.foreign_pct"):
             assert BY_CODE[code].available_at(GeoLevel.SECCION), code
+
+
+class TestRecargaUtil:
+    def test_no_se_encola_lo_que_nunca_tendra_dato_por_distrito(self):
+        from powergis.application.build_report import BuildReport
+        from powergis.domain import indicators as catalog
+
+        encolado: list = []
+        u = uow([])
+        servicio = BuildReport(lambda: u, "test",
+                               request_ingest=lambda c, lvl, p: encolado.append((c, lvl, p)))
+        caducos = servicio._plan_ingest(u, proyecto(), Tier.AVANZADO,
+                                        catalog.sections_for_tier(Tier.AVANZADO))
+        assert caducos and encolado
+        assert "tur.hotel.travellers" not in caducos       # sólo municipal
+        assert "dem.pop.total" in caducos                  # sí se publica por distrito
+        assert all(catalog.BY_CODE[c].available_at(GeoLevel.DISTRITO) for c in caducos)
+        assert encolado[0][1:] == ("distrito", "28134")
