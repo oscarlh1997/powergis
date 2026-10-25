@@ -18,6 +18,7 @@ from .catastro import CatastroCollector
 from .derived import DerivedCollector
 from .ine import IneCollector
 from .ine_adrh import AdrhCollector
+from .infoelectoral import InfoelectoralCollector
 from .osm import OsmCollector
 from .plantilla import PlantillaCollector
 
@@ -29,6 +30,7 @@ _FACTORIES: dict[str, Callable[..., BaseCollector]] = {
     "osm": OsmCollector,
     "aemet": AemetCollector,
     "catastro": CatastroCollector,
+    "infoelectoral": InfoelectoralCollector,
     "derived": DerivedCollector,
     "plantilla": PlantillaCollector,
 }
@@ -47,6 +49,7 @@ def build_registry(
         "ine_adrh": AdrhCollector(),
         "aemet": AemetCollector(centroids=centroids),
         "catastro": CatastroCollector(),
+        "infoelectoral": InfoelectoralCollector(),
         "osm": OsmCollector(session=session, sector=sector),
         "derived": DerivedCollector(
             facts_lookup=facts_lookup,
@@ -114,6 +117,7 @@ __all__ = [
     "DerivedCollector",
     "HttpClient",
     "IneCollector",
+    "InfoelectoralCollector",
     "OsmCollector",
     "PlantillaCollector",
     "available",

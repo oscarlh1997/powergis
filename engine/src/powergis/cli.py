@@ -524,6 +524,34 @@ def distritos(municipio: str = typer.Argument(..., help="Código INE de 5 cifras
                     "(o, sin ellas, no hay zonas que comparar).", fg=typer.colors.YELLOW)
 
 
+@app.command("infoelectoral-verificar")
+def infoelectoral_verificar(
+    origen: str = typer.Argument(..., help="ZIP de mesas de Infoelectoral (ruta o URL)"),
+) -> None:
+    """Comprueba un ZIP de mesas ANTES de cargarlo (posiciones provisionales).
+
+    Debe dar: tipo/año/mes de la convocatoria, una participación total
+    plausible (40–80 %), cero secciones con descuadre (los votos por
+    candidatura suman lo que dice la mesa) y la mayoría de secciones en
+    dim_geo. Si no, ajusta CAMPOS_09/CAMPOS_10 en infoelectoral.py.
+
+        powergis infoelectoral-verificar /data/02202307_MESA.zip
+        POWERGIS_INFOELECTORAL=/data/02202307_MESA.zip \
+            powergis ingest infoelectoral --level seccion
+    """
+    from .adapters.collectors.infoelectoral import InfoelectoralCollector
+    from .adapters.db.session import uow_factory
+    from .domain.enums import GeoLevel
+
+    with uow_factory() as uow:
+        root = uow.geos.get(GeoLevel.PAIS, "ES")
+        geos = uow.geos.descendants(root.geo_id, GeoLevel.SECCION) if root else []
+    resultado = InfoelectoralCollector(origen).verificar(geos)
+    typer.echo(json.dumps(resultado, indent=2, ensure_ascii=False))
+    if resultado["secciones_con_descuadre"] or not resultado["secciones"]:
+        raise typer.Exit(1)
+
+
 @app.command("almacen-estado")
 def almacen_estado(
     nivel: str = typer.Option("municipio", help="municipio | provincia | ccaa"),
