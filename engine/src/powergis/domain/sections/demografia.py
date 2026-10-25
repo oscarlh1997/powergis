@@ -16,6 +16,7 @@ from .base import (
     build_table,
     kpi_from,
     register,
+    sin_datos_de_capa,
 )
 
 #: Tramos de edad en que se puede guardar el nivel educativo (segmento
@@ -214,9 +215,9 @@ class Demografia(SectionBuilder):
             "dem.household.monoparental_pct",
         ]
         if not ctx.has_any(codes):
-            ctx.warnings.append(
-                "Estructura familiar no disponible: el Censo no publica a este nivel de desagregación."
-            )
+            # El Censo 2021 y el Atlas sí llegan a sección censal: si no hay
+            # nada es que no está cargado, no que no se publique.
+            sin_datos_de_capa(ctx, codes, "Estructura familiar")
             return None
 
         return Subsection(

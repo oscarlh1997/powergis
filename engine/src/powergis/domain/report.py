@@ -136,7 +136,7 @@ class ReportBuilder:
         wanted_set = set(wanted)
         out: list[dict[str, str]] = []
         for ind in ctx.catalog.values():
-            if ind.section not in wanted_set:
+            if ind.section not in wanted_set or not ctx.con_dato(ind.code):
                 continue
             definition = ind.description or ind.formula or ""
             if not definition:
@@ -304,6 +304,7 @@ def _section_from_dict(raw: dict, section: Section) -> SectionResult:
         subsections=subs,
         sources=raw.get("sources", []),
         coverage=raw.get("coverage", 1.0),
+        notes=raw.get("notes", []),
     )
 
 

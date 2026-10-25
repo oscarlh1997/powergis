@@ -1401,6 +1401,8 @@
 			const box = el('section', 'pg-section');
 			box.id = 'seccion-' + section.id;
 			box.appendChild(el('h2', null, section.title));
+			// El motivo de lo que falta va dentro de la sección, no sólo arriba.
+			(section.notes || []).forEach((note) => box.appendChild(el('p', 'pg-warning', note)));
 
 			subsections.forEach((sub) => {
 				box.appendChild(el('h3', null, sub.title));

@@ -99,6 +99,8 @@ class PdfExporter:
                 )
                 continue
             parts.append(f"<h2>{esc(section.title)}</h2>")
+            for note in section.notes:
+                parts.append(f"<div class='warning'>{esc(note)}</div>")
             for sub in section.subsections:
                 parts.append(f"<h3>{esc(sub.title)}</h3>")
                 parts.append(self._kpis(sub.kpis))

@@ -340,6 +340,10 @@ class SectionResult:
     # Son etiquetas del catálogo (metadatos del producto), no hechos del
     # cliente. Es el índice de lo que se compra, no una muestra de los datos.
     preview: list[str] = field(default_factory=list)
+    #: Por qué falta algo en ESTA sección («la fuente no se publica por
+    #: distrito…»). Antes sólo iba a los avisos generales y la sección salía
+    #: en blanco, sin texto.
+    notes: list[str] = field(default_factory=list)
 
     def as_dict(self) -> dict[str, Any]:
         if not self.available:
@@ -361,6 +365,7 @@ class SectionResult:
             "coverage": round(self.coverage, 3),
             "sources": self.sources,
             "subsections": [s.as_dict() for s in self.subsections],
+            "notes": list(self.notes),
         }
 
 

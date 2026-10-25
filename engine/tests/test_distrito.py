@@ -208,3 +208,26 @@ class TestUnaSolaZona:
         assert "una sola zona" in out["resumen"]
         assert out["fortalezas"] == [] and out["riesgos"] == []
         assert "cobertura de datos parcial" in out["recomendacion"]
+
+
+class TestSeccionesConMotivo:
+    def test_la_seccion_vacia_dice_por_que(self):
+        from powergis.domain.enums import Section
+
+        ctx = contexto([f(MUN, "dem.pop.total", 92_000.0)])
+        from powergis.domain.sections import REGISTRY
+
+        resultado = REGISTRY[Section.TRAFICO].build(ctx)
+        assert not resultado.subsections
+        assert resultado.notes == ["Tráfico peatonal no disponible: falta el extracto de OSM."]
+        assert resultado.as_dict()["notes"] == resultado.notes
+
+    def test_fuentes_y_glosario_solo_de_lo_que_se_ve(self):
+        from powergis.domain.enums import Section
+        from powergis.domain.report import ReportBuilder
+
+        ctx = contexto([f(11, "eco.income.household.mean", 60_000.0)])
+        report = ReportBuilder("test").build(proyecto(), ctx, version=1, tier=Tier.AVANZADO)
+        demo = next(s for s in report.sections if s.id == Section.DEMOGRAFIA)
+        assert "INE:Padrón continuo" not in demo.sources
+        assert all(g["code"] != "inm.dwellings.empty_pct" for g in report.glossary)

@@ -88,14 +88,16 @@ def _axis_and_legend(
     # principio y no enteros que luego cambian de tipo.
     lx: float = PAD_L
     ly = H - 10
+    # Con una o dos series cabe la etiqueta entera («Renta bruta media por hogar»).
+    largo = 40 if len(names) <= 2 else 22
     for i, name in enumerate(names):
         color = PALETTE[i % len(PALETTE)]
         parts.append(f'<rect x="{lx}" y="{ly - 8}" width="9" height="9" rx="2" fill="{color}"/>')
         parts.append(
             f'<text x="{lx + 13}" y="{ly}" font-size="9" fill="#334155">'
-            f"{_esc(_truncate(name, 22))}</text>"
+            f"{_esc(_truncate(name, largo))}</text>"
         )
-        lx += 16 + len(_truncate(name, 22)) * 5.2
+        lx += 16 + len(_truncate(name, largo)) * 5.2
     return parts
 
 

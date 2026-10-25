@@ -149,6 +149,10 @@ class SectionContext:
             return stats.weighted_mean(vals, weights)
         return stats.mean(vals)
 
+    def con_dato(self, indicator: str) -> bool:
+        """¿Tiene valor en alguna zona o en el ámbito?"""
+        return self.has_any([indicator]) or self.parent_value(indicator) is not None
+
     def has_any(self, indicators: Sequence[str]) -> bool:
         return any(v is not None for code in indicators for v in self.values(code))
 
@@ -451,10 +455,15 @@ class SectionBuilder(ABC):
                 locked_reason="tier",
                 preview=self.preview_labels(hidden=ctx.hidden_layers),
             )
+        antes = len(ctx.warnings)
         subsections = self.subsections(ctx)
+        notes = list(dict.fromkeys(ctx.warnings[antes:]))
         codes = self.indicator_codes
+        # Sólo las fuentes de lo que se enseña: el pie de Demografía citaba el
+        # Padrón y el Atlas sin un solo dato de ellos en la sección.
         sources = sorted({
-            ctx.catalog[c].source for c in codes if c in ctx.catalog and ctx.catalog[c].source
+            ctx.catalog[c].source for c in codes
+            if c in ctx.catalog and ctx.catalog[c].source and ctx.con_dato(c)
         })
         return SectionResult(
             id=self.section,
@@ -463,6 +472,7 @@ class SectionBuilder(ABC):
             subsections=[s for s in subsections if s is not None],
             sources=sources,
             coverage=ctx.coverage(codes),
+            notes=notes,
         )
 
     @abstractmethod
