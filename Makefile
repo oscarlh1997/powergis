@@ -393,6 +393,33 @@ cargar-datos:  ## Carga COMPLETA y en orden: catálogo → INE → renta → der
 	$(ENGINE) powergis almacen-estado
 	$(ENGINE) powergis almacen-estado --nivel provincia
 
+.PHONY: cargar-distritos
+cargar-distritos:  ## Distritos y secciones (tras cargar-datos): Atlas, INE por sección, Infoelectoral, OSM, agregados y derivados
+	@# Necesita las geografías de distrito y sección en dim_geo (powergis
+	@# distritos 28134 lo enseña). Las tablas por sección sin id verificado
+	@# (INE_SECCION_TABLE_…) y lo provisional no bloquean: se avisa y sigue.
+	$(ENGINE) powergis sync-catalog
+	@$(ETL) powergis ine-verify || { \
+		echo ""; echo "ABORTADO: el mapeo del INE no cuadra. No se carga nada."; exit 1; }
+	@for nivel in distrito seccion; do \
+		$(ETL) powergis ingest ine --level $$nivel || exit 1; \
+		$(ETL) powergis ingest ine_adrh --level $$nivel || exit 1; \
+		$(ETL) powergis ingest plantilla --level $$nivel || exit 1; \
+	done
+	@if [ -n "$(INFOELECTORAL)" ]; then \
+		$(ETL) powergis infoelectoral-verificar "$(INFOELECTORAL)" || exit 1; \
+		for nivel in seccion distrito municipio; do \
+			$(ETL) env POWERGIS_INFOELECTORAL="$(INFOELECTORAL)" powergis ingest infoelectoral --level $$nivel || exit 1; \
+		done; \
+	else echo "AVISO: sin INFOELECTORAL=/data/<zip de mesas>; no se carga el electoral."; fi
+	@$(ETL) powergis ingest osm --level seccion || echo "AVISO: OSM por sección no cargado (¿sin extracto?)."
+	@$(ETL) powergis ingest osm --level distrito || echo "AVISO: OSM por distrito no cargado (¿sin extracto?)."
+	$(ETL) powergis agregar
+	@for nivel in seccion distrito; do \
+		$(ETL) powergis derive --level $$nivel || exit 1; \
+		$(ETL) powergis ingest derived --level $$nivel || exit 1; \
+	done
+
 .PHONY: validar-plantilla
 validar-plantilla:  ## Revisa la plantilla SIN cargarla (qué entra, qué se rechaza y por qué): make validar-plantilla PLANTILLA=fichero.xlsx
 	@test -f "$(PLANTILLA)" || { echo "No encuentro $(PLANTILLA)"; exit 1; }
