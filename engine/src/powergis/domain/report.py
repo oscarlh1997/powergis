@@ -113,7 +113,9 @@ class ReportBuilder:
     # ------------------------------------------------------------------ #
 
     def _placerank(self, ctx: SectionContext, tier: Tier) -> PlaceRankResult | None:
-        if tier is not Tier.AVANZADO:
+        # Con una sola zona no hay ranking: un percentil dentro de un ámbito de
+        # una zona da 50 en todo y la llamaba «mejor» y «peor» a la vez.
+        if tier is not Tier.AVANZADO or len(ctx.children) < 2:
             return None
         profile = placerank_mod.get_profile(ctx.business.get("sector"))
         result = placerank_mod.compute(ctx, profile, target=ctx.target)
@@ -177,10 +179,11 @@ class ReportBuilder:
         share = stats.relative_share(segment, pop)
 
         headline = [
-            {"label": "Población analizada", "value": pop, "unit": "personas"},
-            {"label": "Público objetivo", "value": segment, "unit": "personas"},
-            {"label": "Peso del público objetivo", "value": share, "unit": "%"},
-            {"label": "Zonas comparadas", "value": len(ctx.children), "unit": "ud"},
+            {"label": "Población analizada", "value": pop, "unit": "personas", "decimals": 0},
+            {"label": "Público objetivo", "value": segment, "unit": "personas", "decimals": 0},
+            {"label": "Peso del público objetivo", "value": share, "unit": "%", "decimals": 1},
+            {"label": "Zonas comparadas", "value": len(ctx.children), "unit": "ud",
+             "decimals": 0},
         ]
 
         best: list[dict] = []
@@ -189,7 +192,7 @@ class ReportBuilder:
             top, bottom = placerank_mod.podium(placerank, 3)
             best = [placerank_mod.explain(r, ctx.catalog) for r in top]
             worst = [placerank_mod.explain(r, ctx.catalog) for r in bottom]
-        else:
+        elif len(ctx.children) > 1:
             pairs = [(g.ine_code, ctx.value(g.geo_id, "dem.pop.segment")) for g in ctx.children]
             highlights = stats.top_bottom(pairs, n=3)
             names = {g.ine_code: g.name for g in ctx.children}

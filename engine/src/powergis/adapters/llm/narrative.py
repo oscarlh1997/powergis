@@ -321,7 +321,9 @@ def _template_summary(facts: dict[str, Any]) -> dict[str, Any]:
     peores = [z.get("zona") for z in (facts.get("peores_zonas") or [])][:3]
 
     resumen = f"Análisis de {ambito}"
-    if zonas:
+    if zonas == 1:
+        resumen += " sobre una sola zona: no hay otras con las que compararla"
+    elif zonas:
         resumen += f" sobre {zonas} zonas comparables"
     resumen += "."
     if mejores:
@@ -332,10 +334,13 @@ def _template_summary(facts: dict[str, Any]) -> dict[str, Any]:
     return {
         "resumen": resumen,
         "fortalezas": [f"Mejor posicionada: {mejores[0]}"] if mejores else [],
-        "riesgos": ["Cobertura de datos parcial en algunas secciones"]
-        if facts.get("cobertura_baja") else [],
+        # La cobertura es un aviso sobre los datos, no un riesgo del negocio:
+        # va en la recomendación, no mezclado con los riesgos.
+        "riesgos": [],
         "recomendacion": (
-            "Revise las tablas comparativas de cada sección antes de decidir. "
+            ("Algunas secciones tienen cobertura de datos parcial. "
+             if facts.get("cobertura_baja") else "")
+            + "Revise las tablas comparativas de cada sección antes de decidir. "
             "Este resumen se ha generado con plantilla determinista porque la "
             "generación asistida no estaba disponible."
         ),

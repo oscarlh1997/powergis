@@ -142,7 +142,7 @@ class PdfExporter:
         summary = report.executive_summary or {}
         head = "".join(
             f"<div class='kpi'><div class='label'>{esc(item['label'])}</div>"
-            f"<div class='value'>{fmt(item.get('value'))} "
+            f"<div class='value'>{fmt(item.get('value'), item.get('decimals', 2))} "
             f"<span class='unit'>{esc(item.get('unit', ''))}</span></div></div>"
             for item in summary.get("headline", [])
         )

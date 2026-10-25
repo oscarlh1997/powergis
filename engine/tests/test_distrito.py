@@ -174,3 +174,37 @@ class TestRecargaUtil:
         assert "dem.pop.total" in caducos                  # sí se publica por distrito
         assert all(catalog.BY_CODE[c].available_at(GeoLevel.DISTRITO) for c in caducos)
         assert encolado[0][1:] == ("distrito", "28134")
+
+
+class TestUnaSolaZona:
+    def informe(self):
+        from powergis.application.context import build_context
+        from powergis.domain.report import ReportBuilder
+
+        solo = [g for g in geos() if g.geo_id != 12 and g.level is not GeoLevel.SECCION]
+        u = FakeUnitOfWork(solo, [f(11, "eco.income.household.mean", 67_269.0),
+                                  f(11, "eco.gini", 0.335), f(MUN, "dem.pop.total", 92_000.0)])
+        ctx = build_context(u, proyecto(), tier=Tier.AVANZADO)
+        return ReportBuilder("test").build(proyecto(), ctx, version=1, tier=Tier.AVANZADO)
+
+    def test_sin_ranking_ni_podio(self):
+        report = self.informe()
+        assert report.placerank is None
+        assert report.executive_summary["mejores_zonas"] == []
+        assert report.executive_summary["peores_zonas"] == []
+
+    def test_zonas_comparadas_sin_decimales(self):
+        from powergis.adapters.exports.pdf import PdfExporter
+
+        html = PdfExporter().to_html(self.informe())
+        assert "1 <span class='unit'>ud" in html
+        assert "1,00" not in html.split("Zonas comparadas")[1][:80]
+
+    def test_la_plantilla_no_llama_mejor_a_la_unica_zona(self):
+        from powergis.adapters.llm.narrative import _template_summary
+
+        out = _template_summary({"ambito": "San Sebastián de los Reyes", "zonas_comparadas": 1,
+                                 "cobertura_baja": True})
+        assert "una sola zona" in out["resumen"]
+        assert out["fortalezas"] == [] and out["riesgos"] == []
+        assert "cobertura de datos parcial" in out["recomendacion"]
