@@ -51,9 +51,13 @@ class TestMarcas:
                       ref="estimación modelada · elaboración propia")
         assert estado.ESTIMADO in estado.de_hecho(modelado, "eco.disposable.monthly", hoy=self.HOY)
 
-    def test_riesgo_de_pobreza_siempre_estimado(self):
-        assert estado.ESTIMADO in estado.de_hecho(_f(1, "eco.poverty.risk_pct", 20.0),
-                                                  "eco.poverty.risk_pct", hoy=self.HOY)
+    def test_riesgo_de_pobreza_estimado_solo_si_es_modelo(self):
+        modelo = _f(1, "eco.poverty.risk_pct", 20.0, ref="estimación modelada · elaboración propia")
+        assert estado.ESTIMADO in estado.de_hecho(modelo, "eco.poverty.risk_pct", hoy=self.HOY)
+        # El del Atlas (umbrales relativos) es un dato publicado.
+        assert estado.ESTIMADO not in estado.de_hecho(
+            _f(1, "eco.poverty.risk_pct", 11.4, ref="INE:37700"), "eco.poverty.risk_pct",
+            hoy=self.HOY)
 
     def test_las_normales_de_aemet_no_son_dato_antiguo(self):
         normal = _f(1, "cli.temp.annual", 15.0, period=date(2020, 1, 1),
@@ -67,8 +71,10 @@ class TestMarcas:
         from powergis.adapters.collectors import ine_adrh
         from powergis.adapters.collectors.ine import TABLES
 
+        # Las tablas por distrito o sección no marcan el código entero: sus
+        # hechos llevan «provisional» en la fuente (`IneCollector._ref`).
         marcados = {s.indicator for s in (*TABLES, *ine_adrh.SPECS)
-                    if s.pendiente or s.provisional}
+                    if (s.pendiente or s.provisional) and s.level not in ("distrito", "seccion")}
         # El riesgo de pobreza se estima: sale «Estimado», no «En actualización».
         assert marcados - {"eco.poverty.risk_pct"} == set(estado.EN_ACTUALIZACION)
 

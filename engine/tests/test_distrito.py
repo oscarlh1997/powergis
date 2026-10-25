@@ -9,7 +9,6 @@ from __future__ import annotations
 from datetime import date
 
 from conftest import FakeUnitOfWork
-
 from powergis.domain.enums import GeoLevel, Tier
 from powergis.domain.models import Fact, Geo, Scope, Segments
 from powergis.domain.sections.base import SectionContext, kpi_from, sin_datos_de_capa

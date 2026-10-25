@@ -89,6 +89,9 @@ class IngestData:
             report.errors.append("No hay geografías para ese ámbito")
             report.finished_at = datetime.now(UTC)
             return report
+        if getattr(collector, "CONTEXTO_MUNICIPAL", False) and level in (
+                GeoLevel.DISTRITO, GeoLevel.SECCION):
+            geos = [*geos, *self._target_geos(GeoLevel.MUNICIPIO, None)]
 
         from ..domain.models import Segments
 

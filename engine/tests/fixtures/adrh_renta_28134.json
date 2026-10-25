@@ -1,0 +1,222 @@
+[
+ {
+  "Nombre": "San Sebastián de los Reyes. Renta bruta media por hogar. Dato base. ",
+  "MetaData": [
+   {
+    "Variable": {
+     "Id": 19,
+     "Nombre": "Municipios"
+    },
+    "Nombre": "San Sebastián de los Reyes",
+    "Codigo": "28134"
+   },
+   {
+    "Variable": {
+     "Id": 3,
+     "Nombre": "Tipo de dato"
+    },
+    "Nombre": "Dato base",
+    "Codigo": ""
+   }
+  ],
+  "Data": [
+   {
+    "Anyo": 2023,
+    "Valor": 67269
+   },
+   {
+    "Anyo": 2022,
+    "Valor": 64000
+   }
+  ]
+ },
+ {
+  "Nombre": "San Sebastián de los Reyes. Renta neta media por hogar. Dato base. ",
+  "MetaData": [
+   {
+    "Variable": {
+     "Id": 19,
+     "Nombre": "Municipios"
+    },
+    "Nombre": "San Sebastián de los Reyes",
+    "Codigo": "28134"
+   },
+   {
+    "Variable": {
+     "Id": 3,
+     "Nombre": "Tipo de dato"
+    },
+    "Nombre": "Dato base",
+    "Codigo": ""
+   }
+  ],
+  "Data": [
+   {
+    "Anyo": 2023,
+    "Valor": 52000
+   }
+  ]
+ },
+ {
+  "Nombre": "San Sebastián de los Reyes distrito 01. Renta bruta media por hogar. Dato base. ",
+  "MetaData": [
+   {
+    "Variable": {
+     "Id": 847,
+     "Nombre": "Distritos"
+    },
+    "Nombre": "San Sebastián de los Reyes distrito 01",
+    "Codigo": "2813401"
+   },
+   {
+    "Variable": {
+     "Id": 3,
+     "Nombre": "Tipo de dato"
+    },
+    "Nombre": "Dato base",
+    "Codigo": ""
+   }
+  ],
+  "Data": [
+   {
+    "Anyo": 2023,
+    "Valor": 73996
+   },
+   {
+    "Anyo": 2022,
+    "Valor": 70400
+   }
+  ]
+ },
+ {
+  "Nombre": "San Sebastián de los Reyes distrito 01. Renta neta media por hogar. Dato base. ",
+  "MetaData": [
+   {
+    "Variable": {
+     "Id": 847,
+     "Nombre": "Distritos"
+    },
+    "Nombre": "San Sebastián de los Reyes distrito 01",
+    "Codigo": "2813401"
+   },
+   {
+    "Variable": {
+     "Id": 3,
+     "Nombre": "Tipo de dato"
+    },
+    "Nombre": "Dato base",
+    "Codigo": ""
+   }
+  ],
+  "Data": [
+   {
+    "Anyo": 2023,
+    "Valor": 57200
+   }
+  ]
+ },
+ {
+  "Nombre": "San Sebastián de los Reyes sección 01001. Renta bruta media por hogar. Dato base. ",
+  "MetaData": [
+   {
+    "Variable": {
+     "Id": 847,
+     "Nombre": "Secciones"
+    },
+    "Nombre": "San Sebastián de los Reyes sección 01001",
+    "Codigo": "2813401001"
+   },
+   {
+    "Variable": {
+     "Id": 3,
+     "Nombre": "Tipo de dato"
+    },
+    "Nombre": "Dato base",
+    "Codigo": ""
+   }
+  ],
+  "Data": [
+   {
+    "Anyo": 2023,
+    "Valor": 80723
+   },
+   {
+    "Anyo": 2022,
+    "Valor": 76800
+   }
+  ]
+ },
+ {
+  "Nombre": "San Sebastián de los Reyes sección 01001. Renta neta media por hogar. Dato base. ",
+  "MetaData": [
+   {
+    "Variable": {
+     "Id": 847,
+     "Nombre": "Secciones"
+    },
+    "Nombre": "San Sebastián de los Reyes sección 01001",
+    "Codigo": "2813401001"
+   },
+   {
+    "Variable": {
+     "Id": 3,
+     "Nombre": "Tipo de dato"
+    },
+    "Nombre": "Dato base",
+    "Codigo": ""
+   }
+  ],
+  "Data": [
+   {
+    "Anyo": 2023,
+    "Valor": 62400
+   }
+  ]
+ },
+ {
+  "Nombre": "Madrid. Renta bruta media por hogar. Dato base.",
+  "MetaData": [
+   {
+    "Variable": {
+     "Id": 115,
+     "Nombre": "Provincias"
+    },
+    "Nombre": "Madrid",
+    "Codigo": "28"
+   }
+  ],
+  "Data": [
+   {
+    "Anyo": 2023,
+    "Valor": 50000
+   }
+  ]
+ },
+ {
+  "Nombre": "San Sebastián de los Reyes sección 02001. Renta bruta media por hogar. Dato base. ",
+  "MetaData": [
+   {
+    "Variable": {
+     "Id": 847,
+     "Nombre": "Secciones"
+    },
+    "Nombre": "San Sebastián de los Reyes sección 02001",
+    "Codigo": "2813402001"
+   },
+   {
+    "Variable": {
+     "Id": 3,
+     "Nombre": "Tipo de dato"
+    },
+    "Nombre": "Dato base",
+    "Codigo": ""
+   }
+  ],
+  "Data": [
+   {
+    "Anyo": 2023,
+    "Valor": ".."
+   }
+  ]
+ }
+]

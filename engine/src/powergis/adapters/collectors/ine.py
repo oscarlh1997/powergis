@@ -104,6 +104,20 @@ class TableSpec:
     #: bueno, se quita la marca.
     provisional: str | None = None
 
+    #: Niveles INFERIORES que la misma tabla publica además de `level`. El
+    #: Atlas de renta mezcla en cada tabla municipios, distritos (7 cifras) y
+    #: secciones censales (10); antes se apartaban y un informe por distrito
+    #: no tenía renta propia (análisis 8071).
+    tambien: tuple[str, ...] = ()
+
+    #: Cuántos periodos se piden (`?nult=`). La variación interanual necesita
+    #: al menos dos.
+    nult: int = 1
+
+    @property
+    def niveles(self) -> tuple[str, ...]:
+        return (self.level, *self.tambien)
+
     @property
     def env_key(self) -> str:
         return f"{self.env_prefix}{self.indicator.upper().replace('.', '_')}"
@@ -143,6 +157,14 @@ class TableSpec:
 # cogería las tres y escribiría tres hechos del mismo indicador para la misma
 # geografía. Lo que distingue al total es que NO dice ni hombres ni mujeres.
 # ---------------------------------------------------------------------------
+#: Niveles inferiores que el Atlas publica en las mismas tablas.
+_INFERIORES = ("distrito", "seccion")
+_SECCION = "INE_SECCION_TABLE_"
+_VER_SECCION = "tabla por sección censal sin id verificado: fíjalo en el VPS"
+#: Tramos de edad («De 0 a 4 años»): en el Padrón por sección sólo vale el
+#: total («Total edades»). Con espacio delante para no excluir «Llanos».
+_EDADES = (" años",)
+
 TABLES: tuple[TableSpec, ...] = (
     TableSpec(
         "29005", "dem.pop.total", "municipio",
@@ -180,16 +202,30 @@ TABLES: tuple[TableSpec, ...] = (
     # distintos y llevan códigos distintos.
     # -----------------------------------------------------------------------
     TableSpec("30814", "dem.age.mean", "municipio", match=("edad media de la poblacion",),
-              operacion=353, table_match=("indicadores demograficos",), varias_tablas=True),
+              operacion=353, table_match=("indicadores demograficos",), varias_tablas=True,
+              tambien=_INFERIORES),
     TableSpec("30814", "dem.age.u18_pct", "municipio", match=("menor de 18",),
-              operacion=353, table_match=("indicadores demograficos",), varias_tablas=True),
+              operacion=353, table_match=("indicadores demograficos",), varias_tablas=True,
+              tambien=_INFERIORES),
     TableSpec("30814", "dem.age.65p_pct", "municipio", match=("65 y mas",),
-              operacion=353, table_match=("indicadores demograficos",), varias_tablas=True),
+              operacion=353, table_match=("indicadores demograficos",), varias_tablas=True,
+              tambien=_INFERIORES),
     TableSpec("30814", "dem.household.size", "municipio", match=("tamano medio del hogar",),
-              operacion=353, table_match=("indicadores demograficos",), varias_tablas=True),
+              operacion=353, table_match=("indicadores demograficos",), varias_tablas=True,
+              tambien=_INFERIORES),
     TableSpec("30814", "dem.household.single_pct", "municipio",
               match=("hogares unipersonales",),
-              operacion=353, table_match=("indicadores demograficos",), varias_tablas=True),
+              operacion=353, table_match=("indicadores demograficos",), varias_tablas=True,
+              tambien=_INFERIORES),
+
+    # La población del distrito y la sección, de la misma familia del Atlas.
+    # Sólo para esos niveles: la municipal sigue saliendo del Padrón (29005)
+    # y dos fuentes para el mismo municipio serían un conflicto.
+    TableSpec("30814", "dem.pop.total", "distrito", match=("poblacion",),
+              exclude=("edad media", "porcentaje", "menor", "65", "hogar"),
+              operacion=353, table_match=("indicadores demograficos",), varias_tablas=True,
+              tambien=("seccion",), env_prefix="INE_INFERIOR_TABLE_",
+              provisional="serie «Población» del Atlas por distrito y sección sin verificar"),
 
     # -----------------------------------------------------------------------
     # SIN FUENTE VERIFICADA — se dejan declarados para que `ine-verify` los
@@ -266,6 +302,53 @@ TABLES: tuple[TableSpec, ...] = (
               match=("primaria", "analfabet", "sin estudios"), segment_from="age",
               cociente=True, provisional="verificar en el VPS con `powergis ine-verify`"),
 
+    # -----------------------------------------------------------------------
+    # POR SECCIÓN CENSAL — Padrón continuo y Censo 2021 (análisis 8071)
+    #
+    # Sin id: el proxy de la sesión no llega al INE y no se ha podido ver
+    # ninguna tabla. Se localizan en el VPS con
+    #
+    #     powergis ine-buscar "seccion censal"
+    #     powergis ine-discover <id>
+    #
+    # y se fijan con su variable de entorno (INE_SECCION_TABLE_…). Hasta
+    # entonces no se descargan ni bloquean nada; `ine-verify` las enseña como
+    # provisionales. Los distritos se obtienen sumando o ponderando secciones
+    # (`powergis agregar`).
+    #   · Padrón continuo: «Población por sexo, sección censal y edad».
+    #   · Censo 2021, resultados por sección censal: nacionalidad, nivel de
+    #     estudios, estado civil, tipo de hogar y viviendas.
+    # -----------------------------------------------------------------------
+    TableSpec("", "dem.sex.men", "seccion", match=("hombres",), exclude=_EDADES,
+              env_prefix=_SECCION, provisional=_VER_SECCION),
+    TableSpec("", "dem.sex.women", "seccion", match=("mujeres",), exclude=_EDADES,
+              env_prefix=_SECCION, provisional=_VER_SECCION),
+    TableSpec("", "dem.nat.foreign_pct", "seccion", match=("extranjer",), cociente=True,
+              env_prefix=_SECCION, provisional=_VER_SECCION),
+    TableSpec("", "dem.edu.university_pct", "seccion", match=("superior",),
+              exclude=("no superior",), cociente=True,
+              env_prefix=_SECCION, provisional=_VER_SECCION),
+    TableSpec("", "dem.edu.secondary_pct", "seccion", match=("secundaria",),
+              exclude=("primaria",), cociente=True,
+              env_prefix=_SECCION, provisional=_VER_SECCION),
+    TableSpec("", "dem.edu.primary_or_less_pct", "seccion",
+              match=("primaria", "analfabet", "sin estudios"), cociente=True,
+              env_prefix=_SECCION, provisional=_VER_SECCION),
+    TableSpec("", "dem.civil.single_pct", "seccion", match=("soltero",), cociente=True,
+              env_prefix=_SECCION, provisional=_VER_SECCION),
+    TableSpec("", "dem.civil.married_pct", "seccion", match=("casado",), cociente=True,
+              env_prefix=_SECCION, provisional=_VER_SECCION),
+    TableSpec("", "dem.household.with_children_pct", "seccion", match=("con hijos",),
+              exclude=("sin hijos",), cociente=True,
+              env_prefix=_SECCION, provisional=_VER_SECCION),
+    TableSpec("", "dem.household.monoparental_pct", "seccion", match=("monoparental",),
+              cociente=True, env_prefix=_SECCION, provisional=_VER_SECCION),
+    TableSpec("", "inm.dwellings.main_pct", "seccion", match=("principal",),
+              exclude=("no principal",), cociente=True,
+              env_prefix=_SECCION, provisional=_VER_SECCION),
+    TableSpec("", "inm.dwellings.empty_pct", "seccion", match=("vacia",), cociente=True,
+              env_prefix=_SECCION, provisional=_VER_SECCION),
+
     # `1470` y `67223` se llaman las dos «Tasa Bruta de Natalidad por
     # provincia» y tienen la misma fecha de modificación: sólo las distingue el
     # identificador, y la republicada es la de número mayor. La resolución por
@@ -304,6 +387,9 @@ class IneCollector(BaseCollector):
 
     name = "ine"
     TODAS_LAS_GEOS = True
+    #: Al cargar distritos o secciones necesita los municipios para resolver
+    #: los nombres del Atlas («Municipio distrito 01»). Ver `IngestData`.
+    CONTEXTO_MUNICIPAL = True
     SPECS: tuple[TableSpec, ...] = TABLES
     PROVIDES = tuple({spec.indicator for spec in TABLES})
 
@@ -360,6 +446,12 @@ class IneCollector(BaseCollector):
         facts: list[Fact] = []
 
         niveles = {str(g.level) for g in geos}
+        # Cargando distritos o secciones llegan también los municipios, sólo
+        # para resolver «Municipio distrito 01» por nombre: se escribe el
+        # nivel pedido, no los municipios otra vez.
+        inferiores = niveles & {"distrito", "seccion"}
+        if inferiores:
+            niveles = inferiores
         for spec in self.SPECS:
             if spec.indicator not in wanted:
                 continue
@@ -370,13 +462,21 @@ class IneCollector(BaseCollector):
             # Cada spec sólo contra geografías de SU nivel. Cargando municipios
             # no tiene sentido bajar la tabla provincial de natalidad, ni
             # cargando provincias las 54 del Atlas.
-            if spec.level not in niveles:
+            if not set(spec.niveles) & niveles:
+                continue
+            if not spec.resolved_id() and spec.operacion is None:
+                # Tabla por verificar sin id todavía: se fija con su variable
+                # de entorno cuando `ine-buscar` la localice en el VPS.
+                log.warning("INE %s (%s): sin id de tabla; fíjalo en %s",
+                            spec.indicator, spec.level, spec.env_key)
                 continue
             try:
-                rows = self._table(spec)
+                rows = self._table(spec, spec.nult)
             except CollectorError as exc:
                 log.warning("INE tabla %s (%s): %s", spec.resolved_id(), spec.indicator, exc.message)
-                self.fallos.append(f"{spec.indicator}: {exc.message}")
+                # Un mapeo provisional no bloquea la carga de lo verificado.
+                if not spec.provisional:
+                    self.fallos.append(f"{spec.indicator}: {exc.message}")
                 continue
             if spec.cociente:
                 facts.extend(self._map_cociente(spec, rows, by_code, by_name, period))
@@ -384,6 +484,9 @@ class IneCollector(BaseCollector):
                 facts.extend(self._map(spec, rows, by_code, by_name, segments, period))
 
         self._filas_cache.clear()
+        if inferiores:
+            del_nivel = {g.geo_id for g in geos if str(g.level) in niveles}
+            facts = [x for x in facts if x.geo_id in del_nivel]
         return self._sin_conflictos(facts)
 
     @staticmethod
@@ -564,9 +667,13 @@ class IneCollector(BaseCollector):
             if not isinstance(variable, dict):
                 continue
             nombre_var = _fold(str(variable.get("Nombre") or ""))
-            if nombre_var.startswith(("seccion", "distrito")):
-                return IneCollector.NO_MUNICIPIO
             valor = str(meta.get("Codigo") or "").strip()
+            if nombre_var.startswith(("seccion", "distrito")):
+                # Distrito (7 cifras) o sección (10): el código, para los specs
+                # que declaran ese nivel en `tambien`; el resto los aparta.
+                if valor.isdigit() and len(valor) in (7, 10):
+                    return valor
+                return IneCollector.NO_MUNICIPIO
             if variable.get("Id") == 19 or nombre_var.startswith("municipio"):
                 if valor.isdigit() and len(valor) == 5:
                     codigo = valor
@@ -659,17 +766,10 @@ class IneCollector(BaseCollector):
                 continue
 
             casadas += 1
-            meta = row.get("Municipio") if spec.level == "municipio" else None
-            if meta == self.NO_MUNICIPIO:
+            geo = self._geo_de_fila(spec, row, name, plegado, by_code, by_name)
+            if geo == self.NO_MUNICIPIO:
                 de_otro_nivel += 1      # provincia, distrito o sección
                 continue
-            # El código de los metadatos manda sobre el nombre. Si no está entre
-            # las geografías, la serie no es de aquí: NO se prueba por nombre,
-            # porque así es como el Castejón de Cuenca acababa en el de Navarra.
-            geo = (
-                self._por_codigo(str(meta), plegado, by_code) if meta
-                else self._geo_of(name, by_code, by_name, spec.level)
-            )
             if geo is None:
                 sin_resolver += 1
                 continue
@@ -703,7 +803,7 @@ class IneCollector(BaseCollector):
                         segment or None,
                         # La tabla de la que sale DE VERDAD, no la semilla: con
                         # 54 tablas por indicador, «INE:30814» no decía nada.
-                        source_ref=f"INE:{row.get('Tabla') or spec.resolved_id()}",
+                        source_ref=self._ref(spec, row.get("Tabla")),
                     )
                 )
 
@@ -718,7 +818,7 @@ class IneCollector(BaseCollector):
         if de_otro_nivel:
             log.info("INE %s: %d series de provincia, distrito o sección apartadas",
                      spec.indicator, de_otro_nivel)
-        if casadas and not out:
+        if casadas and not out and not spec.provisional:
             self.fallos.append(
                 f"{spec.indicator}: {casadas} series encajan con el filtro y ninguna "
                 "resolvió a una geografía"
@@ -763,13 +863,9 @@ class IneCollector(BaseCollector):
         for row in rows:
             name = str(row.get("Nombre") or "")
             plegado = _fold(name)
-            meta = row.get("Municipio") if spec.level == "municipio" else None
-            if meta == self.NO_MUNICIPIO:
+            geo = self._geo_de_fila(spec, row, name, plegado, by_code, by_name)
+            if geo == self.NO_MUNICIPIO:
                 continue
-            geo = (
-                self._por_codigo(str(meta), plegado, by_code) if meta
-                else self._geo_of(name, by_code, by_name, spec.level)
-            )
             if geo is None:
                 sin_resolver += 1
                 continue
@@ -841,7 +937,7 @@ class IneCollector(BaseCollector):
                 self.fact(
                     g["geo"], spec.indicator, valor, cuando,
                     {"age": edad} if edad else None,
-                    source_ref=f"INE:{g['tabla'] or spec.resolved_id()}",
+                    source_ref=self._ref(spec, g["tabla"]),
                 )
             )
 
@@ -861,6 +957,63 @@ class IneCollector(BaseCollector):
             else:
                 self.fallos.append(aviso)
         return out
+
+    #: «San Sebastián de los Reyes distrito 01» / «… sección 01001», que es
+    #: como nombra el Atlas sus filas inferiores cuando no trae metadatos.
+    _INFERIOR = re.compile(r"^(.+?) (distrito|seccion) (\d{2}|\d{5})$")
+
+    def _geo_de_fila(
+        self,
+        spec: TableSpec,
+        row: dict[str, Any],
+        name: str,
+        plegado: str,
+        by_code: dict[str, Geo],
+        by_name: dict[tuple[str, str], Geo],
+    ) -> Geo | str | None:
+        """La geografía de la serie, `NO_MUNICIPIO` si es de otro nivel, o None.
+
+        El código de los metadatos manda sobre el nombre. Si no está entre las
+        geografías, la serie no es de aquí: NO se prueba por nombre, porque así
+        es como el Castejón de Cuenca acababa en el de Navarra.
+        """
+        meta = row.get("Municipio")
+        inferior = meta if meta and str(meta).isdigit() and len(str(meta)) in (7, 10) else None
+        if inferior is None and (spec.tambien or spec.level in ("distrito", "seccion")):
+            inferior = self._codigo_por_nombre(plegado, by_name)
+        if inferior is not None:
+            nivel = "distrito" if len(inferior) == 7 else "seccion"
+            if nivel not in spec.niveles:
+                return self.NO_MUNICIPIO
+            return by_code.get(inferior)
+        if spec.level in ("distrito", "seccion"):
+            # Una tabla de secciones trae también el municipio y la provincia.
+            if meta:
+                return self.NO_MUNICIPIO
+            return self._geo_of(name, by_code, by_name, spec.level)
+        if spec.level != "municipio":
+            return self._geo_of(name, by_code, by_name, spec.level)
+        if meta == self.NO_MUNICIPIO:
+            return self.NO_MUNICIPIO
+        return (
+            self._por_codigo(str(meta), plegado, by_code) if meta
+            else self._geo_of(name, by_code, by_name, spec.level)
+        )
+
+    def _codigo_por_nombre(self, plegado: str, by_name: dict[tuple[str, str], Geo]) -> str | None:
+        """Código de distrito o sección a partir de «Municipio distrito 01.»."""
+        primero = plegado.split(".")[0].strip()
+        m = self._INFERIOR.match(primero)
+        if not m:
+            return None
+        municipio = by_name.get(("municipio", m.group(1).strip()))
+        return f"{municipio.ine_code}{m.group(3)}" if municipio else None
+
+    @staticmethod
+    def _ref(spec: TableSpec, tabla: str | None) -> str:
+        """Fuente del hecho; lo de una tabla por verificar lleva «provisional»."""
+        ref = f"INE:{tabla or spec.resolved_id()}"
+        return f"{ref} · provisional" if spec.provisional else ref
 
     @staticmethod
     def _por_codigo(codigo: str, plegado: str, by_code: dict[str, Geo]) -> Geo | None:
@@ -1209,6 +1362,15 @@ class IneCollector(BaseCollector):
                     "status": "PENDING", "detail": spec.pendiente,
                 })
                 continue
+            if not spec.resolved_id() and spec.operacion is None:
+                results.append({
+                    "indicator": spec.indicator, "table": "—", "overridden": False,
+                    "resolution": "", "expected_level": spec.level,
+                    "provisional": spec.provisional, "status": "UNREACHABLE",
+                    "detail": f"falta el id de la tabla ({spec.level}): búscalo con "
+                              f"`powergis ine-buscar` y fíjalo en {spec.env_key}",
+                })
+                continue
             try:
                 tablas, motivo = self.resolver_tablas(spec)
             except CollectorError as exc:
@@ -1288,7 +1450,7 @@ class IneCollector(BaseCollector):
                 results.append(entry)
                 continue
 
-            if detected and detected != spec.level:
+            if detected and detected not in spec.niveles:
                 entry.update(
                     status="LEVEL_MISMATCH",
                     detail=f"se esperaba '{spec.level}' y las series son de '{detected}'",
@@ -1516,7 +1678,8 @@ class IneCollector(BaseCollector):
             token = name.split(".")[0].strip().split(" ")[0].strip()
             if not token.isdigit():
                 continue
-            level = {2: "provincia", 5: "municipio", 7: "seccion"}.get(len(token))
+            # 7 cifras es un DISTRITO (municipio + 2); la sección tiene 10.
+            level = {2: "provincia", 5: "municipio", 7: "distrito", 10: "seccion"}.get(len(token))
             if level:
                 counts[level] = counts.get(level, 0) + 1
         if not counts:

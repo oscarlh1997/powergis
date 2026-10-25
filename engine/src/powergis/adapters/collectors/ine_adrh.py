@@ -51,39 +51,60 @@ _ATLAS: dict[str, Any] = {"operacion": 353, "varias_tablas": True, "env_prefix":
 #: unidad de consumo, renta bruta media por persona / por hogar.
 _RENTA = ("indicadores de renta media y mediana",)
 
+#: Municipio, distrito y sección: el Atlas publica los tres en cada tabla y
+#: antes se apartaban los dos últimos (análisis 8071).
+_INFERIORES = ("distrito", "seccion")
+#: Dos periodos: la variación interanual de la renta (`eco.income.yoy`) es un
+#: derivado y con un solo año no sale nunca.
+_DOS_ANOS = 2
+
+#: Los desgloses por sexo y edad de las familias de umbrales: sólo el total.
+_SIN_DESGLOSE = ("hombres", "mujeres", "menos de 18", "18 a 64", "65 y mas")
+_POR_VERIFICAR = ("mapeo escrito sin ver la tabla: comprobar con "
+                  "`powergis ine-tablas 353 --contiene umbrales` y `powergis ine-verify`")
+
 SPECS: tuple[TableSpec, ...] = (
     TableSpec("30824", "eco.income.household.mean", "municipio",
-              match=("renta bruta media por hogar",), table_match=_RENTA, **_ATLAS),
+              match=("renta bruta media por hogar",), table_match=_RENTA,
+              tambien=_INFERIORES, nult=_DOS_ANOS, **_ATLAS),
     TableSpec("30824", "eco.income.household.net", "municipio",
-              match=("renta neta media por hogar",), table_match=_RENTA, **_ATLAS),
+              match=("renta neta media por hogar",), table_match=_RENTA,
+              tambien=_INFERIORES, nult=_DOS_ANOS, **_ATLAS),
     TableSpec("30824", "eco.income.percapita", "municipio",
-              match=("renta neta media por persona",), table_match=_RENTA, **_ATLAS),
+              match=("renta neta media por persona",), table_match=_RENTA,
+              tambien=_INFERIORES, nult=_DOS_ANOS, **_ATLAS),
     TableSpec("30824", "eco.income.household.median", "municipio",
               match=("mediana de la renta por unidad de consumo",),
-              table_match=_RENTA, **_ATLAS),
+              table_match=_RENTA, tambien=_INFERIORES, nult=_DOS_ANOS, **_ATLAS),
 
     # «Índice de Gini y Distribución de la renta P80/P20». Si el INE cambia el
     # nombre de la familia, `ine-verify` lo dirá: ninguna tabla encajará.
     TableSpec("37677", "eco.gini", "municipio", match=("gini",),
-              table_match=("gini",), **_ATLAS),
+              table_match=("gini",), tambien=_INFERIORES, **_ATLAS),
 
     # -----------------------------------------------------------------------
-    # PENDIENTES — sin `operacion`, o sea fallando en `ine-verify` a la vista.
+    # PROVISIONALES — familias de «umbrales relativos» y «umbrales fijos».
     #
-    # Viven en las familias de «umbrales fijos» y «umbrales relativos», que
-    # desglosan cada municipio por sexo y tramos de edad. Sin ver los nombres
-    # exactos de sus series, un filtro puesto a ojo cogería los desgloses junto
-    # al total y escribiría varios valores para el mismo municipio. Se
-    # completan en cuanto se vean con `powergis ine-tablas 353 --contiene umbrales`.
+    # Desglosan cada zona por sexo y tramos de edad; `exclude` deja sólo el
+    # total. Los tokens se escribieron sin ver los nombres exactos de las
+    # series (el proxy de la sesión no llega al INE): un spec provisional que
+    # no casa no bloquea la carga ni escribe nada, y `ine-verify` enseña los
+    # «ej.:» para ajustarlo. Si los umbrales fijos del Atlas no son 15.000,
+    # 30.000 y 60.000 €, el indicador no casará y habrá que decidir si se
+    # cambia la etiqueta del catálogo al umbral que sí se publica.
     # -----------------------------------------------------------------------
-    TableSpec("37677", "eco.poverty.risk_pct", "municipio", match=("riesgo de pobreza",),
-              env_prefix="ADRH_TABLE_", pendiente="familia de umbrales relativos; hay que ver sus series"),
-    TableSpec("30833", "eco.income.under15k_pct", "municipio", match=("menos de 15",),
-              env_prefix="ADRH_TABLE_", pendiente="familia de umbrales fijos; hay que ver sus series"),
-    TableSpec("30833", "eco.income.over30k_pct", "municipio", match=("mas de 30",),
-              env_prefix="ADRH_TABLE_", pendiente="familia de umbrales fijos; hay que ver sus series"),
-    TableSpec("30833", "eco.income.over60k_pct", "municipio", match=("mas de 60",),
-              env_prefix="ADRH_TABLE_", pendiente="familia de umbrales fijos; hay que ver sus series"),
+    TableSpec("37677", "eco.poverty.risk_pct", "municipio", match=("60%",),
+              exclude=_SIN_DESGLOSE, table_match=("umbrales relativos",),
+              tambien=_INFERIORES, provisional=_POR_VERIFICAR, **_ATLAS),
+    TableSpec("30833", "eco.income.under15k_pct", "municipio", match=("debajo de 15.000",),
+              exclude=_SIN_DESGLOSE, table_match=("umbrales fijos",),
+              tambien=_INFERIORES, provisional=_POR_VERIFICAR, **_ATLAS),
+    TableSpec("30833", "eco.income.over30k_pct", "municipio", match=("encima de 30.000",),
+              exclude=_SIN_DESGLOSE, table_match=("umbrales fijos",),
+              tambien=_INFERIORES, provisional=_POR_VERIFICAR, **_ATLAS),
+    TableSpec("30833", "eco.income.over60k_pct", "municipio", match=("encima de 60.000",),
+              exclude=_SIN_DESGLOSE, table_match=("umbrales fijos",),
+              tambien=_INFERIORES, provisional=_POR_VERIFICAR, **_ATLAS),
 )
 
 

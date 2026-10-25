@@ -58,8 +58,11 @@ EN_ACTUALIZACION: frozenset[str] = frozenset({
 })
 
 #: Indicadores que siempre son modelo, salga de donde salga el hecho.
+#: El riesgo de pobreza ya no está: el Atlas lo publica (umbrales relativos)
+#: y sólo es estimado cuando lo modela el colector de derivados, cuya fuente
+#: dice «estimación modelada».
 SIEMPRE_ESTIMADOS: frozenset[str] = frozenset({
-    "eco.poverty.risk_pct", "sat.rent_m2", "inm.affordability.years",
+    "sat.rent_m2", "inm.affordability.years",
     "inm.rent.effort_pct", "tur.index",
 })
 
