@@ -193,7 +193,7 @@ def column_for(ind: Indicator, key: str | None = None, label: str | None = None)
 
 _NIVEL_NOMBRE = {
     "pais": "país", "ccaa": "comunidad autónoma", "provincia": "provincia",
-    "municipio": "municipio", "seccion": "sección censal",
+    "municipio": "municipio", "distrito": "distrito", "seccion": "sección censal",
 }
 
 
@@ -225,7 +225,11 @@ def kpi_from(
     note: str | None = None,
 ) -> Kpi:
     """KPI del ámbito completo, con su percentil, sus marcas y sus cortes de color."""
-    ind = ctx.catalog.get(code)
+    from .. import indicators as catalog_mod
+
+    # Fuera del catálogo filtrado (no se publica al nivel de las zonas) la
+    # etiqueta sigue siendo la del catálogo: nunca el código en crudo.
+    ind = ctx.catalog.get(code) or catalog_mod.BY_CODE.get(code)
     value = ctx.parent_value(code, segment)
     unit = ind.unit if ind else Unit.INDICE
     direction = ind.direction if ind else Direction.NEUTRAL
@@ -254,12 +258,26 @@ def kpi_from(
         percentile=(stats.percentile_of(value, child_values)
                     if child_values and not es_total else None),
         decimals=ind.decimals if ind else 2,
-        note=note or (_missing_note(child_values) if value is None else None),
+        note=note or (_missing_note(child_values) if value is None
+                      else _nota_del_ambito(ctx, code, child_values)),
         flags=flags,
         reference=reference,
         rating=estado.clase(value, reference, int(direction)),
         period=hecho.period.isoformat() if hecho and hecho.period else None,
     )
+
+
+def _nota_del_ambito(ctx: SectionContext, code: str,
+                     child_values: Sequence[float | None]) -> str | None:
+    """El KPI es del ámbito entero y las zonas no tienen el suyo: se dice.
+
+    Sin esto el KPI (municipio) y la tabla (distritos, en blanco) parecían
+    contradecirse: 11,4 % arriba y «n. d.» abajo.
+    """
+    if any(v is not None for v in child_values) or ctx.fact(ctx.parent.geo_id, code) is None:
+        return None
+    nivel = _NIVEL_NOMBRE.get(str(ctx.scope.resolve_children_level()), "zona")
+    return f"Dato del conjunto de {ctx.parent.name}; no hay dato propio por {nivel}"
 
 
 def _missing_note(child_values: Sequence[float | None]) -> str | None:
