@@ -182,7 +182,7 @@ class InfoelectoralCollector(BaseCollector):
     PROVIDES = ("pol.turnout_pct", "pol.winner_share_pct", "pol.effective_parties")
 
     def __init__(self, origen: str | None = None, client: Any = None) -> None:
-        self._origen = origen or os.getenv("POWERGIS_INFOELECTORAL", "")
+        self._origen: str = origen or os.getenv("POWERGIS_INFOELECTORAL") or ""
         self._client = client
         self.fallos: list[str] = []
 

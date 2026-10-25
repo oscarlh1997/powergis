@@ -767,7 +767,7 @@ class IneCollector(BaseCollector):
 
             casadas += 1
             geo = self._geo_de_fila(spec, row, name, plegado, by_code, by_name)
-            if geo == self.NO_MUNICIPIO:
+            if isinstance(geo, str):  # NO_MUNICIPIO
                 de_otro_nivel += 1      # provincia, distrito o sección
                 continue
             if geo is None:
@@ -864,7 +864,7 @@ class IneCollector(BaseCollector):
             name = str(row.get("Nombre") or "")
             plegado = _fold(name)
             geo = self._geo_de_fila(spec, row, name, plegado, by_code, by_name)
-            if geo == self.NO_MUNICIPIO:
+            if isinstance(geo, str):  # NO_MUNICIPIO
                 continue
             if geo is None:
                 sin_resolver += 1
