@@ -139,3 +139,20 @@ class TestDatoDelAmbito:
         head = {h["label"]: h["value"] for h in report.executive_summary["headline"]}
         assert head["Población analizada"] == 92_000.0
         assert head["Público objetivo"] == 20_000.0
+
+
+class TestGranularidad:
+    def test_un_informe_por_distrito_ya_no_descarta_casi_todo(self):
+        from powergis.domain import indicators as catalog
+
+        usables = [i for i in catalog.CATALOG
+                   if i.available_at(GeoLevel.DISTRITO) or catalog.heredable(i)]
+        assert len(usables) >= 90, "antes eran 12 de 129"
+
+    def test_renta_disponible_ticket_y_resistencia_bajan_a_seccion(self):
+        from powergis.domain.indicators import BY_CODE
+
+        for code in ("eco.disposable.monthly", "eco.consumer.ticket", "eco.resilience.index",
+                     "dem.pop.total", "dem.dependency.total", "pol.turnout_pct", "cmp.count",
+                     "tra.transit.stops", "dem.edu.university_pct", "dem.nat.foreign_pct"):
+            assert BY_CODE[code].available_at(GeoLevel.SECCION), code

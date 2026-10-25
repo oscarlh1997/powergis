@@ -14,6 +14,8 @@ Convención de códigos:  <prefijo_sección>.<familia>.<métrica>
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 from .enums import Dimension, Direction, GeoLevel, Section, Tier, Unit
 from .models import Indicator
 
@@ -540,7 +542,44 @@ _TRA = [
 ]
 
 
-CATALOG: list[Indicator] = [*_DEMO, *_ECO, *_CTX, *_INM, *_CMP, *_TUR, *_CLI, *_TRA]
+#: Lo que se publica, o se calcula, por sección censal (y por tanto por
+#: distrito). Antes eran sólo 12 indicadores y un informe por distrito
+#: descartaba 117 de 129 (análisis 8071). Fuentes:
+#:
+#: * Atlas de renta (ADRH, op. 353): población, edad, hogares, renta, Gini,
+#:   umbrales; publica municipio, distrito y sección.
+#: * Padrón continuo por sección censal: sexo y edad.
+#: * Censo 2021 por sección: formación, nacionalidad, estado civil, hogares,
+#:   viviendas.
+#: * Infoelectoral, resultados por mesa: se suman a sección y distrito.
+#: * OSM: puntos y vías, que se cruzan con el polígono de cualquier zona.
+#: * Derivados de todo lo anterior (renta disponible, ticket, resistencia…).
+_POR_SECCION = frozenset({
+    "dem.pop.total", "dem.pop.density", "dem.pop.segment", "dem.pop.segment_pct",
+    "dem.age.mean", "dem.age.u18_pct", "dem.age.65p_pct", "dem.age.18_64_pct",
+    "dem.dependency.total", "dem.ageing.index",
+    "dem.sex.women", "dem.sex.men", "dem.sex.women_pct", "dem.femininity.index",
+    "dem.household.size", "dem.household.single_pct", "dem.household.with_children_pct",
+    "dem.household.monoparental_pct", "dem.civil.single_pct", "dem.civil.married_pct",
+    "dem.edu.university_pct", "dem.edu.secondary_pct", "dem.edu.primary_or_less_pct",
+    "dem.nat.foreign_pct",
+    "eco.resilience.index", "eco.disposable.monthly", "eco.gross_monthly",
+    "eco.gross_net_gap", "eco.financial_stress.index", "eco.saving.rate",
+    "eco.sector_spend", "eco.consumer.ticket", "eco.consumer.frequency",
+    "pol.turnout_pct", "pol.winner_share_pct", "pol.effective_parties",
+    "inm.rent.m2", "inm.rent.ipva_yoy", "inm.rent.effort_pct",
+    "cmp.count", "cmp.count_indirect", "cmp.density_km2", "cmp.per_1000hab",
+    "cmp.opportunity.index", "anc.supermarkets", "anc.schools", "anc.health", "anc.green",
+    "anc.admin", "anc.hotels", "anc.poi.count", "anc.diversity.index",
+    "anc.attraction.index", "tra.transit.stops", "tra.parking.capacity",
+    "tra.road.primary_km", "tra.pedestrian.index", "tra.vehicle.index",
+    "tra.pedestrian.aforo", "tra.vehicle.imd",
+})
+
+CATALOG: list[Indicator] = [
+    replace(i, min_level=SEC) if i.code in _POR_SECCION else i
+    for i in (*_DEMO, *_ECO, *_CTX, *_INM, *_CMP, *_TUR, *_CLI, *_TRA)
+]
 
 BY_CODE: dict[str, Indicator] = {i.code: i for i in CATALOG}
 

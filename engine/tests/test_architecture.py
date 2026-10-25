@@ -104,7 +104,9 @@ class TestCatalogo:
         from powergis.domain.enums import GeoLevel
         from powergis.domain.indicators import BY_CODE
 
-        municipal = BY_CODE["dem.pop.total"]
+        # La población ya baja a sección (Atlas de renta y Padrón por sección):
+        # el ejemplo es la EOH, que sólo llega a municipio.
+        municipal = BY_CODE["tur.hotel.travellers"]
         assert municipal.available_at(GeoLevel.PROVINCIA)   # se agrega hacia arriba
         assert not municipal.available_at(GeoLevel.SECCION)  # no se inventa hacia abajo
 
